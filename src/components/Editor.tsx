@@ -6,7 +6,9 @@ import { Stage, Layer, Rect, Text, Image as KImage, Transformer } from 'react-ko
 import useImage from 'use-image';
 import type Konva from 'konva';
 import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
+import { newImage, newRect, newText } from '@/lib/elements';
 import { useToast } from './Toast';
+import { AgentPanel } from './AgentPanel';
 import type { CanvasDoc, CanvasElement, Category, ImageAsset, Project, TextElement } from '@/lib/types';
 
 const PX = 3; // canvas pixels per mm at zoom 1
@@ -66,6 +68,7 @@ function ImageNode({
 export default function Editor({ id }: { id: string }) {
   const [project, setProject] = useState<Project | null>(null);
   const [canManage, setCanManage] = useState(false);
+  const [canAgent, setCanAgent] = useState(false);
   const [pubStatus, setPubStatus] = useState<'draft' | 'published'>('draft');
   const [pubBusy, setPubBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -96,8 +99,9 @@ export default function Editor({ id }: { id: string }) {
       try {
         const [pRes, lRes] = await Promise.all([fetch(`/api/projects/${id}`), fetch('/api/library')]);
         if (!pRes.ok) throw new Error(pRes.status === 404 ? 'העיצוב לא נמצא' : 'טעינת העיצוב נכשלה');
-        const p: Project & { canManage: boolean } = await pRes.json();
+        const p: Project & { canManage: boolean; canAgent: boolean } = await pRes.json();
         setCanManage(p.canManage);
+        setCanAgent(p.canAgent);
         setPubStatus(p.status);
         const lib = await lRes.json();
         setProject(p);
@@ -250,61 +254,17 @@ export default function Editor({ id }: { id: string }) {
 
   const addText = () => {
     const doc = docRef.current;
-    if (!doc) return;
-    const w = Math.min(120, doc.page.width_mm - 20);
-    addElement({
-      id: crypto.randomUUID(),
-      type: 'text',
-      x_mm: (doc.page.width_mm - w) / 2,
-      y_mm: doc.page.height_mm / 3,
-      w_mm: w,
-      rotation: 0,
-      z: doc.elements.length,
-      text: 'לחצו לעריכת הטקסט',
-      align: 'center',
-      editable: true,
-      label: 'טקסט',
-      font: { family: 'Heebo', weight: 700, size_pt: 32, color: '#1F3A2E' },
-    });
+    if (doc) addElement(newText(doc));
   };
 
   const addRect = () => {
     const doc = docRef.current;
-    if (!doc) return;
-    addElement({
-      id: crypto.randomUUID(),
-      type: 'rect',
-      x_mm: doc.page.width_mm / 4,
-      y_mm: doc.page.height_mm / 4,
-      w_mm: doc.page.width_mm / 2,
-      h_mm: doc.page.height_mm / 6,
-      rotation: 0,
-      z: doc.elements.length,
-      fill: '#E4ECE3',
-    });
+    if (doc) addElement(newRect(doc));
   };
 
   const addImage = (asset: ImageAsset) => {
     const doc = docRef.current;
-    if (!doc) return;
-    let w = Math.min(doc.page.width_mm * 0.6, 200);
-    let h = (w * asset.height) / asset.width;
-    const maxH = doc.page.height_mm * 0.7;
-    if (h > maxH) {
-      h = maxH;
-      w = (h * asset.width) / asset.height;
-    }
-    addElement({
-      id: crypto.randomUUID(),
-      type: 'image',
-      x_mm: (doc.page.width_mm - w) / 2,
-      y_mm: (doc.page.height_mm - h) / 2,
-      w_mm: w,
-      h_mm: h,
-      rotation: 0,
-      z: doc.elements.length,
-      asset_id: asset.id,
-    });
+    if (doc) addElement(newImage(doc, asset));
   };
 
   const removeSelected = useCallback(() => {
@@ -555,6 +515,11 @@ export default function Editor({ id }: { id: string }) {
                 </button>
               </div>
             )}
+            {canAgent && (editableFields.length > 0 || swappables.length > 0) && (
+              <div style={{ order: -2 }}>
+                <AgentPanel projectId={id} getDoc={() => docRef.current} onApply={(d) => commit(d)} placeholder="למשל: החתונה של דן ונועה, 12 במאי, אולם הגן" />
+              </div>
+            )}
             {editableFields.length === 0 && swappables.length === 0 ? (
               <p className="status">בתבנית הזו אין שדות לעריכה.</p>
             ) : (
@@ -696,6 +661,9 @@ export default function Editor({ id }: { id: string }) {
               </div>
             )}
           </div>
+          {canAgent && (
+            <AgentPanel projectId={id} getDoc={() => docRef.current} onApply={(d) => commit(d)} placeholder="למשל: הוסף כותרת 'חתונה' ושדות לשמות החתן והכלה" />
+          )}
         </aside>
         )}
 
