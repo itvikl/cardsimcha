@@ -283,6 +283,15 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .hint-x { flex: none; border: 0; background: transparent; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: 6px; }
 .hint-x:hover { background: rgba(0, 0, 0, 0.06); }
 
+/* AI assistant panel in the editor */
+.agent { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); }
+.agent .panel-title { margin: 0; }
+.agent .btn { justify-self: start; }
+.agent-log { display: grid; gap: 6px; max-height: 240px; overflow-y: auto; }
+.agent-msg { margin: 0; padding: 8px 12px; border-radius: var(--r-sm); font-size: 14px; white-space: pre-wrap; }
+.agent-msg.user { background: var(--surface); border: 1px solid var(--line); justify-self: start; }
+.agent-msg.assistant { background: var(--mint-soft); color: var(--brand-text); justify-self: end; }
+
 /* ------------------------------------------------ editor on phones/tablets */
 @media (max-width: 860px) {
   .editor-wrap { display: block; height: auto; }

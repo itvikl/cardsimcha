@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { readDb, updateDb } from '@/lib/db';
 import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
-import type { Project, User } from '@/lib/types';
+import { canRead, canWrite } from '@/lib/access';
+import { AGENT_ENABLED } from '@/lib/config';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -12,11 +13,6 @@ const MAX_THUMB = 700_000;
 const validThumb = (t: unknown): t is string =>
   typeof t === 'string' && t.length <= MAX_THUMB && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(t);
 
-/** Admins manage templates; everyone manages their own designs. */
-const canWrite = (u: User, p: Project) => (p.kind === 'template' ? u.role === 'admin' : p.ownerId === u.id);
-const canRead = (u: User, p: Project) =>
-  canWrite(u, p) || (p.kind === 'template' && p.status === 'published') || u.role === 'admin';
-
 export async function GET(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
@@ -25,7 +21,11 @@ export async function GET(_req: Request, { params }: Ctx) {
   const project = db.projects.find((p) => p.id === id);
   if (!project || !canRead(user, project)) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   // `canEdit` tells the editor which mode to open in; the server enforces it again on save.
-  return NextResponse.json({ ...project, canManage: canWrite(user, project) && project.kind === 'template' });
+  return NextResponse.json({
+    ...project,
+    canManage: canWrite(user, project) && project.kind === 'template',
+    canAgent: AGENT_ENABLED && canWrite(user, project),
+  });
 }
 
 export async function PUT(req: Request, { params }: Ctx) {
