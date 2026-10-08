@@ -31,6 +31,7 @@ npm run dev      # http://localhost:3000
 - `src/lib/canvas.ts` — ולידציה של מסמך הקאנבס, גדלי עמוד ופונטים.
 - `src/lib/db.ts` — שכבת האחסון המקומית. כל הגישה לנתונים עוברת דרכה, כדי שאפשר יהיה להחליף ב-MongoDB ו-Cloud Storage לפי האפיון.
 - `src/components/Editor.tsx` — העורך.
+- `examples/ad-import/` — דוגמה להמרת מודעה שטוחה (JPG) לתבנית עם טקסטים שאפשר לערוך.
 
 ## עוזר AI בעורך
 
