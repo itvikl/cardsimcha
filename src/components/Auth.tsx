@@ -11,8 +11,8 @@ const AuthContext = createContext<Ctx>({ me: null, loading: true, refresh: async
 
 export const useMe = () => useContext(AuthContext);
 
-/** Pages a visitor can open without an account: the gallery, a card's preview, and login itself. */
-const isPublic = (path: string) => path === '/' || path === '/login' || path.startsWith('/t/');
+/** Pages a visitor can open without an account: the gallery, its categories, a card's preview, and login itself. */
+const isPublic = (path: string) => path === '/' || path === '/login' || path.startsWith('/t/') || path.startsWith('/category/');
 
 /** Only follow same-site paths when returning after login. */
 export const safeNext = (next: string | null | undefined) =>

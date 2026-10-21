@@ -157,7 +157,7 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .tile .noimg { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, 0.5); }
 .tile-cap {
   position: absolute; inset-inline: 12px; bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 14px 16px; border-radius: var(--r-md); background: rgba(10, 20, 16, 0.58);
+  padding: 14px 16px; border-radius: var(--r-md); background: rgba(10, 20, 16, 0.58); color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.22); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
 .tile-cap strong { display: block; font-size: 18px; line-height: 1.25; }

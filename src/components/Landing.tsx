@@ -1,12 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMe } from './Auth';
-import { ArrowIcon, DownloadIcon, LogoIcon, PenIcon, SearchIcon } from './Icons';
+import { DownloadIcon, LogoIcon, PenIcon, SearchIcon } from './Icons';
+import CardCascade from './CardCascade';
+import { FallingTitle } from './FallingTitle';
+import { IntroEnvelope } from './IntroEnvelope';
+import { applyCarousel, categoryHref, defaultCards, type CarouselSetting } from '@/lib/categories';
 
-type Published = { id: string; name: string; width_mm: number; height_mm: number; thumbnail: string | null };
+type Published = { id: string; topic: string | null; thumbnail: string | null };
 type Mine = { id: string; name: string; updatedAt: string; thumbnail: string | null };
+
+/** every visit, except for people who asked their system to reduce motion */
+function shouldPlayIntro() {
+  try {
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return true;
+  }
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -16,21 +29,30 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const STEPS = [
-  { n: '01', icon: <SearchIcon />, grad: 'linear-gradient(135deg,#0e7490,#22b8cf)', title: 'בוחרים', text: 'מטיילים בגלריה ובוחרים כרטיס שאהבתם.' },
+  { n: '01', icon: <SearchIcon />, grad: 'linear-gradient(135deg,#0e7490,#22b8cf)', title: 'בוחרים', text: 'בוחרים קטגוריה ואת הכרטיס שאהבתם.' },
   { n: '02', icon: <PenIcon />, grad: 'linear-gradient(135deg,#12664a,#2fcf96)', title: 'מתאימים', text: 'משנים שמות, תאריך וצבעים, מחליפים רקע וגוררים את הטקסטים למקום.' },
   { n: '03', icon: <DownloadIcon />, grad: 'linear-gradient(135deg,#d97706,#f5b73b)', title: 'מורידים', text: 'מורידים את הכרטיס כקובץ באיכות הדפסה (300dpi) ומשתפים.' },
 ];
 
 export function Landing() {
   const { me } = useMe();
-  const [templates, setTemplates] = useState<Published[] | null>(null);
+  const [templates, setTemplates] = useState<Published[]>([]);
   const [mine, setMine] = useState<Mine[]>([]);
+  const [carousel, setCarousel] = useState<CarouselSetting[]>([]);
   const [error, setError] = useState('');
+  const [intro, setIntro] = useState(shouldPlayIntro);
+  const [titlePlay, setTitlePlay] = useState(() => !intro);
 
   const load = useCallback(async () => {
-    const [t, m] = await Promise.all([api<Published[]>('/api/templates'), me ? api<Mine[]>('/api/projects') : Promise.resolve([])]);
+    const [t, m, c] = await Promise.all([
+      api<Published[]>('/api/templates'),
+      me ? api<Mine[]>('/api/projects') : Promise.resolve([]),
+      // without the admin's choices the default carousel still works
+      api<CarouselSetting[]>('/api/carousel').catch(() => []),
+    ]);
     setTemplates(t);
     setMine(m);
+    setCarousel(c);
   }, [me]);
 
   useEffect(() => {
@@ -47,25 +69,29 @@ export function Landing() {
     }
   }
 
+  // the admin picks which cards show, their order and their images (see /carousel)
+  const categories = useMemo(
+    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden),
+    [templates, carousel]
+  );
+
   return (
     <>
-      <section className="hero">
-        <span className="pill-badge">
-          <span className="dot" /> עיצוב בדקות, בלי לדעת עיצוב
-        </span>
-        <h1>
-          לכל שמחה, יש <span className="grad">כרטיס מושלם</span>.
-        </h1>
-        <p className="lead">בחרו עיצוב, שנו את השמות, התאריך והצבעים, והורידו הזמנה יפה באיכות הדפסה. הכול בדקות.</p>
-        <div className="cta">
-          <a className="btn primary xl" href="#cards">
-            לעיון בכרטיסים <ArrowIcon />
-          </a>
-          <a className="btn ghost-light xl" href="#how">
-            איך זה עובד
-          </a>
-        </div>
-      </section>
+      {intro && <IntroEnvelope onOpen={() => setTitlePlay(true)} onDone={() => setIntro(false)} />}
+      <CardCascade
+        id="cards"
+        eyebrow="הזמנות ועיצובים לכל אירוע"
+        title={<FallingTitle lines={['תעצב את', 'האירוע שלך']} play={titlePlay} />}
+        description="בחרו קטגוריה, התאימו את הכרטיס בכמה לחיצות והורידו אותו באיכות הדפסה."
+        cards={categories.map((c) => ({ name: c.name, background: c.background, href: categoryHref(c.name) }))}
+        scrollScreens={Math.max(4, categories.length)}
+      />
+
+      {error && (
+        <p className="error" role="alert" style={{ margin: 16 }}>
+          {error}
+        </p>
+      )}
 
       {mine.length > 0 && (
         <section className="mine-section" aria-label="הכרטיסים שלי">
@@ -101,47 +127,6 @@ export function Landing() {
           </div>
         </section>
       )}
-
-      <section className="dark-section" id="cards" style={{ marginTop: mine.length > 0 ? 64 : 0 }}>
-        <div className="inner">
-          <span className="eyebrow">גלריה</span>
-          <h2 className="section-title">
-            הכרטיסים <span className="grad">שלנו</span>
-          </h2>
-          {error && <p className="error" role="alert">{error}</p>}
-          {templates === null ? (
-            <div className="tiles" aria-busy="true" aria-label="טוען כרטיסים">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="tile skeleton" />
-              ))}
-            </div>
-          ) : templates.length === 0 ? (
-            <div className="empty" style={{ marginTop: 40 }}>עדיין לא פורסמו כרטיסים. חזרו בקרוב.</div>
-          ) : (
-            <div className="tiles">
-              {templates.map((t) => (
-                <Link
-                  key={t.id}
-                  href={`/t/${t.id}`}
-                  className="tile"
-                  style={{ aspectRatio: `${t.width_mm} / ${t.height_mm}`, ...(t.thumbnail ? { backgroundImage: `url(${t.thumbnail})` } : {}) }}
-                >
-                  {!t.thumbnail && <span className="noimg">אין תצוגה מקדימה</span>}
-                  <span className="tile-cap">
-                    <span>
-                      <strong>{t.name}</strong>
-                      <small>התחלת עריכה</small>
-                    </span>
-                    <span className="tile-go">
-                      <ArrowIcon />
-                    </span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
 
       <section className="light-section" id="how">
         <div className="inner">

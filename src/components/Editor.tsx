@@ -110,6 +110,8 @@ export default function Editor({ id }: { id: string }) {
         setLibrary(lib);
         setLibCat(lib.categories[0]?.id ?? '');
         loadedRef.current = true;
+        // a project that was never saved has no preview image yet: the autosave creates one
+        if (!p.thumbnail && (p.canManage || p.kind === 'design')) setSave('dirty');
       } catch (e) {
         setLoadError((e as Error).message);
       }

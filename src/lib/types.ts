@@ -103,14 +103,27 @@ export type Project = {
   templateId?: string;
   status: 'draft' | 'published'; // only meaningful for templates
   name: string;
+  /** topic shown to customers as a category tile on the home page, e.g. "בית כנסת" (templates only) */
+  topic?: string;
   canvas: CanvasDoc;
   thumbnail?: string;
   createdAt: string;
   updatedAt: string;
 };
 
+/** admin's choices for one home-page carousel card, keyed by its topic name */
+export type CarouselSlide = {
+  id: string;
+  name: string;
+  /** '/categories/…' or '/api/uploads/…' URL, or 'template:<id>' for that template's thumbnail; null keeps the default cover */
+  image: string | null;
+  hidden: boolean;
+  order: number;
+};
+
 export type Db = {
   categories: Category[];
+  carousel: CarouselSlide[];
   images: ImageAsset[];
   projects: Project[];
   users: User[];

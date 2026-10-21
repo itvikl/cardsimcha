@@ -6,12 +6,14 @@ import Link from 'next/link';
 import { PAGE_PRESETS } from '@/lib/canvas';
 import { useMe } from '@/components/Auth';
 import { Landing } from '@/components/Landing';
+import { CATEGORIES } from '@/lib/categories';
 
 type Item = {
   id: string;
   kind: 'template' | 'design';
   status: 'draft' | 'published';
   name: string;
+  topic: string | null;
   updatedAt: string;
   width_mm: number;
   height_mm: number;
@@ -19,11 +21,47 @@ type Item = {
   thumbnail: string | null;
 };
 
+/** example topics shown to the admin as suggestions; any free text is accepted */
+const SUGGESTED_TOPICS = CATEGORIES.map((c) => c.name);
+
 const Preview = ({ src, label }: { src: string | null; label: string }) => (
   <div className="preview" style={src ? { backgroundImage: `url(${src})`, backgroundSize: 'contain' } : undefined} aria-label={label}>
     {!src && 'אין תצוגה מקדימה'}
   </div>
 );
+
+const BG_CATEGORY = 'רקעים';
+
+/** Uploads the picture into the "רקעים" library category (created on first use) and returns the asset id. */
+async function uploadBackground(file: File): Promise<string> {
+  const dims = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('אי אפשר לקרוא את התמונה'));
+    };
+    img.src = url;
+  });
+  const lib = await api<{ categories: { id: string; name: string }[] }>('/api/library');
+  const cat =
+    lib.categories.find((c) => c.name === BG_CATEGORY) ??
+    (await api<{ id: string }>('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: BG_CATEGORY, description: 'רקעים שהועלו בעת יצירת תבנית' }),
+    }));
+  const form = new FormData();
+  form.set('file', file);
+  form.set('width', String(dims.width));
+  form.set('height', String(dims.height));
+  const asset = await api<{ id: string }>(`/api/categories/${cat.id}/images`, { method: 'POST', body: form });
+  return asset.id;
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -44,9 +82,12 @@ function AdminHome() {
   const router = useRouter();
   const [items, setItems] = useState<Item[] | null>(null);
   const [name, setName] = useState('');
+  const [topic, setTopic] = useState('');
   const [preset, setPreset] = useState<string>(PAGE_PRESETS[0].id);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [bgFile, setBgFile] = useState<File | null>(null);
+  const [fileKey, setFileKey] = useState(0);
 
   const load = useCallback(async () => {
     setItems(await api<Item[]>('/api/projects'));
@@ -61,10 +102,11 @@ function AdminHome() {
     setBusy(true);
     setError('');
     try {
+      const backgroundAssetId = bgFile ? await uploadBackground(bgFile) : undefined;
       const r = await api<{ id: string }>('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, width_mm: p.width_mm, height_mm: p.height_mm }),
+        body: JSON.stringify({ name, topic, width_mm: p.width_mm, height_mm: p.height_mm, backgroundAssetId }),
       });
       router.push(`/editor/${r.id}`);
     } catch (err) {
@@ -110,7 +152,23 @@ function AdminHome() {
     }
   }
 
+  async function saveTopic(it: Item, value: string) {
+    const next = value.trim();
+    if (next === (it.topic ?? '')) return;
+    try {
+      await api(`/api/projects/${it.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: next }),
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   const templates = items?.filter((i) => i.kind === 'template') ?? [];
+  const topicOptions = Array.from(new Set([...SUGGESTED_TOPICS, ...templates.map((t) => t.topic).filter((t): t is string => !!t)]));
 
   return (
     <main className="page">
@@ -132,10 +190,29 @@ function AdminHome() {
             ))}
           </select>
         </label>
+        <label className="field">
+          נושא (קטגוריה לעמוד הבית)
+          <input type="text" list="topic-options" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="למשל: בית כנסת" maxLength={60} />
+        </label>
+        <label className="field">
+          תמונת רקע (לא חובה)
+          <input
+            key={fileKey}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={(e) => setBgFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
         <button className="btn primary" type="submit" disabled={busy}>
-          תבנית חדשה
+          {busy && bgFile ? 'מעלה…' : 'תבנית חדשה'}
         </button>
       </form>
+
+      <datalist id="topic-options">
+        {topicOptions.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
 
       {error && <p className="error" role="alert">{error}</p>}
 
@@ -160,6 +237,17 @@ function AdminHome() {
               <span className="status">
                 {it.width_mm}×{it.height_mm} מ״מ · {it.editableFields} שדות לעריכה ללקוח
               </span>
+              <label className="field" style={{ fontSize: 13 }}>
+                נושא (קטגוריה לעמוד הבית)
+                <input
+                  type="text"
+                  list="topic-options"
+                  defaultValue={it.topic ?? ''}
+                  placeholder="לא הוגדר נושא"
+                  maxLength={60}
+                  onBlur={(e) => saveTopic(it, e.target.value)}
+                />
+              </label>
               <div className="row">
                 <Link className="btn small primary" href={`/editor/${it.id}`}>
                   עריכה

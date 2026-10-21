@@ -21,7 +21,12 @@ export function TopBar() {
   }
   const links = [
     { href: '/', label: me?.role === 'admin' ? 'תבניות' : 'הכרטיסים שלי' },
-    ...(me?.role === 'admin' ? [{ href: '/categories', label: 'קטגוריות ותמונות' }] : []),
+    ...(me?.role === 'admin'
+      ? [
+          { href: '/categories', label: 'קטגוריות ותמונות' },
+          { href: '/carousel', label: 'קרוסלה' },
+        ]
+      : []),
   ];
   return (
     <header className="topbar">

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 540"><defs><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbeec1"/><stop offset=".45" stop-color="#e2bd5f"/><stop offset=".75" stop-color="#b8862b"/><stop offset="1" stop-color="#f0d48a"/></linearGradient><radialGradient id="bg" cx=".5" cy=".35" r=".8"><stop offset="0" stop-color="#24407a"/><stop offset="1" stop-color="#0b1730"/></radialGradient></defs><rect width="500" height="540" fill="url(#bg)"/><rect x="22" y="22" width="456" height="496" rx="26" fill="none" stroke="url(#gold)" stroke-width="3"/><rect x="34" y="34" width="432" height="472" rx="18" fill="none" stroke="url(#gold)" stroke-width="1" opacity=".6"/>
+<g fill="none" stroke="url(#gold)" stroke-width="4">
+<path d="M250 150 L280 202 L220 202 Z M250 220 L220 168 L280 168 Z" stroke-width="3.5"/>
+<path d="M150 440 V290 Q150 236 250 236 Q350 236 350 290 V440"/>
+<path d="M176 440 V298 Q176 262 250 262 Q324 262 324 298 V440" stroke-width="2"/>
+<line x1="250" y1="276" x2="250" y2="440" stroke-width="2"/>
+<line x1="118" y1="442" x2="382" y2="442" stroke-width="6"/>
+</g>
+<g fill="url(#gold)">
+<rect x="204" y="318" width="32" height="44" rx="6"/><rect x="264" y="318" width="32" height="44" rx="6"/>
+<circle cx="236" cy="400" r="4"/><circle cx="264" cy="400" r="4"/>
+<path d="M250 84 q10 14 0 28 q-10 -14 0 -28z"/><rect x="242" y="112" width="16" height="10" rx="3"/>
+</g>
+<g fill="#fbeec1" opacity=".55"><circle cx="90" cy="110" r="2"/><circle cx="410" cy="96" r="2.5"/><circle cx="380" cy="160" r="1.6"/><circle cx="120" cy="180" r="1.6"/></g></svg>

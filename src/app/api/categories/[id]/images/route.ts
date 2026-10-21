@@ -1,8 +1,6 @@
 import { requireAdmin } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { newId, readDb, updateDb, uploadsDir } from '@/lib/db';
+import { newId, readDb, removeUploads, saveUpload, updateDb } from '@/lib/db';
 import type { ImageAsset } from '@/lib/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -39,8 +37,7 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const assetId = newId();
   const fileName = assetId + ext;
-  await fs.mkdir(uploadsDir, { recursive: true });
-  await fs.writeFile(path.join(uploadsDir, fileName), Buffer.from(await file.arrayBuffer()));
+  await saveUpload(fileName, Buffer.from(await file.arrayBuffer()), file.type);
 
   const name = file.name.replace(/\.[^.]+$/, '').slice(0, 100) || 'תמונה';
   const asset: ImageAsset = {
@@ -59,7 +56,7 @@ export async function POST(req: Request, { params }: Ctx) {
     return true;
   });
   if (!ok) {
-    await fs.rm(path.join(uploadsDir, fileName), { force: true });
+    await removeUploads([fileName]);
     return NextResponse.json({ error: 'הקטגוריה נמחקה' }, { status: 404 });
   }
   return NextResponse.json(asset, { status: 201 });

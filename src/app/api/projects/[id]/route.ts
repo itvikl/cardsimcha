@@ -37,6 +37,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   if (name === '') return NextResponse.json({ error: 'שם חובה' }, { status: 400 });
   const thumbnail = body?.thumbnail === undefined ? undefined : validThumb(body.thumbnail) ? body.thumbnail : null;
   const status = body?.status === 'draft' || body?.status === 'published' ? body.status : undefined;
+  const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : undefined;
 
   type Result = 'missing' | 'invalid' | { id: string; updatedAt: string };
   const result = await updateDb<Result>((db) => {
@@ -52,6 +53,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (name) p.name = name;
     if (thumbnail) p.thumbnail = thumbnail;
     if (status && p.kind === 'template') p.status = status;
+    if (topic !== undefined && p.kind === 'template') p.topic = topic || undefined;
     p.updatedAt = new Date().toISOString();
     return { id: p.id, updatedAt: p.updatedAt };
   });

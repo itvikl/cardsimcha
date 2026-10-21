@@ -55,14 +55,37 @@ export async function POST(req: Request) {
 
   if (user.role !== 'admin') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 100) : 'תבנית חדשה';
+  const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : '';
   const canvas = validateDoc(emptyDoc(Number(body?.width_mm) || 210, Number(body?.height_mm) || 297));
   if (!canvas) return NextResponse.json({ error: 'מידות לא תקינות' }, { status: 400 });
+  const db = await readDb();
+  const bg = typeof body?.backgroundAssetId === 'string' ? db.images.find((i) => i.id === body.backgroundAssetId) : undefined;
+  if (bg) {
+    // fill the page like CSS "cover": scale to the larger side, centred, anything beyond the page is cropped
+    const { width_mm: pw, height_mm: ph } = canvas.page;
+    const scale = Math.max(pw / bg.width, ph / bg.height);
+    const w = bg.width * scale;
+    const h = bg.height * scale;
+    canvas.elements.push({
+      id: newId(),
+      type: 'image',
+      x_mm: (pw - w) / 2,
+      y_mm: (ph - h) / 2,
+      w_mm: w,
+      h_mm: h,
+      rotation: 0,
+      z: 0,
+      asset_id: bg.id,
+      label: 'רקע',
+    });
+  }
   const project: Project = {
     id: newId(),
     kind: 'template',
     ownerId: user.id,
     status: 'draft',
     name,
+    topic: topic || undefined,
     canvas,
     createdAt: now,
     updatedAt: now,

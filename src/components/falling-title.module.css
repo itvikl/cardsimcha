@@ -1,0 +1,64 @@
+.root {
+  position: relative; display: block; isolation: isolate;
+  font-family: 'Frank Ruhl Libre', 'David Libre', Georgia, serif;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+.line { display: block; }
+.word { display: inline-block; white-space: nowrap; }
+.letter, .plain { display: inline-block; }
+.letter {
+  background: linear-gradient(180deg, #f2c75c 0%, #d99a1e 40%, #a86a0c 68%, #e7b443 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 .05em .08em rgba(150, 95, 10, .28));
+  animation: fall 1.15s cubic-bezier(.22, 1, .36, 1) both;
+  will-change: transform, opacity;
+}
+/* held at the first frame (hidden above) until the intro hands over */
+.root[data-phase='waiting'] .letter { animation-play-state: paused; }
+@keyframes fall {
+  0% { transform: translateY(-160%) rotate(-14deg); opacity: 0; }
+  55% { transform: translateY(10%) rotate(3deg); opacity: 1; }
+  72% { transform: translateY(-6%) rotate(-1deg); }
+  86% { transform: translateY(2%) rotate(0); }
+  100% { transform: none; opacity: 1; }
+}
+
+/* a band of light sweeping across the gold, clipped to the letter shapes; repeats now and then */
+.sheen {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0) 38%, rgba(255, 252, 235, .95) 50%, rgba(255, 255, 255, 0) 62%);
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sweep 7s ease-in-out .35s infinite;
+}
+@keyframes sweep {
+  0% { background-position: 130% 0; }
+  20%, 100% { background-position: -30% 0; }
+}
+
+/* confetti burst from behind the headline the moment the last letter lands */
+.burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: -1; pointer-events: none; }
+.burst i {
+  position: absolute; left: 0; top: 0; display: block; border-radius: 2px;
+  animation: burst 1.5s cubic-bezier(.15, .7, .35, 1) both;
+}
+@keyframes burst {
+  0% { transform: translate(0, 0) scale(.3) rotate(0); opacity: 1; }
+  45% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(calc(var(--rot) * .5)); opacity: 1; }
+  100% { transform: translate(calc(var(--dx) * 1.15), calc(var(--dy) + 140px)) scale(.9) rotate(var(--rot)); opacity: 0; }
+}
+
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .letter { animation: none; }
+  .sheen, .burst { display: none; }
+}

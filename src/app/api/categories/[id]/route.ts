@@ -1,8 +1,6 @@
 import { requireAdmin } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { updateDb, uploadsDir } from '@/lib/db';
+import { removeUploads, updateDb } from '@/lib/db';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,6 +39,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     return removed;
   });
   if (!files) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
-  await Promise.all(files.map((f) => fs.rm(path.join(uploadsDir, f), { force: true })));
+  await removeUploads(files);
   return NextResponse.json({ ok: true });
 }
