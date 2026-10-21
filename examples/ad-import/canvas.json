@@ -1,0 +1,419 @@
+{
+  "schema_version": 1,
+  "page": {
+    "width_mm": 210,
+    "height_mm": 297,
+    "background": "#2A1D14"
+  },
+  "elements": [
+    {
+      "id": "1fd01671-64e0-48bc-915a-f77d8f49cc6e",
+      "type": "image",
+      "x_mm": 0,
+      "y_mm": 0,
+      "w_mm": 210,
+      "h_mm": 297,
+      "rotation": 0,
+      "z": 0,
+      "asset_id": "BACKGROUND",
+      "label": "רקע"
+    },
+    {
+      "id": "781a2258-bc09-465f-bfe8-7043aef61c60",
+      "type": "rect",
+      "x_mm": 37.88,
+      "y_mm": 0.0,
+      "w_mm": 38.81,
+      "h_mm": 133.5,
+      "rotation": 0,
+      "z": 1,
+      "fill": "#F6AA4A"
+    },
+    {
+      "id": "30024527-caa4-4a7a-b6a7-e7abd1cba5c1",
+      "type": "rect",
+      "x_mm": 12.63,
+      "y_mm": 155.97,
+      "w_mm": 64.8,
+      "h_mm": 20.61,
+      "rotation": 0,
+      "z": 2,
+      "fill": "#FAFBFF"
+    },
+    {
+      "id": "c7fe948a-0908-4520-98cc-3370cff69ad8",
+      "type": "rect",
+      "x_mm": 12.63,
+      "y_mm": 179.18,
+      "w_mm": 64.8,
+      "h_mm": 19.87,
+      "rotation": 0,
+      "z": 3,
+      "fill": "#FAFBFF"
+    },
+    {
+      "id": "4da13c03-77d6-488d-8bd0-a35bf5e6ea03",
+      "type": "rect",
+      "x_mm": 12.63,
+      "y_mm": 202.02,
+      "w_mm": 64.8,
+      "h_mm": 20.24,
+      "rotation": 0,
+      "z": 4,
+      "fill": "#F6AA4A"
+    },
+    {
+      "id": "d2617879-511a-43f3-a537-cdc809a1be88",
+      "type": "rect",
+      "x_mm": 82.63,
+      "y_mm": 245.09,
+      "w_mm": 106.02,
+      "h_mm": 7.61,
+      "rotation": 0,
+      "z": 5,
+      "fill": "#F6AA4A"
+    },
+    {
+      "id": "e3f80727-dde1-4c71-81a4-696f7b99c27e",
+      "type": "text",
+      "x_mm": 72.98,
+      "y_mm": 2.72,
+      "w_mm": 116.73,
+      "rotation": 90,
+      "z": 6,
+      "text": "בית שמש",
+      "align": "center",
+      "editable": true,
+      "label": "עיר (כותרת)",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 74.1,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "c11ab459-cd19-4037-a43a-d90c6fb4a7f9",
+      "type": "text",
+      "x_mm": 47.39,
+      "y_mm": 112.67,
+      "w_mm": 29.62,
+      "rotation": 0,
+      "z": 7,
+      "text": "יום ראשון",
+      "align": "center",
+      "editable": true,
+      "label": "יום (בכותרת)",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 17.4,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "7c675772-f6f4-4f63-bea6-6f634959bda8",
+      "type": "text",
+      "x_mm": 35.39,
+      "y_mm": 122.66,
+      "w_mm": 42.85,
+      "rotation": 0,
+      "z": 8,
+      "text": "אולם קוסוב ויזניץ",
+      "align": "center",
+      "editable": true,
+      "label": "אולם (בכותרת)",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 14.2,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "d6d89385-def9-44a1-8bfa-afe329fc1a03",
+      "type": "text",
+      "x_mm": 35.44,
+      "y_mm": 9.01,
+      "w_mm": 134.24,
+      "rotation": 90,
+      "z": 9,
+      "text": "ורוד השטריימלך",
+      "align": "center",
+      "editable": true,
+      "label": "שם העסק",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 50.4,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "fd64657f-d8af-46fe-ab58-a3e00eca5ecf",
+      "type": "text",
+      "x_mm": 101.62,
+      "y_mm": 32.98,
+      "w_mm": 75.1,
+      "rotation": 0,
+      "z": 10,
+      "text": "ביום ראשון זה קורה",
+      "align": "center",
+      "editable": true,
+      "label": "שורת פתיחה",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 23.1,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "ff315e87-c3d0-4f5c-8f89-48606a7303fc",
+      "type": "text",
+      "x_mm": 11.73,
+      "y_mm": 136.76,
+      "w_mm": 69.76,
+      "rotation": 0,
+      "z": 11,
+      "text": "לרגל השקת הקולקציה החדשה",
+      "align": "center",
+      "editable": true,
+      "label": "הסבר שורה 1",
+      "font": {
+        "family": "Heebo",
+        "weight": 400,
+        "size_pt": 13.4,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "dcbf8d78-9fbc-462d-a1c1-fdcfccfd9821",
+      "type": "text",
+      "x_mm": 6.87,
+      "y_mm": 144.85,
+      "w_mm": 75.95,
+      "rotation": 0,
+      "z": 12,
+      "text": "אנחנו מרוקנים את המדפים ופותחים",
+      "align": "center",
+      "editable": true,
+      "label": "הסבר שורה 2",
+      "font": {
+        "family": "Heebo",
+        "weight": 400,
+        "size_pt": 12.5,
+        "color": "#FFFFFF"
+      }
+    },
+    {
+      "id": "b4a14439-905a-4636-9fb3-1305f55a422f",
+      "type": "text",
+      "x_mm": 10.33,
+      "y_mm": 155.61,
+      "w_mm": 71.25,
+      "rotation": 0,
+      "z": 13,
+      "text": "במחירים",
+      "align": "center",
+      "editable": true,
+      "label": "מבצע שורה 1",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 48.8,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "2357059b-13ab-4d51-b3e0-5203d0550f8d",
+      "type": "text",
+      "x_mm": 18.01,
+      "y_mm": 178.58,
+      "w_mm": 53.1,
+      "rotation": 0,
+      "z": 14,
+      "text": "נדירים",
+      "align": "center",
+      "editable": true,
+      "label": "מבצע שורה 2",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 47.8,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "2a85f015-e3b2-41c9-b050-4d099669bb78",
+      "type": "text",
+      "x_mm": 24.35,
+      "y_mm": 203.07,
+      "w_mm": 41.36,
+      "rotation": 0,
+      "z": 15,
+      "text": "ביותר",
+      "align": "center",
+      "editable": true,
+      "label": "מבצע שורה 3",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 42.0,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "dd1cf3c6-ab3e-4fd6-896a-9d8edcd8fc6b",
+      "type": "text",
+      "x_mm": 77.63,
+      "y_mm": 245.09,
+      "w_mm": 115.45,
+      "rotation": 0,
+      "z": 16,
+      "text": "5 שעות של מחירים מטורפים בבית שמש",
+      "align": "center",
+      "editable": true,
+      "label": "פס כתום",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 17.7,
+        "color": "#45301F"
+      }
+    },
+    {
+      "id": "1665b47b-5e8e-4dba-a9a0-21458a62dde5",
+      "type": "text",
+      "x_mm": 102.24,
+      "y_mm": 255.57,
+      "w_mm": 71.25,
+      "rotation": 0,
+      "z": 17,
+      "text": "מגוון שטריימלעך מפוארים ואיכותיים",
+      "align": "center",
+      "editable": true,
+      "label": "תיאור שורה 1",
+      "font": {
+        "family": "Heebo",
+        "weight": 400,
+        "size_pt": 11.4,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "0ab3e115-24d8-40f0-8188-1a5b4e85fbdf",
+      "type": "text",
+      "x_mm": 89.51,
+      "y_mm": 260.22,
+      "w_mm": 89.83,
+      "rotation": 0,
+      "z": 18,
+      "text": "במבחר דגמים וסגנונות בשיטת שלם וקח",
+      "align": "center",
+      "editable": true,
+      "label": "תיאור שורה 2",
+      "font": {
+        "family": "Heebo",
+        "weight": 400,
+        "size_pt": 12.7,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "a77bc55f-807c-4ad2-9302-51254dbd6e36",
+      "type": "text",
+      "x_mm": 158.2,
+      "y_mm": 269.22,
+      "w_mm": 38.8,
+      "rotation": 0,
+      "z": 19,
+      "text": "יום ראשון",
+      "align": "center",
+      "editable": true,
+      "label": "יום",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 23.2,
+        "color": "#FFFFFF"
+      }
+    },
+    {
+      "id": "23ff679d-154a-440f-869c-bcb28df8ef18",
+      "type": "text",
+      "x_mm": 118.81,
+      "y_mm": 267.95,
+      "w_mm": 44.99,
+      "rotation": 0,
+      "z": 20,
+      "text": "כ״ד אלול",
+      "align": "center",
+      "editable": true,
+      "label": "תאריך",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 29.0,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "0b4995dd-705c-4df4-9dde-a0f23b04fe19",
+      "type": "text",
+      "x_mm": 72.39,
+      "y_mm": 269.69,
+      "w_mm": 53.53,
+      "rotation": 0,
+      "z": 21,
+      "text": "18:00 - 23:00",
+      "align": "center",
+      "editable": true,
+      "label": "שעות",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 21.1,
+        "color": "#FFFFFF"
+      }
+    },
+    {
+      "id": "b92fab96-0772-4169-a4b8-d93e6b3997f4",
+      "type": "text",
+      "x_mm": 135.15,
+      "y_mm": 280.66,
+      "w_mm": 64.85,
+      "rotation": 0,
+      "z": 22,
+      "text": "אולם קוסוב ויזניץ",
+      "align": "center",
+      "editable": true,
+      "label": "אולם",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 21.9,
+        "color": "#F7B868"
+      }
+    },
+    {
+      "id": "ee1b5ae9-ec26-47e7-84f1-2e05cb2872e7",
+      "type": "text",
+      "x_mm": 71.13,
+      "y_mm": 281.4,
+      "w_mm": 72.75,
+      "rotation": 0,
+      "z": 23,
+      "text": "רח׳ האדמו״ר מבעלזא 4",
+      "align": "center",
+      "editable": true,
+      "label": "כתובת",
+      "font": {
+        "family": "Secular One",
+        "weight": 400,
+        "size_pt": 18.5,
+        "color": "#FFFFFF"
+      }
+    }
+  ]
+}
