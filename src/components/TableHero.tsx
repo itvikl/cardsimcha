@@ -146,6 +146,7 @@ export function TableHero({ audience, copy, name, onName, cards, onPick }: Props
                   key={c.name}
                   type="button"
                   className={s.tcard}
+                  data-front={isFront}
                   aria-label={isFront ? `לעיצובים של ${c.name}` : `לשלוף את ${c.name}`}
                   onClick={() => (isFront ? onPick(c.name) : setFront(c.name))}
                   style={
@@ -164,7 +165,6 @@ export function TableHero({ audience, copy, name, onName, cards, onPick }: Props
                     style={{
                       background: `${c.background} center / cover no-repeat, #fffcf6`,
                       animationDelay: c.slot.delay,
-                      boxShadow: isFront ? '0 50px 90px rgba(60,40,20,.30), 0 0 0 1px #c9a35a' : '0 24px 50px rgba(60,40,20,.20)',
                     }}
                   >
                     <span className={s.ttag}>{c.name}</span>

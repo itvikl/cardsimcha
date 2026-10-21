@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMe } from './Auth';
@@ -18,6 +18,9 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) throw new Error(data.error || 'שגיאה לא צפויה');
   return data as T;
 }
+
+/** business seals each get their own colour (the private side keeps them all paper-white) */
+const SEAL_COLORS = ['#ff6b5b', '#ffc53d', '#2ed3b7', '#4fb3ff', '#ff5fa2', '#9b8cff'];
 
 /** everything on the page that differs between the two doors */
 const COPY = {
@@ -143,7 +146,7 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
   }
 
   return (
-    <div className={s.root}>
+    <div className={audience === 'business' ? `${s.root} ${s.business}` : s.root}>
       <TableHero
         audience={audience}
         copy={copy}
@@ -212,8 +215,15 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
             <span>בחרו חותם, והטבעת מתמלאת</span>
           </div>
           <div className={s.seals} role="group" aria-label="קטגוריות">
-            {categories.map((c) => (
-              <button key={c} type="button" className={s.seal} aria-pressed={c === selected} onClick={() => setCat(c)}>
+            {categories.map((c, i) => (
+              <button
+                key={c}
+                type="button"
+                className={s.seal}
+                aria-pressed={c === selected}
+                onClick={() => setCat(c)}
+                style={audience === 'business' ? ({ '--seal-tint': SEAL_COLORS[i % SEAL_COLORS.length] } as CSSProperties) : undefined}
+              >
                 <span className={s.sealDisk}>
                   <span className={s.sealRing} aria-hidden="true" />
                   <span className={s.sealFace} aria-hidden="true">
@@ -233,7 +243,7 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
             busy={busy}
           />
           {name.trim() && (
-            <p style={{ margin: 0, color: 'var(--muted)' }}>
+            <p className={s.note}>
               השם &quot;{name.trim()}&quot; ייכנס לכרטיס כשתפתחו אותו בעורך.
             </p>
           )}

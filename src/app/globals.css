@@ -72,6 +72,8 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .topbar .btn { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); color: #fff; }
 .topbar .btn:hover { background: rgba(255, 255, 255, 0.16); }
 .topbar .btn.primary { background: #d6c2a1; color: #1a1714; border-color: transparent; }
+.topbar.business { background: #071640; border-bottom-color: rgba(244, 246, 255, 0.1); }
+.topbar.business .logo-mark { background: #ffc53d; }
 
 /* ---------------------------------------------------------- layout */
 .page { max-width: 1200px; margin: 0 auto; padding: 40px clamp(16px, 4vw, 40px) 80px; }

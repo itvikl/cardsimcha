@@ -29,7 +29,7 @@ export function TopBar() {
       : []),
   ];
   return (
-    <header className="topbar">
+    <header className={pathname.startsWith('/business') ? 'topbar business' : 'topbar'}>
       <Link href="/" className="brand">
         <span className="logo-mark">
           <LogoIcon />
