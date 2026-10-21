@@ -1,15 +1,27 @@
 /** templates without a topic are listed here, so nothing becomes invisible */
 export const GENERAL_TOPIC = 'כללי';
 
+/** who a category is for: the home page has a door for each (`/` and `/business`) */
+export type Audience = 'private' | 'business';
+
 /** the home-page categories, in display order; `image` is the cover shown in the carousel */
-export const CATEGORIES = [
-  { name: 'בית כנסת', image: '/categories/synagogue.svg' },
-  { name: 'תעודות', image: '/categories/certificates.svg' },
-  { name: 'שלום זכר', image: '/categories/shalom-zachar.svg' },
-  { name: 'שמחת בית השואבה', image: '/categories/simchat-beit-hashoeva.svg' },
-  { name: 'חתונה', image: '/categories/wedding.svg' },
-  { name: 'בר מצווה', image: '/categories/bar-mitzvah.svg' },
+export const CATEGORIES: { name: string; image: string; audience: Audience }[] = [
+  { name: 'בית כנסת', image: '/categories/synagogue.svg', audience: 'private' },
+  { name: 'תעודות', image: '/categories/certificates.svg', audience: 'private' },
+  { name: 'שלום זכר', image: '/categories/shalom-zachar.svg', audience: 'private' },
+  { name: 'שמחת בית השואבה', image: '/categories/simchat-beit-hashoeva.svg', audience: 'private' },
+  { name: 'חתונה', image: '/categories/wedding.svg', audience: 'private' },
+  { name: 'בר מצווה', image: '/categories/bar-mitzvah.svg', audience: 'private' },
+  { name: 'מודעות מבצע', image: '/categories/sale.svg', audience: 'business' },
+  { name: 'פתיחת עסק', image: '/categories/opening.svg', audience: 'business' },
+  { name: 'לוגו', image: '/categories/logo.svg', audience: 'business' },
+  { name: 'כרטיסי ביקור', image: '/categories/business-cards.svg', audience: 'business' },
+  { name: 'פוסטים לרשתות', image: '/categories/social.svg', audience: 'business' },
+  { name: 'תפריטים', image: '/categories/menus.svg', audience: 'business' },
 ];
+
+/** topics an admin typed freely (not in CATEGORIES) belong to the private side */
+export const audienceOf = (name: string): Audience => CATEGORIES.find((c) => c.name === name)?.audience ?? 'private';
 
 export const categoryHref = (name: string) => `/category/${encodeURIComponent(name)}`;
 

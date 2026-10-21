@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import s from './festive.module.css';
+import type { Audience } from '@/lib/categories';
+
+const DOORS: { audience: Audience; href: string; label: string }[] = [
+  { audience: 'private', href: '/', label: 'לשמחה' },
+  { audience: 'business', href: '/business', label: 'לעסק' },
+];
 
 /** one card per category, as the carousel shows it; `background` is a CSS background value */
 export type HeroCard = { name: string; background: string };
@@ -23,6 +30,8 @@ const SPARKS = Array.from({ length: 18 }, (_, i) => ({
 }));
 
 type Props = {
+  audience: Audience;
+  copy: { eyebrow: string; title: string[]; lead: string; label: string; name: string };
   name: string;
   onName: (v: string) => void;
   cards: HeroCard[];
@@ -30,7 +39,7 @@ type Props = {
   onPick: (category: string) => void;
 };
 
-export function TableHero({ name, onName, cards, onPick }: Props) {
+export function TableHero({ audience, copy, name, onName, cards, onPick }: Props) {
   const heroRef = useRef<HTMLElement>(null);
   const [front, setFront] = useState<string | null>(null);
 
@@ -86,25 +95,32 @@ export function TableHero({ name, onName, cards, onPick }: Props) {
 
       <div className={`${s.wrap} ${s.heroInner}`}>
         <div className={s.copy}>
-          <span className={`${s.eyebrow} ${s.rise}`}>הזמנות · תעודות · מודעות לבית הכנסת</span>
+          <nav className={`${s.doors} ${s.rise}`} aria-label="בשביל מי העיצוב">
+            {DOORS.map((d) => (
+              <Link key={d.audience} href={d.href} className={s.door} aria-current={d.audience === audience ? 'page' : undefined} scroll={false}>
+                {d.label}
+              </Link>
+            ))}
+          </nav>
+          <span className={`${s.eyebrow} ${s.rise}`}>{copy.eyebrow}</span>
           <h1 className={`${s.title} ${s.rise}`} style={{ animationDelay: '.12s' }}>
-            תעצב את
+            {copy.title[0]}
             <br />
-            האירוע <span className={s.shine}>שלך</span>
+            {copy.title[1]} <span className={s.shine}>{copy.title[2]}</span>
           </h1>
           <p className={`${s.lead} ${s.rise}`} style={{ animationDelay: '.24s' }}>
-            שלפו כרטיס מהשולחן, כתבו את השם, והוא כבר יחכה לכם בכרטיס כשתפתחו אותו.
+            {copy.lead}
           </p>
 
           <div className={`${s.panel} ${s.rise}`} style={{ animationDelay: '.36s' }}>
-            <label htmlFor="hero-name">למי השמחה?</label>
+            <label htmlFor="hero-name">{copy.label}</label>
             <input
               id="hero-name"
               className={s.nameInput}
               type="text"
               value={name}
               maxLength={40}
-              placeholder="נועם & שירה"
+              placeholder={copy.name}
               onChange={(e) => onName(e.target.value)}
             />
           </div>

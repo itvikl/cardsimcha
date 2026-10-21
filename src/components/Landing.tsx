@@ -7,7 +7,7 @@ import { useMe } from './Auth';
 import { TableHero, type HeroCard } from './TableHero';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
-import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, type CarouselSetting } from '@/lib/categories';
+import { applyCarousel, audienceOf, categoryHref, defaultCards, GENERAL_TOPIC, type Audience, type CarouselSetting } from '@/lib/categories';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null };
 type Mine = { id: string; name: string; updatedAt: string; thumbnail: string | null };
@@ -19,23 +19,51 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-const WISHES = ['מזל טוב', 'בשעה טובה', 'ברוכים הבאים', 'שנזכה לשמחות', 'לחיים'];
-const TICKER = Array.from({ length: 4 }, () => WISHES).flat();
+/** everything on the page that differs between the two doors */
+const COPY = {
+  private: {
+    eyebrow: 'הזמנות · תעודות · מודעות לבית הכנסת',
+    title: ['תעצב את', 'האירוע', 'שלך'],
+    lead: 'שלפו כרטיס מהשולחן, כתבו את השם, והוא כבר יחכה לכם בכרטיס כשתפתחו אותו.',
+    label: 'למי השמחה?',
+    name: 'נועם & שירה',
+    fallbackName: 'השם שלכם',
+    ticker: ['מזל טוב', 'בשעה טובה', 'ברוכים הבאים', 'שנזכה לשמחות', 'לחיים'],
+    catsTitle: ['לאיזו', 'שמחה', '?'],
+    step1: 'מסובבים את הטבעת ובוחרים עיצוב לשמחה שלכם.',
+    step2: 'שמות, תאריך, צבע ורקע, או פשוט מבקשים מהעוזר.',
+    cta: 'הכרטיס שלכם כבר על השולחן.',
+  },
+  business: {
+    eyebrow: 'מודעות · לוגו · כרטיסי ביקור · פוסטים',
+    title: ['תעצב את', 'העסק', 'שלך'],
+    lead: 'מודעה, לוגו או פוסט לעסק, בלי גרפיקאי. כתבו את שם העסק, והוא כבר יחכה לכם בעיצוב כשתפתחו אותו.',
+    label: 'איך קוראים לעסק?',
+    name: 'מאפיית השכונה',
+    fallbackName: 'העסק שלכם',
+    ticker: ['פתיחה חגיגית', 'מבצע השבוע', 'חדש בשכונה', 'פתוחים גם בערב', 'משלוחים עד הבית'],
+    catsTitle: ['מה', 'העסק', 'צריך?'],
+    step1: 'מסובבים את הטבעת ובוחרים מודעה, לוגו או פוסט.',
+    step2: 'שם העסק, טלפון, מחירים וצבעים, או פשוט מבקשים מהעוזר.',
+    cta: 'העיצוב של העסק כבר על השולחן.',
+  },
+} satisfies Record<Audience, unknown>;
 
-const STEPS = [
-  { n: 'א', title: 'בוחרים', text: 'מסובבים את הטבעת ובוחרים עיצוב לשמחה שלכם.' },
-  { n: 'ב', title: 'מתאימים', text: 'שמות, תאריך, צבע ורקע, או פשוט מבקשים מהעוזר.' },
-  { n: 'ג', title: 'מורידים', text: 'קובץ 300dpi, מוכן לבית הדפוס או לוואטסאפ.' },
-];
-
-export function Landing() {
+export function Landing({ audience = 'private' }: { audience?: Audience }) {
+  const copy = COPY[audience];
+  const ticker = Array.from({ length: 4 }, () => copy.ticker).flat();
+  const steps = [
+    { n: 'א', title: 'בוחרים', text: copy.step1 },
+    { n: 'ב', title: 'מתאימים', text: copy.step2 },
+    { n: 'ג', title: 'מורידים', text: 'קובץ 300dpi, מוכן לדפוס, לוואטסאפ או לרשתות.' },
+  ];
   const { me } = useMe();
   const router = useRouter();
   const [templates, setTemplates] = useState<Published[]>([]);
   const [mine, setMine] = useState<Mine[]>([]);
   const [carousel, setCarousel] = useState<CarouselSetting[]>([]);
   const [error, setError] = useState('');
-  const [name, setName] = useState('נועם & שירה');
+  const [name, setName] = useState(copy.name);
   const [cat, setCat] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -56,7 +84,10 @@ export function Landing() {
   }, [load]);
 
   // the admin picks which categories show and their order (see /carousel)
-  const visible = useMemo(() => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden), [templates, carousel]);
+  const visible = useMemo(
+    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden && audienceOf(c.name) === audience),
+    [templates, carousel, audience]
+  );
   const categories = useMemo(() => visible.map((c) => c.name), [visible]);
   const byTopic = useMemo(() => {
     const map = new Map<string, RingItem[]>();
@@ -79,7 +110,7 @@ export function Landing() {
 
   // until the visitor picks one: the first category that has designs
   const selected = cat ?? categories.find((c) => byTopic.has(c)) ?? categories[0] ?? GENERAL_TOPIC;
-  const shownName = name.trim() || 'השם שלכם';
+  const shownName = name.trim() || copy.fallbackName;
 
   async function open(item: RingItem) {
     if (!me) {
@@ -114,6 +145,8 @@ export function Landing() {
   return (
     <div className={s.root}>
       <TableHero
+        audience={audience}
+        copy={copy}
         name={name}
         onName={setName}
         cards={heroCards}
@@ -125,7 +158,7 @@ export function Landing() {
 
       <div className={s.ticker} aria-hidden="true">
         <div className={s.tickerTrack}>
-          {TICKER.map((w, i) => (
+          {ticker.map((w, i) => (
             <span key={i}>
               {w} <i>✦</i>
             </span>
@@ -173,7 +206,8 @@ export function Landing() {
         <div className={`${s.wrap} ${s.catsInner}`}>
           <div className={s.headRow}>
             <h2 className={s.h2}>
-              לאיזו <span className={s.shine}>שמחה</span>?
+              {copy.catsTitle[0]} <span className={s.shine}>{copy.catsTitle[1]}</span>
+              {copy.catsTitle[2] === '?' ? '?' : ` ${copy.catsTitle[2]}`}
             </h2>
             <span>בחרו חותם, והטבעת מתמלאת</span>
           </div>
@@ -212,7 +246,7 @@ export function Landing() {
         </h2>
         <span className={s.drawLine} aria-hidden="true" />
         <div className={s.steps}>
-          {STEPS.map((st) => (
+          {steps.map((st) => (
             <div key={st.n} className={s.step}>
               <span className={s.stepNum}>{st.n}</span>
               <h3>{st.title}</h3>
@@ -225,7 +259,7 @@ export function Landing() {
       <section className={s.wrap}>
         <div className={s.cta}>
           <h2>
-            <span className={s.shineLight}>{shownName}</span>, הכרטיס שלכם כבר על השולחן.
+            <span className={s.shineLight}>{shownName}</span>, {copy.cta}
           </h2>
           <a className={`${s.btn} ${s.light}`} href="#cats">
             בחרו עיצוב ←
