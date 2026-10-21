@@ -1,0 +1,33 @@
+{
+  "name": "הזמנה לחתונה - כינור (ייבוא)",
+  "page": { "width_mm": 210, "height_mm": 297, "background": "#F1E6D3" },
+  "background_name": "רקע - מסגרת זהב וכינור",
+  "tighten": true,
+  "texts": [
+    { "text": "בשבח והודיה להשי״ת", "box": [338, 468, 512, 495], "font": "Frank Ruhl Libre", "label": "פתיחה שורה 1" },
+    { "text": "הננו מתכבדים להזמינכם לבוא", "box": [292, 503, 552, 530], "font": "Frank Ruhl Libre", "label": "פתיחה שורה 2" },
+    { "text": "ולהשתתף בשמחת כלולות בנינו היקרים", "box": [264, 535, 579, 563], "font": "Frank Ruhl Libre", "label": "פתיחה שורה 3" },
+    { "text": "החתן המופלג", "box": [378, 579, 466, 600], "font": "Frank Ruhl Libre", "label": "תואר החתן" },
+    { "text": "יעקב", "box": [358, 604, 484, 662], "font": "Frank Ruhl Libre", "weight": 700, "label": "שם החתן" },
+    { "text": "עב״ג", "box": [391, 682, 449, 709], "font": "Frank Ruhl Libre", "label": "אחרי שם החתן" },
+    { "text": "הכלה המהוללה", "box": [373, 731, 469, 753], "font": "Frank Ruhl Libre", "label": "תואר הכלה" },
+    { "text": "ציפורה ברכה", "box": [254, 758, 594, 814], "font": "Frank Ruhl Libre", "weight": 700, "label": "שם הכלה" },
+    { "text": "שתתקיים בעזהשי״ת ובשעה טובה ומוצלחת", "box": [248, 842, 601, 870], "font": "Frank Ruhl Libre", "label": "שורת החתונה" },
+    { "text": "ביום חמישי פרשת חיי שרה", "box": [281, 877, 562, 908], "font": "Frank Ruhl Libre", "weight": 700, "label": "יום ופרשה" },
+    { "text": "כ״ה מר-חשון תשפ״ז", "box": [296, 912, 549, 945], "font": "Frank Ruhl Libre", "weight": 700, "label": "תאריך" },
+    { "text": "קבל״פ בשעה 18:00   חופה בשעה 19:00", "box": [251, 958, 596, 989], "font": "Frank Ruhl Libre", "label": "שעות" },
+    { "text": "באולמי טנטור-הילס", "box": [294, 999, 552, 1041], "font": "Frank Ruhl Libre", "weight": 700, "label": "אולם" },
+    { "text": "רחוב דרך חברון 303", "box": [336, 1047, 506, 1075], "font": "Frank Ruhl Libre", "label": "כתובת" },
+    { "text": "הורי החתן", "box": [381, 1090, 449, 1113], "font": "Frank Ruhl Libre", "label": "כותרת הורי החתן" },
+    { "text": "אהרן זעליקאוויטש", "box": [334, 1114, 499, 1148], "font": "Frank Ruhl Libre", "weight": 700, "label": "הורי החתן" },
+    { "text": "וב״ב", "box": [391, 1150, 434, 1173], "font": "Frank Ruhl Libre", "label": "וב״ב (חתן)" },
+    { "text": "הורי הכלה", "box": [380, 1182, 447, 1206], "font": "Frank Ruhl Libre", "label": "כותרת הורי הכלה" },
+    { "text": "מאיר גולדבערג", "box": [353, 1207, 479, 1241], "font": "Frank Ruhl Libre", "weight": 700, "label": "הורי הכלה" },
+    { "text": "וב״ב", "box": [393, 1243, 436, 1266], "font": "Frank Ruhl Libre", "label": "וב״ב (כלה)" },
+    { "text": "אהובי ידידי אחי ורעי היקר", "box": [871, 392, 1072, 418], "font": "Frank Ruhl Libre", "label": "הזמנה אישית שורה 1" },
+    { "text": "אשמח לראותך משתתף בשמחתי", "box": [854, 418, 1072, 445], "font": "Frank Ruhl Libre", "label": "הזמנה אישית שורה 2" },
+    { "text": "נא לראות הזמנה זו כאישית ממש", "box": [849, 444, 1072, 471], "font": "Frank Ruhl Libre", "label": "הזמנה אישית שורה 3" },
+    { "text": "באחווה ובידידות", "box": [888, 491, 1032, 516], "font": "Frank Ruhl Libre", "label": "ברכת סיום" },
+    { "text": "החתן יענקי", "box": [881, 523, 1014, 572], "font": "Frank Ruhl Libre", "label": "חתימה" }
+  ]
+}
