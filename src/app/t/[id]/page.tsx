@@ -70,7 +70,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
 
   return (
     <main className="page">
-      <Link href="/#cards" className="btn small">
+      <Link href="/#cats" className="btn small">
         כל הכרטיסים
       </Link>
       <div className="tpl-layout">

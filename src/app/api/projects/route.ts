@@ -20,8 +20,9 @@ export async function GET() {
 }
 
 /**
- * - { templateId }: create the caller's own design as a copy of a template
+ * - { templateId, prefill? }: create the caller's own design as a copy of a template
  *   (customers: published templates only; admins may copy any template to test it).
+ *   `prefill` only fills an editable text field whose label mentions a name.
  * - { name, width_mm, height_mm }: create a new blank template (admin only).
  */
 export async function POST(req: Request) {
@@ -46,6 +47,12 @@ export async function POST(req: Request) {
         createdAt: now,
         updatedAt: now,
       };
+      // the name typed on the home page goes into the first editable field labelled as a name
+      const prefill = typeof body.prefill === 'string' ? body.prefill.trim().slice(0, 80) : '';
+      const field = prefill
+        ? copy.canvas.elements.find((e) => e.type === 'text' && e.editable && (e.label ?? '').includes('שם'))
+        : undefined;
+      if (field?.type === 'text') field.text = prefill;
       db.projects.push(copy);
       return copy;
     });

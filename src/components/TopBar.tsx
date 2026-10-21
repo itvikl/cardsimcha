@@ -31,7 +31,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <Link href="/" className="brand">
-        <span className="logo-mark" style={{ color: '#fff' }}>
+        <span className="logo-mark">
           <LogoIcon />
         </span>
         <span className="brand-text">סטודיו עיצוב</span>

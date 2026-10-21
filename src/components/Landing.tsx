@@ -2,24 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMe } from './Auth';
-import { DownloadIcon, LogoIcon, PenIcon, SearchIcon } from './Icons';
-import CardCascade from './CardCascade';
-import { FallingTitle } from './FallingTitle';
-import { IntroEnvelope } from './IntroEnvelope';
-import { applyCarousel, categoryHref, defaultCards, type CarouselSetting } from '@/lib/categories';
+import { TableHero, type FoilId } from './TableHero';
+import { MirrorRing, type RingItem } from './MirrorRing';
+import s from './festive.module.css';
+import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, type CarouselSetting } from '@/lib/categories';
 
-type Published = { id: string; topic: string | null; thumbnail: string | null };
+type Published = { id: string; name: string; topic: string | null; thumbnail: string | null };
 type Mine = { id: string; name: string; updatedAt: string; thumbnail: string | null };
-
-/** every visit, except for people who asked their system to reduce motion */
-function shouldPlayIntro() {
-  try {
-    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return true;
-  }
-}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -28,26 +19,32 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+const WISHES = ['מזל טוב', 'בשעה טובה', 'ברוכים הבאים', 'שנזכה לשמחות', 'לחיים'];
+const TICKER = Array.from({ length: 4 }, () => WISHES).flat();
+
 const STEPS = [
-  { n: '01', icon: <SearchIcon />, grad: 'linear-gradient(135deg,#0e7490,#22b8cf)', title: 'בוחרים', text: 'בוחרים קטגוריה ואת הכרטיס שאהבתם.' },
-  { n: '02', icon: <PenIcon />, grad: 'linear-gradient(135deg,#12664a,#2fcf96)', title: 'מתאימים', text: 'משנים שמות, תאריך וצבעים, מחליפים רקע וגוררים את הטקסטים למקום.' },
-  { n: '03', icon: <DownloadIcon />, grad: 'linear-gradient(135deg,#d97706,#f5b73b)', title: 'מורידים', text: 'מורידים את הכרטיס כקובץ באיכות הדפסה (300dpi) ומשתפים.' },
+  { n: 'א', title: 'בוחרים', text: 'מסובבים את הטבעת ובוחרים עיצוב לשמחה שלכם.' },
+  { n: 'ב', title: 'מתאימים', text: 'שמות, תאריך, צבע ורקע, או פשוט מבקשים מהעוזר.' },
+  { n: 'ג', title: 'מורידים', text: 'קובץ 300dpi, מוכן לבית הדפוס או לוואטסאפ.' },
 ];
 
 export function Landing() {
   const { me } = useMe();
+  const router = useRouter();
   const [templates, setTemplates] = useState<Published[]>([]);
   const [mine, setMine] = useState<Mine[]>([]);
   const [carousel, setCarousel] = useState<CarouselSetting[]>([]);
   const [error, setError] = useState('');
-  const [intro, setIntro] = useState(shouldPlayIntro);
-  const [titlePlay, setTitlePlay] = useState(() => !intro);
+  const [name, setName] = useState('נועם & שירה');
+  const [foil, setFoil] = useState<FoilId>('gold');
+  const [cat, setCat] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [t, m, c] = await Promise.all([
       api<Published[]>('/api/templates'),
       me ? api<Mine[]>('/api/projects') : Promise.resolve([]),
-      // without the admin's choices the default carousel still works
+      // without the admin's choices the default order still works
       api<CarouselSetting[]>('/api/carousel').catch(() => []),
     ]);
     setTemplates(t);
@@ -59,6 +56,44 @@ export function Landing() {
     load().catch((e) => setError(e.message));
   }, [load]);
 
+  // the admin picks which categories show and their order (see /carousel)
+  const categories = useMemo(
+    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden).map((c) => c.name),
+    [templates, carousel]
+  );
+  const byTopic = useMemo(() => {
+    const map = new Map<string, RingItem[]>();
+    for (const t of templates) {
+      const key = t.topic || GENERAL_TOPIC;
+      map.set(key, [...(map.get(key) ?? []), { id: t.id, name: t.name, thumbnail: t.thumbnail }]);
+    }
+    return map;
+  }, [templates]);
+
+  // until the visitor picks one: the first category that has designs
+  const selected = cat ?? categories.find((c) => byTopic.has(c)) ?? categories[0] ?? GENERAL_TOPIC;
+  const shownName = name.trim() || 'השם שלכם';
+
+  async function open(item: RingItem) {
+    if (!me) {
+      router.push(`/t/${item.id}`);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api<{ id: string }>('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: item.id, prefill: name.trim() }),
+      });
+      router.push(`/editor/${r.id}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   async function remove(it: Mine) {
     if (!confirm(`למחוק את "${it.name}"? אי אפשר לבטל.`)) return;
     try {
@@ -69,55 +104,46 @@ export function Landing() {
     }
   }
 
-  // the admin picks which cards show, their order and their images (see /carousel)
-  const categories = useMemo(
-    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden),
-    [templates, carousel]
-  );
-
   return (
-    <>
-      {intro && <IntroEnvelope onOpen={() => setTitlePlay(true)} onDone={() => setIntro(false)} />}
-      <CardCascade
-        id="cards"
-        eyebrow="הזמנות ועיצובים לכל אירוע"
-        title={<FallingTitle lines={['תעצב את', 'האירוע שלך']} play={titlePlay} />}
-        description="בחרו קטגוריה, התאימו את הכרטיס בכמה לחיצות והורידו אותו באיכות הדפסה."
-        cards={categories.map((c) => ({ name: c.name, background: c.background, href: categoryHref(c.name) }))}
-        scrollScreens={Math.max(4, categories.length)}
-      />
+    <div className={s.root}>
+      <TableHero name={name} onName={setName} foil={foil} onFoil={setFoil} shownName={shownName} />
+
+      <div className={s.ticker} aria-hidden="true">
+        <div className={s.tickerTrack}>
+          {TICKER.map((w, i) => (
+            <span key={i}>
+              {w} <i>✦</i>
+            </span>
+          ))}
+        </div>
+      </div>
 
       {error && (
-        <p className="error" role="alert" style={{ margin: 16 }}>
+        <p className={s.error} role="alert">
           {error}
         </p>
       )}
 
       {mine.length > 0 && (
-        <section className="mine-section" aria-label="הכרטיסים שלי">
-          <div className="inner">
-            <span className="eyebrow">ההמשך שלכם</span>
-            <h2 className="section-title" style={{ fontSize: 'clamp(28px,4vw,40px)' }}>
-              הכרטיסים שלי
+        <section className={s.mine} aria-label="הכרטיסים שלי">
+          <div className={s.wrap}>
+            <span className={s.eyebrow}>ההמשך שלכם</span>
+            <h2 className={s.h2} style={{ marginTop: 10 }}>
+              הכרטיסים <span className={s.shine}>שלי</span>
             </h2>
-            <div className="grid" style={{ marginTop: 24 }}>
+            <div className={s.mineGrid}>
               {mine.map((it) => (
-                <div key={it.id} className="card" style={{ display: 'grid', gap: 10 }}>
-                  <Link href={`/editor/${it.id}`}>
-                    <div
-                      className="preview"
-                      style={it.thumbnail ? { backgroundImage: `url(${it.thumbnail})`, backgroundSize: 'contain' } : undefined}
-                      role="img"
-                      aria-label={`תצוגה מקדימה של ${it.name}`}
-                    />
+                <div key={it.id} className={s.mineCard}>
+                  <Link href={`/editor/${it.id}`} aria-label={`המשך עריכה של ${it.name}`}>
+                    <div className={s.mineThumb} style={it.thumbnail ? { backgroundImage: `url("${it.thumbnail}")` } : undefined} />
                   </Link>
                   <strong>{it.name}</strong>
-                  <span className="status">עודכן {new Date(it.updatedAt).toLocaleString('he-IL')}</span>
-                  <div className="row">
-                    <Link className="btn small primary" href={`/editor/${it.id}`}>
+                  <small>עודכן {new Date(it.updatedAt).toLocaleString('he-IL')}</small>
+                  <div className={s.mineRow}>
+                    <Link className={`${s.btn} ${s.dark}`} href={`/editor/${it.id}`}>
                       המשך עריכה
                     </Link>
-                    <button className="btn small danger" onClick={() => remove(it)}>
+                    <button type="button" className={`${s.btn} ${s.danger}`} onClick={() => remove(it)}>
                       מחיקה
                     </button>
                   </div>
@@ -128,36 +154,76 @@ export function Landing() {
         </section>
       )}
 
-      <section className="light-section" id="how">
-        <div className="inner">
-          <span className="eyebrow">תהליך פשוט</span>
-          <h2 className="section-title">
-            איך זה <span className="grad">עובד</span>
-          </h2>
-          <div className="steps">
-            {STEPS.map((s) => (
-              <div key={s.n} className="step">
-                <div className="step-icon" style={{ background: s.grad }}>
-                  {s.icon}
-                </div>
-                <span className="num">שלב {s.n}</span>
-                <h3>{s.title}</h3>
-                <p>{s.text}</p>
-              </div>
+      <section id="cats" className={s.cats}>
+        <div className={`${s.wrap} ${s.catsInner}`}>
+          <div className={s.headRow}>
+            <h2 className={s.h2}>
+              לאיזו <span className={s.shine}>שמחה</span>?
+            </h2>
+            <span>בחרו חותם, והטבעת מתמלאת</span>
+          </div>
+          <div className={s.seals} role="group" aria-label="קטגוריות">
+            {categories.map((c) => (
+              <button key={c} type="button" className={s.seal} aria-pressed={c === selected} onClick={() => setCat(c)}>
+                <span className={s.sealDisk}>
+                  <span className={s.sealRing} aria-hidden="true" />
+                  <span className={s.sealFace} aria-hidden="true">
+                    {c.trim().charAt(0)}
+                  </span>
+                </span>
+                <span className={s.sealName}>{c}</span>
+              </button>
             ))}
           </div>
+          <MirrorRing
+            items={byTopic.get(selected) ?? []}
+            title={selected}
+            moreHref={categoryHref(selected)}
+            spinKey={selected}
+            onOpen={open}
+            busy={busy}
+          />
+          {name.trim() && (
+            <p style={{ margin: 0, color: 'var(--muted)' }}>
+              השם &quot;{name.trim()}&quot; ייכנס לכרטיס כשתפתחו אותו בעורך.
+            </p>
+          )}
         </div>
       </section>
 
-      <footer className="site-footer">
-        <p className="brand" style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          <span className="logo-mark" style={{ color: '#fff' }}>
-            <LogoIcon />
-          </span>
-          סטודיו עיצוב
-        </p>
-        <p style={{ margin: '8px 0 0' }}>לכל שמחה, יש כרטיס מושלם.</p>
+      <section id="how" className={`${s.wrap} ${s.how}`}>
+        <h2 className={s.h2}>
+          שלוש דקות, <span className={s.shine}>שלושה צעדים</span>
+        </h2>
+        <span className={s.drawLine} aria-hidden="true" />
+        <div className={s.steps}>
+          {STEPS.map((st) => (
+            <div key={st.n} className={s.step}>
+              <span className={s.stepNum}>{st.n}</span>
+              <h3>{st.title}</h3>
+              <p>{st.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className={s.wrap}>
+        <div className={s.cta}>
+          <h2>
+            <span className={s.shineLight}>{shownName}</span>, הכרטיס שלכם כבר על השולחן.
+          </h2>
+          <a className={`${s.btn} ${s.light}`} href="#cats">
+            בחרו עיצוב ←
+          </a>
+        </div>
+      </section>
+
+      <footer className={s.footer}>
+        <div className={s.wrap}>
+          <strong>סטודיו עיצוב</strong>
+          <span>לכל שמחה, יש כרטיס מושלם.</span>
+        </div>
       </footer>
-    </>
+    </div>
   );
 }
