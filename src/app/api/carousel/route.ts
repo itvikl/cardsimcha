@@ -47,6 +47,11 @@ export async function PUT(req: Request) {
   }
 
   const result = await updateDb((db) => {
+    // the page only lists topics with something to show; keep the rest (e.g. a business topic
+    // whose templates are all drafts) so they don't lose their door
+    for (const old of [...db.carousel].sort((a, b) => a.order - b.order)) {
+      if (!seen.has(old.name)) slides.push({ ...old, order: slides.length });
+    }
     db.carousel = slides;
     return list(db);
   });

@@ -3,7 +3,7 @@ import { newId, readDb, updateDb } from '@/lib/db';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { summarize } from '@/lib/summary';
-import { claimTopic, parseAudience } from '@/lib/topics';
+import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
 import type { Project } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,7 @@ export async function GET() {
  *   (customers: published templates only; admins may copy any template to test it).
  *   `prefill` only fills an editable text field whose label mentions a name.
  * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
- *   a new topic is claimed for the door (`audience`) the admin was working behind.
+ *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  */
 export async function POST(req: Request) {
   const user = await requireUser();
@@ -89,6 +89,11 @@ export async function POST(req: Request) {
     });
   }
   const audience = parseAudience(body?.audience);
+  // fail before the upload work below is wasted (checked again, atomically, when saving)
+  if (audience) {
+    const why = topicConflict(db, topic, audience);
+    if (why) return NextResponse.json({ error: why }, { status: 400 });
+  }
   const project: Project = {
     id: newId(),
     kind: 'template',
@@ -100,9 +105,13 @@ export async function POST(req: Request) {
     createdAt: now,
     updatedAt: now,
   };
-  await updateDb((db) => {
+  const conflict = await updateDb((db) => {
+    const why = audience ? topicConflict(db, topic, audience) : null;
+    if (why) return why;
+    if (audience) claimTopic(db, topic, audience);
     db.projects.push(project);
-    if (audience && topic) claimTopic(db, topic, audience);
+    return null;
   });
+  if (conflict) return NextResponse.json({ error: conflict }, { status: 400 });
   return NextResponse.json({ id: project.id }, { status: 201 });
 }

@@ -4,7 +4,7 @@ import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
-import { claimTopic, parseAudience } from '@/lib/topics';
+import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -40,10 +40,17 @@ export async function PUT(req: Request, { params }: Ctx) {
   const status = body?.status === 'draft' || body?.status === 'published' ? body.status : undefined;
   const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : undefined;
 
-  type Result = 'missing' | 'invalid' | { id: string; updatedAt: string };
+  const audience = parseAudience(body?.audience);
+
+  type Result = 'missing' | 'invalid' | { conflict: string } | { id: string; updatedAt: string };
   const result = await updateDb<Result>((db) => {
     const p = db.projects.find((x) => x.id === id);
     if (!p || !canWrite(user, p)) return 'missing';
+    // checked before anything changes: a template only takes a topic of the admin's current door
+    if (topic !== undefined && p.kind === 'template' && audience) {
+      const why = topicConflict(db, topic, audience);
+      if (why) return { conflict: why };
+    }
 
     if (body?.canvas !== undefined) {
       // admin editing a template: full control. A customer's design: text of editable fields only.
@@ -56,14 +63,14 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (status && p.kind === 'template') p.status = status;
     if (topic !== undefined && p.kind === 'template') {
       p.topic = topic || undefined;
-      const audience = parseAudience(body?.audience);
-      if (audience && topic) claimTopic(db, topic, audience);
+      if (audience) claimTopic(db, topic, audience);
     }
     p.updatedAt = new Date().toISOString();
     return { id: p.id, updatedAt: p.updatedAt };
   });
   if (result === 'missing') return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   if (result === 'invalid') return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
+  if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
   return NextResponse.json(result);
 }
 

@@ -155,9 +155,10 @@ function AdminHome() {
     }
   }
 
-  async function saveTopic(it: Item, value: string) {
-    const next = value.trim();
+  async function saveTopic(it: Item, input: HTMLInputElement) {
+    const next = input.value.trim();
     if (next === (it.topic ?? '')) return;
+    setError('');
     try {
       await api(`/api/projects/${it.id}`, {
         method: 'PUT',
@@ -166,6 +167,8 @@ function AdminHome() {
       });
       await load();
     } catch (err) {
+      // refused (e.g. a topic of the other door): show the saved topic again
+      input.value = it.topic ?? '';
       setError((err as Error).message);
     }
   }
@@ -274,7 +277,7 @@ function AdminHome() {
                   defaultValue={it.topic ?? ''}
                   placeholder="לא הוגדר נושא"
                   maxLength={60}
-                  onBlur={(e) => saveTopic(it, e.target.value)}
+                  onBlur={(e) => saveTopic(it, e.currentTarget)}
                 />
               </label>
               <div className="row">
