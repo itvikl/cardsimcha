@@ -19,10 +19,10 @@
     { "box": [445, 1320, 1016, 1361], "fill": "#F6AA4A" }
   ],
   "texts": [
-    { "text": "בית שמש", "box": [235, 60, 375, 598], "rotation": 90, "font": "Secular One", "color": "#45301F", "label": "עיר (כותרת)" },
+    { "text": "בית שמש", "box": [235, 60, 375, 598], "rotation": -90, "font": "Secular One", "color": "#45301F", "label": "עיר (כותרת)" },
     { "text": "יום ראשון", "box": [270, 607, 400, 648], "font": "Secular One", "color": "#45301F", "label": "יום (בכותרת)" },
     { "text": "אולם קוסוב ויזניץ", "box": [210, 655, 402, 700], "font": "Secular One", "color": "#45301F", "label": "אולם (בכותרת)" },
-    { "text": "ורוד השטריימלך", "box": [72, 100, 190, 720], "rotation": 90, "font": "Secular One", "color": "#F7B868", "label": "שם העסק" },
+    { "text": "ורוד השטריימלך", "box": [72, 100, 190, 720], "rotation": -90, "font": "Secular One", "color": "#F7B868", "label": "שם העסק" },
     { "text": "ביום ראשון זה קורה", "box": [578, 188, 921, 222], "font": "Secular One", "color": "#F7B868", "label": "שורת פתיחה" },
     { "text": "לרגל השקת הקולקציה החדשה", "box": [92, 735, 410, 770], "font": "Heebo", "color": "#F7B868", "label": "הסבר שורה 1" },
     { "text": "אנחנו מרוקנים את המדפים ופותחים", "box": [68, 775, 415, 815], "font": "Heebo", "color": "#FFFFFF", "label": "הסבר שורה 2" },

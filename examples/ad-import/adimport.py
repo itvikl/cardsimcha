@@ -59,15 +59,35 @@ def ink(gray, box, t=22):
     return diff > t, diff
 
 
-def tighten(gray, box, pad=4):
-    """shrink a rough box to the text's actual ink"""
+def tighten(gray, box, pad=4, grow=80, gap=16):
+    """fit a rough box (horizontal text) to the text's actual ink: shrink it, and extend it along the
+    line while more letters follow (a gap wider than `gap` px, more than a word space, ends the line)"""
     x0, y0, x1, y1 = box
-    b = [max(0, x0 - pad), max(0, y0 - pad), min(gray.shape[1], x1 + pad), min(gray.shape[0], y1 + pad)]
+    W = gray.shape[1]
+    b = [max(0, x0 - pad), max(0, y0 - pad), min(W, x1 + pad), min(gray.shape[0], y1 + pad)]
     m, _ = ink(gray, b)
-    rows, cols = np.where(m.sum(1) >= 2)[0], np.where(m.sum(0) >= 2)[0]
-    if not len(rows) or not len(cols):
+    rows = np.where(m.sum(1) >= 2)[0]
+    if not len(rows):
         return box
-    return [b[0] + int(cols[0]), b[1] + int(rows[0]), b[0] + int(cols[-1]) + 1, b[1] + int(rows[-1]) + 1]
+    ty0, ty1 = b[1] + int(rows[0]), b[1] + int(rows[-1]) + 1
+    sx0, sx1 = max(0, x0 - grow), min(W, x1 + grow)
+    m, _ = ink(gray, (sx0, ty0, sx1, ty1))
+    on = m.sum(0) >= 2
+    inner = np.where(on[x0 - sx0:x1 - sx0])[0]
+    if not len(inner):
+        return box
+    lo, hi = x0 - sx0 + int(inner[0]), x0 - sx0 + int(inner[-1])
+    i = lo - 1
+    while i >= 0 and lo - i <= gap:  # walk left; any ink within `gap` px continues the line
+        if on[i]:
+            lo = i
+        i -= 1
+    i = hi + 1
+    while i < len(on) and i - hi <= gap:
+        if on[i]:
+            hi = i
+        i += 1
+    return [sx0 + lo, ty0, sx0 + hi + 1, ty1]
 
 
 def sample_color(img, gray, box):
@@ -92,7 +112,10 @@ def clean(img, gray, spec, boxes):
     """Erases text from the background. Text on a rect is left: the rect covers it in the editor."""
     regions = spec.get('erase')
     if regions is None:  # default: every text that is not on a solid box, with some margin
-        regions = [[b[0] - 8, b[1] - 8, b[2] + 8, b[3] + 8] for b in boxes
+        # union of the rough and the tightened box: faint letter edges can fall outside the tight one
+        both = [[min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                for a, b in zip((t['box'] for t in spec['texts']), boxes)]
+        regions = [[b[0] - 8, b[1] - 8, b[2] + 8, b[3] + 8] for b in both
                    if not any(inside(b, r['box']) for r in spec.get('rects', []))]
     mask = np.zeros(gray.shape, np.uint8)
     for x0, y0, x1, y1 in regions:
@@ -135,8 +158,11 @@ def to_canvas(spec, img, gray, boxes, bg_asset_id):
         box_w = along * 1.15 + 10             # slack so a slightly wider browser font never wraps
         box_h = fs_px * LINE
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-        if rot == 90:  # Konva rotates around the top-left corner: box runs down, its height goes left
+        # Konva rotates around the top-left corner
+        if rot == 90:     # reads bottom to top: the box runs down, its height goes left
             bx, by = cx + box_h / 2, cy - box_w / 2
+        elif rot == -90:  # reads top to bottom: the box runs up, its height goes right
+            bx, by = cx - box_h / 2, cy + box_w / 2
         else:
             bx, by = cx - box_w / 2, cy - box_h / 2
         color = t.get('color') or sample_color(img, gray, (x0, y0, x1, y1))
@@ -164,6 +190,9 @@ def preview(doc, background):
         if e['rotation'] == 90:
             layer = layer.rotate(-90, expand=True)
             im.paste(layer, (int(e['x_mm'] * k - h), int(e['y_mm'] * k)), layer)
+        elif e['rotation'] == -90:
+            layer = layer.rotate(90, expand=True)
+            im.paste(layer, (int(e['x_mm'] * k), int(e['y_mm'] * k - w)), layer)
         else:
             im.paste(layer, (int(e['x_mm'] * k), int(e['y_mm'] * k)), layer)
     return im

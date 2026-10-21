@@ -7,7 +7,7 @@
   },
   "elements": [
     {
-      "id": "6bb04fa4-b2a2-462b-9537-f77c9edbbbf0",
+      "id": "f45d4893-d6b1-486d-83e2-b2e6666c022f",
       "type": "image",
       "x_mm": 0,
       "y_mm": 0,
@@ -19,7 +19,7 @@
       "label": "רקע"
     },
     {
-      "id": "e9687619-70f5-4aab-a89b-bdf17d7ac5c6",
+      "id": "34496380-7072-45f6-a926-53ddc683a599",
       "type": "text",
       "x_mm": 59.94,
       "y_mm": 87.0,
@@ -38,7 +38,7 @@
       }
     },
     {
-      "id": "efb4884f-b7b7-46db-8711-a2b3a4e3faac",
+      "id": "d62aca8f-c106-4e41-9dc5-c98208789db8",
       "type": "text",
       "x_mm": 53.1,
       "y_mm": 92.94,
@@ -57,7 +57,7 @@
       }
     },
     {
-      "id": "68781f76-5745-405f-80b6-b7865bd90279",
+      "id": "6cf61e43-35f3-41eb-850f-5381ee029a0c",
       "type": "text",
       "x_mm": 45.2,
       "y_mm": 99.25,
@@ -76,7 +76,7 @@
       }
     },
     {
-      "id": "488392cd-250e-4e15-a2c4-995c78c36ec2",
+      "id": "7fa6c8e6-eb65-40a3-bef6-d2c1b9d0c609",
       "type": "text",
       "x_mm": 69.72,
       "y_mm": 108.23,
@@ -95,7 +95,7 @@
       }
     },
     {
-      "id": "38b210c6-b7d9-407c-9d49-7c759141a181",
+      "id": "ee738156-4eea-4c31-b60d-c4aef666c3a1",
       "type": "text",
       "x_mm": 64.63,
       "y_mm": 109.61,
@@ -114,7 +114,7 @@
       }
     },
     {
-      "id": "5593dd27-1bf0-4cdf-855f-f7265b69262f",
+      "id": "41ae765b-2023-4945-a265-35867a5f6ee4",
       "type": "text",
       "x_mm": 73.39,
       "y_mm": 126.69,
@@ -133,7 +133,7 @@
       }
     },
     {
-      "id": "fdae4979-0aa3-4a33-b6b6-8d867ca552a5",
+      "id": "e38e76be-340c-4846-988d-1b3cbe38bd69",
       "type": "text",
       "x_mm": 68.06,
       "y_mm": 135.59,
@@ -152,7 +152,7 @@
       }
     },
     {
-      "id": "4198edd9-4715-40e9-9f7d-3d4c034269f8",
+      "id": "1b461535-dfa0-40d8-b65b-3c0cc6c17c9e",
       "type": "text",
       "x_mm": 41.98,
       "y_mm": 137.77,
@@ -171,11 +171,11 @@
       }
     },
     {
-      "id": "9a7e80f3-d8a8-462b-93ec-5f25232809a2",
+      "id": "3d9f2698-3900-4200-890f-4e1b0d2ada3c",
       "type": "text",
-      "x_mm": 39.38,
-      "y_mm": 156.33,
-      "w_mm": 79.01,
+      "x_mm": 37.06,
+      "y_mm": 156.17,
+      "w_mm": 83.28,
       "rotation": 0,
       "z": 9,
       "text": "שתתקיים בעזהשי״ת ובשעה טובה ומוצלחת",
@@ -185,12 +185,12 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 12.5,
-        "color": "#6B593C"
+        "size_pt": 13.2,
+        "color": "#6B593D"
       }
     },
     {
-      "id": "60761007-9593-49cf-8623-6af7c228d08a",
+      "id": "b6c56dca-6f02-4a07-a348-e576e4e80fe8",
       "type": "text",
       "x_mm": 47.96,
       "y_mm": 162.78,
@@ -209,7 +209,7 @@
       }
     },
     {
-      "id": "d3ce0f2c-f8f4-42ed-9dce-bde6fa31bf30",
+      "id": "c8062dd2-c331-4b84-a078-00ebe951e785",
       "type": "text",
       "x_mm": 55.01,
       "y_mm": 169.98,
@@ -228,7 +228,7 @@
       }
     },
     {
-      "id": "f824f9ec-0c79-4d06-bdbc-e4fa366730c9",
+      "id": "e4981b00-21e2-4366-8721-b2084ba0e393",
       "type": "text",
       "x_mm": 41.58,
       "y_mm": 178.66,
@@ -247,7 +247,7 @@
       }
     },
     {
-      "id": "2d003b39-7488-4dc8-bf83-54f328424df9",
+      "id": "7bde8b2d-a8b3-49cf-8ce2-aced3c145b73",
       "type": "text",
       "x_mm": 51.15,
       "y_mm": 186.09,
@@ -266,7 +266,7 @@
       }
     },
     {
-      "id": "c81c2685-46b6-4b44-b084-4e9bd1c30338",
+      "id": "4ba58520-587f-4f8d-9e20-14299b835c6b",
       "type": "text",
       "x_mm": 59.96,
       "y_mm": 194.75,
@@ -285,11 +285,11 @@
       }
     },
     {
-      "id": "2478244b-d54c-4f47-aa61-2bb1254c5f92",
+      "id": "9b174507-d5e7-4d52-b60c-c9139015d33d",
       "type": "text",
-      "x_mm": 70.47,
-      "y_mm": 203.9,
-      "w_mm": 15.54,
+      "x_mm": 70.4,
+      "y_mm": 203.74,
+      "w_mm": 16.6,
       "rotation": 0,
       "z": 15,
       "text": "הורי החתן",
@@ -299,16 +299,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 9.1,
-        "color": "#675B44"
+        "size_pt": 9.9,
+        "color": "#685B44"
       }
     },
     {
-      "id": "573451ae-dd37-46e4-89d4-6460dd387eac",
+      "id": "5b397213-fbf7-4b40-aca9-fa7256c8c2c0",
       "type": "text",
-      "x_mm": 59.78,
-      "y_mm": 207.21,
-      "w_mm": 36.91,
+      "x_mm": 59.7,
+      "y_mm": 207.11,
+      "w_mm": 38.19,
       "rotation": 0,
       "z": 16,
       "text": "אהרן זעליקאוויטש",
@@ -318,16 +318,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 700,
-        "size_pt": 12.7,
+        "size_pt": 13.1,
         "color": "#9B8551"
       }
     },
     {
-      "id": "fdca9812-45fc-4e3a-b41d-9e9070015934",
+      "id": "68852d00-dee1-4f8d-bf97-03b7564157ac",
       "type": "text",
-      "x_mm": 74.08,
-      "y_mm": 212.82,
-      "w_mm": 8.7,
+      "x_mm": 74.06,
+      "y_mm": 212.75,
+      "w_mm": 8.91,
       "rotation": 0,
       "z": 17,
       "text": "וב״ב",
@@ -337,16 +337,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 10.8,
-        "color": "#786C55"
+        "size_pt": 11.1,
+        "color": "#746A54"
       }
     },
     {
-      "id": "cd2e7101-911b-4fac-a610-d7f638e384c0",
+      "id": "b0301656-9bb3-4cc4-9e6e-bc11be8e9a3c",
       "type": "text",
-      "x_mm": 70.9,
-      "y_mm": 220.91,
-      "w_mm": 14.68,
+      "x_mm": 70.74,
+      "y_mm": 220.58,
+      "w_mm": 17.03,
       "rotation": 0,
       "z": 18,
       "text": "הורי הכלה",
@@ -356,16 +356,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 8.2,
-        "color": "#685B44"
+        "size_pt": 9.8,
+        "color": "#685C47"
       }
     },
     {
-      "id": "330b0f8e-1c40-4142-9b09-fd4614e516db",
+      "id": "44684b5d-c1f1-42d6-aad2-4c6f9d86790e",
       "type": "text",
-      "x_mm": 64.07,
-      "y_mm": 224.26,
-      "w_mm": 28.15,
+      "x_mm": 63.88,
+      "y_mm": 223.97,
+      "w_mm": 31.14,
       "rotation": 0,
       "z": 19,
       "text": "מאיר גולדבערג",
@@ -375,16 +375,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 700,
-        "size_pt": 11.6,
+        "size_pt": 12.9,
         "color": "#9A8452"
       }
     },
     {
-      "id": "e59fbd47-93dd-4c23-be5e-238a6dd901b1",
+      "id": "743a2d21-cc5c-420d-b358-bdef72711eb7",
       "type": "text",
-      "x_mm": 75.05,
-      "y_mm": 231.16,
-      "w_mm": 8.06,
+      "x_mm": 75.02,
+      "y_mm": 231.01,
+      "w_mm": 8.48,
       "rotation": 0,
       "z": 20,
       "text": "וב״ב",
@@ -394,16 +394,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 9.8,
-        "color": "#7C6F59"
+        "size_pt": 10.5,
+        "color": "#7A6953"
       }
     },
     {
-      "id": "9a5277c1-0cbb-43ab-9612-3318918a06c1",
+      "id": "40e22fc6-9f10-4967-9748-07d278dec8a5",
       "type": "text",
-      "x_mm": 157.62,
-      "y_mm": 73.82,
-      "w_mm": 41.4,
+      "x_mm": 154.62,
+      "y_mm": 73.63,
+      "w_mm": 44.6,
       "rotation": 0,
       "z": 21,
       "text": "אהובי ידידי אחי ורעי היקר",
@@ -413,16 +413,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 10.4,
-        "color": "#9A8659"
+        "size_pt": 11.2,
+        "color": "#9A8559"
       }
     },
     {
-      "id": "37ee7913-c497-4465-b637-7a5d97b0a65e",
+      "id": "5000f49c-e8b9-4164-8d62-9045c5c9d22e",
       "type": "text",
-      "x_mm": 153.9,
-      "y_mm": 77.94,
-      "w_mm": 49.94,
+      "x_mm": 149.7,
+      "y_mm": 77.72,
+      "w_mm": 54.43,
       "rotation": 0,
       "z": 22,
       "text": "אשמח לראותך משתתף בשמחתי",
@@ -432,16 +432,16 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 10.2,
-        "color": "#988457"
+        "size_pt": 11.2,
+        "color": "#998457"
       }
     },
     {
-      "id": "9f9c6e5b-cfbf-4032-9876-af88e4007816",
+      "id": "d4404862-ff84-48fc-9bc8-0cb4fd34f70f",
       "type": "text",
-      "x_mm": 152.89,
-      "y_mm": 81.59,
-      "w_mm": 51.23,
+      "x_mm": 149.49,
+      "y_mm": 81.42,
+      "w_mm": 54.86,
       "rotation": 0,
       "z": 23,
       "text": "נא לראות הזמנה זו כאישית ממש",
@@ -451,12 +451,12 @@
       "font": {
         "family": "Frank Ruhl Libre",
         "weight": 400,
-        "size_pt": 10.5,
+        "size_pt": 11.3,
         "color": "#9B8557"
       }
     },
     {
-      "id": "030911d6-d7cd-4507-a5c9-720a53082c94",
+      "id": "a224e897-1ccf-465b-96ac-9a208b0b59c3",
       "type": "text",
       "x_mm": 162.74,
       "y_mm": 90.96,
@@ -475,7 +475,7 @@
       }
     },
     {
-      "id": "e39de336-10ad-400e-8312-3d8bcaa9798e",
+      "id": "d9b37c92-c065-485a-bb3a-6738a6c48312",
       "type": "text",
       "x_mm": 161.98,
       "y_mm": 97.64,
