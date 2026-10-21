@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMe } from './Auth';
-import { TableHero, type FoilId } from './TableHero';
+import { TableHero, type HeroCard } from './TableHero';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
 import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, type CarouselSetting } from '@/lib/categories';
@@ -36,7 +36,6 @@ export function Landing() {
   const [carousel, setCarousel] = useState<CarouselSetting[]>([]);
   const [error, setError] = useState('');
   const [name, setName] = useState('נועם & שירה');
-  const [foil, setFoil] = useState<FoilId>('gold');
   const [cat, setCat] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -57,10 +56,8 @@ export function Landing() {
   }, [load]);
 
   // the admin picks which categories show and their order (see /carousel)
-  const categories = useMemo(
-    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden).map((c) => c.name),
-    [templates, carousel]
-  );
+  const visible = useMemo(() => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden), [templates, carousel]);
+  const categories = useMemo(() => visible.map((c) => c.name), [visible]);
   const byTopic = useMemo(() => {
     const map = new Map<string, RingItem[]>();
     for (const t of templates) {
@@ -69,6 +66,16 @@ export function Landing() {
     }
     return map;
   }, [templates]);
+  // one card per category for the table: the admin's carousel image, else a real design of that category, else the default cover
+  const heroCards = useMemo<HeroCard[]>(
+    () =>
+      visible.map((c) => {
+        const chosen = carousel.find((x) => x.name === c.name)?.src;
+        const thumb = byTopic.get(c.name)?.find((t) => t.thumbnail)?.thumbnail;
+        return { name: c.name, background: chosen ? `url("${chosen}")` : thumb ? `url("${thumb}")` : c.background };
+      }),
+    [visible, carousel, byTopic]
+  );
 
   // until the visitor picks one: the first category that has designs
   const selected = cat ?? categories.find((c) => byTopic.has(c)) ?? categories[0] ?? GENERAL_TOPIC;
@@ -106,7 +113,15 @@ export function Landing() {
 
   return (
     <div className={s.root}>
-      <TableHero name={name} onName={setName} foil={foil} onFoil={setFoil} shownName={shownName} />
+      <TableHero
+        name={name}
+        onName={setName}
+        cards={heroCards}
+        onPick={(c) => {
+          setCat(c);
+          document.getElementById('cats')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
 
       <div className={s.ticker} aria-hidden="true">
         <div className={s.tickerTrack}>
