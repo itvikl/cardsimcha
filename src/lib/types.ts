@@ -119,6 +119,8 @@ export type CarouselSlide = {
   image: string | null;
   hidden: boolean;
   order: number;
+  /** which home-page door shows it; unset means the default from CATEGORIES (private for free topics) */
+  audience?: 'private' | 'business';
 };
 
 export type Db = {

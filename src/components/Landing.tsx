@@ -7,7 +7,7 @@ import { useMe } from './Auth';
 import { TableHero, type HeroCard } from './TableHero';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
-import { applyCarousel, audienceOf, categoryHref, defaultCards, GENERAL_TOPIC, type Audience, type CarouselSetting } from '@/lib/categories';
+import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null };
 type Mine = { id: string; name: string; updatedAt: string; thumbnail: string | null };
@@ -88,7 +88,7 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
 
   // the admin picks which categories show and their order (see /carousel)
   const visible = useMemo(
-    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden && audienceOf(c.name) === audience),
+    () => applyCarousel(defaultCards(templates), carousel).filter((c) => !c.hidden && topicAudience(c.name, carousel) === audience),
     [templates, carousel, audience]
   );
   const categories = useMemo(() => visible.map((c) => c.name), [visible]);

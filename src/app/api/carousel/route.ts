@@ -2,7 +2,7 @@ import { requireAdmin } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import { readDb, updateDb } from '@/lib/db';
 import type { CarouselSlide, Db } from '@/lib/types';
-import type { CarouselSetting } from '@/lib/categories';
+import { audienceOf, type CarouselSetting } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,7 @@ function resolve(db: Db, image: string | null): string | null {
 function list(db: Db): CarouselSetting[] {
   return [...db.carousel]
     .sort((a, b) => a.order - b.order)
-    .map((s) => ({ name: s.name, image: s.image, src: resolve(db, s.image), hidden: s.hidden }));
+    .map((s) => ({ name: s.name, image: s.image, src: resolve(db, s.image), hidden: s.hidden, audience: s.audience ?? audienceOf(s.name) }));
 }
 
 /** The admin's carousel choices. Public on purpose: the home page needs them before sign-in. */
@@ -26,7 +26,7 @@ export async function GET() {
   return NextResponse.json(list(await readDb()));
 }
 
-/** Replaces the whole carousel setup: body `{ slides: [{ name, image, hidden }] }` in display order. */
+/** Replaces the whole carousel setup: body `{ slides: [{ name, image, hidden, audience }] }` in display order. */
 export async function PUT(req: Request) {
   const auth = await requireAdmin();
   if (auth instanceof Response) return auth;
@@ -36,13 +36,14 @@ export async function PUT(req: Request) {
   const slides: CarouselSlide[] = [];
   const seen = new Set<string>();
   for (const raw of input) {
-    const r = raw as { name?: unknown; image?: unknown; hidden?: unknown };
+    const r = raw as { name?: unknown; image?: unknown; hidden?: unknown; audience?: unknown };
     const name = typeof r?.name === 'string' ? r.name.trim().slice(0, 80) : '';
     if (!name || seen.has(name)) continue;
     seen.add(name);
     const image = typeof r.image === 'string' && IMAGE_RE.test(r.image) ? r.image : null;
     // the name is the key; encoded and prefixed so it is always a valid Firestore doc id
-    slides.push({ id: 's_' + encodeURIComponent(name), name, image, hidden: r.hidden === true, order: slides.length });
+    const audience = r.audience === 'business' || r.audience === 'private' ? r.audience : undefined;
+    slides.push({ id: 's_' + encodeURIComponent(name), name, image, hidden: r.hidden === true, order: slides.length, audience });
   }
 
   const result = await updateDb((db) => {

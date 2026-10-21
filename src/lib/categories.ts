@@ -20,13 +20,17 @@ export const CATEGORIES: { name: string; image: string; audience: Audience }[] =
   { name: 'תפריטים', image: '/categories/menus.svg', audience: 'business' },
 ];
 
-/** topics an admin typed freely (not in CATEGORIES) belong to the private side */
+/** the built-in default: topics an admin typed freely (not in CATEGORIES) belong to the private side */
 export const audienceOf = (name: string): Audience => CATEGORIES.find((c) => c.name === name)?.audience ?? 'private';
+
+/** the admin's choice (saved with the carousel) wins over the built-in default */
+export const topicAudience = (name: string, settings: { name: string; audience: Audience }[]): Audience =>
+  settings.find((s) => s.name === name)?.audience ?? audienceOf(name);
 
 export const categoryHref = (name: string) => `/category/${encodeURIComponent(name)}`;
 
 /** what GET /api/carousel returns, in the admin's order; `src` is `image` resolved to a URL */
-export type CarouselSetting = { name: string; image: string | null; src: string | null; hidden: boolean };
+export type CarouselSetting = { name: string; image: string | null; src: string | null; hidden: boolean; audience: Audience };
 
 export type HomeCard = { name: string; background: string };
 

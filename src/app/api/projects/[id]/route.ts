@@ -4,6 +4,7 @@ import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
+import { claimTopic, parseAudience } from '@/lib/topics';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -53,7 +54,11 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (name) p.name = name;
     if (thumbnail) p.thumbnail = thumbnail;
     if (status && p.kind === 'template') p.status = status;
-    if (topic !== undefined && p.kind === 'template') p.topic = topic || undefined;
+    if (topic !== undefined && p.kind === 'template') {
+      p.topic = topic || undefined;
+      const audience = parseAudience(body?.audience);
+      if (audience && topic) claimTopic(db, topic, audience);
+    }
     p.updatedAt = new Date().toISOString();
     return { id: p.id, updatedAt: p.updatedAt };
   });

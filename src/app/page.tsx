@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { PAGE_PRESETS } from '@/lib/canvas';
 import { useMe } from '@/components/Auth';
 import { Landing } from '@/components/Landing';
-import { CATEGORIES } from '@/lib/categories';
+import { CATEGORIES, GENERAL_TOPIC, topicAudience, type CarouselSetting } from '@/lib/categories';
+import { DoorTurn, RevolvingDoor, useAdminDoor } from '@/components/RevolvingDoor';
 
 type Item = {
   id: string;
@@ -21,8 +22,6 @@ type Item = {
   thumbnail: string | null;
 };
 
-/** example topics shown to the admin as suggestions; any free text is accepted */
-const SUGGESTED_TOPICS = CATEGORIES.map((c) => c.name);
 
 const Preview = ({ src, label }: { src: string | null; label: string }) => (
   <div className="preview" style={src ? { backgroundImage: `url(${src})`, backgroundSize: 'contain' } : undefined} aria-label={label}>
@@ -88,9 +87,13 @@ function AdminHome() {
   const [busy, setBusy] = useState(false);
   const [bgFile, setBgFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
+  const [door, setDoor] = useAdminDoor();
+  const [carousel, setCarousel] = useState<CarouselSetting[]>([]);
 
   const load = useCallback(async () => {
-    setItems(await api<Item[]>('/api/projects'));
+    const [list, c] = await Promise.all([api<Item[]>('/api/projects'), api<CarouselSetting[]>('/api/carousel').catch(() => [])]);
+    setItems(list);
+    setCarousel(c);
   }, []);
   useEffect(() => {
     load().catch((e) => setError(e.message));
@@ -106,7 +109,7 @@ function AdminHome() {
       const r = await api<{ id: string }>('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, topic, width_mm: p.width_mm, height_mm: p.height_mm, backgroundAssetId }),
+        body: JSON.stringify({ name, topic, audience: door, width_mm: p.width_mm, height_mm: p.height_mm, backgroundAssetId }),
       });
       router.push(`/editor/${r.id}`);
     } catch (err) {
@@ -159,7 +162,7 @@ function AdminHome() {
       await api(`/api/projects/${it.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: next }),
+        body: JSON.stringify({ topic: next, audience: door }),
       });
       await load();
     } catch (err) {
@@ -167,13 +170,28 @@ function AdminHome() {
     }
   }
 
-  const templates = items?.filter((i) => i.kind === 'template') ?? [];
-  const topicOptions = Array.from(new Set([...SUGGESTED_TOPICS, ...templates.map((t) => t.topic).filter((t): t is string => !!t)]));
+  const inDoor = (topicName: string) => topicAudience(topicName, carousel) === door;
+  // a template without a topic lands in "כללי", which is on the private side
+  const templates = items?.filter((i) => i.kind === 'template' && inDoor(i.topic || GENERAL_TOPIC)) ?? [];
+  /** example topics shown to the admin as suggestions; any free text is accepted */
+  const topicOptions = Array.from(
+    new Set([
+      ...CATEGORIES.map((c) => c.name),
+      ...carousel.map((c) => c.name),
+      ...(items ?? []).map((t) => t.topic).filter((t): t is string => !!t),
+    ])
+  ).filter(inDoor);
+  const business = door === 'business';
 
   return (
     <main className="page">
-      <h1>תבניות</h1>
-      <p className="sub">בנו תבנית, סמנו אילו טקסטים הלקוח יכול לערוך, ופרסמו אותה. לקוחות רואים רק תבניות שפורסמו.</p>
+      <RevolvingDoor value={door} onChange={setDoor} />
+      <DoorTurn door={door}>
+      <h1>{business ? 'תבניות לעסקים' : 'תבניות לשמחות'}</h1>
+      <p className="sub">
+        בנו תבנית, סמנו אילו טקסטים הלקוח יכול לערוך, ופרסמו אותה. לקוחות רואים רק תבניות שפורסמו.
+        {business ? ' התבניות כאן מופיעות בדלת "לעסק" בעמוד הבית.' : ' התבניות כאן מופיעות בדלת "לשמחה" בעמוד הבית.'}
+      </p>
 
       <form className="card row" onSubmit={create} style={{ marginBottom: 24, alignItems: 'end' }}>
         <label className="field" style={{ flex: 1, minWidth: 200 }}>
@@ -192,7 +210,16 @@ function AdminHome() {
         </label>
         <label className="field">
           נושא (קטגוריה לעמוד הבית)
-          <input type="text" list="topic-options" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="למשל: בית כנסת" maxLength={60} />
+          <input
+            type="text"
+            list="topic-options"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder={business ? 'למשל: מודעות מבצע' : 'למשל: בית כנסת'}
+            maxLength={60}
+            // without a topic a template lands in "כללי", on the private side
+            required={business}
+          />
         </label>
         <label className="field">
           תמונת רקע (לא חובה)
@@ -219,7 +246,9 @@ function AdminHome() {
       {items === null ? (
         <p className="status">טוען…</p>
       ) : templates.length === 0 ? (
-        <div className="empty">עוד אין תבניות. צרו את הראשונה למעלה. כדי להוסיף תמונות, פתחו קודם את "קטגוריות ותמונות".</div>
+        <div className="empty">
+          {business ? 'עוד אין תבניות לעסקים.' : 'עוד אין תבניות לשמחות.'} צרו את הראשונה למעלה. כדי להוסיף תמונות, פתחו קודם את "קטגוריות ותמונות".
+        </div>
       ) : (
         <div className="grid">
           {templates.map((it) => (
@@ -272,6 +301,7 @@ function AdminHome() {
           ))}
         </div>
       )}
+      </DoorTurn>
     </main>
   );
 }

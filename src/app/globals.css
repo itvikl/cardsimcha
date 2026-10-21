@@ -72,6 +72,33 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .topbar .btn { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); color: #fff; }
 .topbar .btn:hover { background: rgba(255, 255, 255, 0.16); }
 .topbar .btn.primary { background: #d6c2a1; color: #1a1714; border-color: transparent; }
+/* ---------------------------------------------------------- admin: revolving door between private and business */
+.revolving {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px; margin-bottom: 20px;
+  border-radius: 999px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.revolving button {
+  min-height: 44px; min-width: 110px; padding: 8px 22px; border: 0; border-radius: 999px; background: transparent;
+  font: inherit; font-weight: 700; font-size: 16px; color: var(--muted); cursor: pointer;
+  transition: background-color 0.35s, color 0.35s;
+}
+.revolving button:hover { color: var(--text); }
+.revolving button[data-door='private'][aria-pressed='true'] { background: #1a1714; color: #efe7da; }
+.revolving button[data-door='business'][aria-pressed='true'] { background: #0b1f4d; color: #ffc53d; }
+.revolving-icon {
+  width: 30px; height: 30px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; color: var(--muted);
+  transition: rotate 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.door-turn { animation: door-turn 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) both; transform-origin: 50% 0; }
+@keyframes door-turn {
+  from { opacity: 0; transform: perspective(1400px) rotateY(-70deg); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .door-turn { animation: none; }
+  .revolving-icon { transition: none; }
+}
+
 .topbar.business { background: #071640; border-bottom-color: rgba(244, 246, 255, 0.1); }
 .topbar.business .logo-mark { background: #ffc53d; }
 

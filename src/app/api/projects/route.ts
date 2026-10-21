@@ -3,6 +3,7 @@ import { newId, readDb, updateDb } from '@/lib/db';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { summarize } from '@/lib/summary';
+import { claimTopic, parseAudience } from '@/lib/topics';
 import type { Project } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,8 @@ export async function GET() {
  * - { templateId, prefill? }: create the caller's own design as a copy of a template
  *   (customers: published templates only; admins may copy any template to test it).
  *   `prefill` only fills an editable text field whose label mentions a name.
- * - { name, width_mm, height_mm }: create a new blank template (admin only).
+ * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
+ *   a new topic is claimed for the door (`audience`) the admin was working behind.
  */
 export async function POST(req: Request) {
   const user = await requireUser();
@@ -86,6 +88,7 @@ export async function POST(req: Request) {
       label: 'רקע',
     });
   }
+  const audience = parseAudience(body?.audience);
   const project: Project = {
     id: newId(),
     kind: 'template',
@@ -97,6 +100,9 @@ export async function POST(req: Request) {
     createdAt: now,
     updatedAt: now,
   };
-  await updateDb((db) => void db.projects.push(project));
+  await updateDb((db) => {
+    db.projects.push(project);
+    if (audience && topic) claimTopic(db, topic, audience);
+  });
   return NextResponse.json({ id: project.id }, { status: 201 });
 }

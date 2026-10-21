@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Category, ImageAsset } from '@/lib/types';
 import { useMe } from '@/components/Auth';
-import { CATEGORIES, GENERAL_TOPIC, applyCarousel, defaultCards, type CarouselSetting } from '@/lib/categories';
+import { CATEGORIES, GENERAL_TOPIC, applyCarousel, audienceOf, defaultCards, type Audience, type CarouselSetting } from '@/lib/categories';
+import { DoorTurn, RevolvingDoor, useAdminDoor } from '@/components/RevolvingDoor';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null };
-type Row = { name: string; image: string | null; hidden: boolean };
+type Row = { name: string; image: string | null; hidden: boolean; audience: Audience };
 
 const UPLOAD_CATEGORY = 'קרוסלה';
 
@@ -57,6 +58,7 @@ function CarouselManager() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const [door, setDoor] = useAdminDoor();
 
   const loadLibrary = useCallback(async () => {
     const lib = await api<{ categories: Category[]; images: ImageAsset[] }>('/api/library');
@@ -75,6 +77,7 @@ function CarouselManager() {
             name: card.name,
             image: byName.get(card.name)?.image ?? null,
             hidden: card.hidden,
+            audience: byName.get(card.name)?.audience ?? audienceOf(card.name),
           }))
         );
       })
@@ -98,11 +101,16 @@ function CarouselManager() {
     setNotice('');
   }
 
-  function move(i: number, by: -1 | 1) {
+  /** swaps with the nearest card behind the same door; the other door's cards keep their places */
+  function move(name: string, by: -1 | 1) {
     setRows((rs) => {
-      if (!rs || i + by < 0 || i + by >= rs.length) return rs;
+      if (!rs) return rs;
+      const i = rs.findIndex((r) => r.name === name);
+      let j = i + by;
+      while (j >= 0 && j < rs.length && rs[j].audience !== rs[i].audience) j += by;
+      if (i < 0 || j < 0 || j >= rs.length) return rs;
       const next = [...rs];
-      [next[i], next[i + by]] = [next[i + by], next[i]];
+      [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
     setDirty(true);
@@ -158,12 +166,14 @@ function CarouselManager() {
   }
 
   const pickRow = rows?.find((r) => r.name === picking) ?? null;
-  const shown = rows?.filter((r) => !r.hidden).length ?? 0;
+  const doorRows = rows?.filter((r) => r.audience === door) ?? null;
+  const shown = doorRows?.filter((r) => !r.hidden).length ?? 0;
 
   return (
     <main className="page">
-      <h1>קרוסלה בעמוד הבית</h1>
-      <p className="sub">בחרו אילו כרטיסים יופיעו בקרוסלה, באיזה סדר, ואיזו תמונה תוצג על כל אחד.</p>
+      <RevolvingDoor value={door} onChange={setDoor} />
+      <h1>{door === 'business' ? 'קטגוריות בדלת "לעסק"' : 'קטגוריות בדלת "לשמחה"'}</h1>
+      <p className="sub">בחרו אילו קטגוריות יופיעו בעמוד הבית, באיזה סדר, איזו תמונה תוצג על כל אחת, ובאיזו דלת.</p>
 
       {error && <p className="error" role="alert">{error}</p>}
 
@@ -171,20 +181,25 @@ function CarouselManager() {
         <button className="btn primary" onClick={save} disabled={!dirty || saving || !rows}>
           {saving ? 'שומר…' : 'שמירה'}
         </button>
-        {rows && (
+        {doorRows && (
           <span className="status">
-            {shown} מתוך {rows.length} כרטיסים מוצגים
+            {shown} מתוך {doorRows.length} קטגוריות מוצגות בדלת הזו
           </span>
         )}
         {dirty && <span className="status">· יש שינויים שלא נשמרו</span>}
         {notice && <span className="status" role="status">{notice}</span>}
       </div>
 
-      {rows === null ? (
+      {doorRows === null ? (
         !error && <p className="status">טוען…</p>
+      ) : doorRows.length === 0 ? (
+        <DoorTurn door={door}>
+          <div className="empty">אין קטגוריות בדלת הזו. אפשר להעביר לכאן קטגוריה מהדלת השנייה, או ליצור תבנית עם נושא חדש.</div>
+        </DoorTurn>
       ) : (
+        <DoorTurn door={door}>
         <div className="thumb-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-          {rows.map((r, i) => {
+          {doorRows.map((r, i) => {
             const src = srcOf(r);
             return (
               <figure key={r.name} className="thumb" style={{ margin: 0, opacity: r.hidden ? 0.5 : 1 }}>
@@ -202,16 +217,23 @@ function CarouselManager() {
                   </strong>
                   <label className="row" style={{ gap: 6 }}>
                     <input type="checkbox" checked={!r.hidden} onChange={(e) => change(r.name, { hidden: !e.target.checked })} />
-                    מוצג בקרוסלה
+                    מוצג בעמוד הבית
+                  </label>
+                  <label className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                    דלת:
+                    <select value={r.audience} onChange={(e) => change(r.name, { audience: e.target.value as Audience })} style={{ width: 'auto', flex: 1 }}>
+                      <option value="private">לשמחה</option>
+                      <option value="business">לעסק</option>
+                    </select>
                   </label>
                   <div className="row" style={{ gap: 6 }}>
                     <button className="btn small" onClick={() => setPicking(r.name)}>
                       בחירת תמונה
                     </button>
-                    <button className="btn small" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`הזזת ${r.name} קדימה`} title="קדימה">
+                    <button className="btn small" onClick={() => move(r.name, -1)} disabled={i === 0} aria-label={`הזזת ${r.name} קדימה`} title="קדימה">
                       ↑
                     </button>
-                    <button className="btn small" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label={`הזזת ${r.name} אחורה`} title="אחורה">
+                    <button className="btn small" onClick={() => move(r.name, 1)} disabled={i === doorRows.length - 1} aria-label={`הזזת ${r.name} אחורה`} title="אחורה">
                       ↓
                     </button>
                   </div>
@@ -220,6 +242,7 @@ function CarouselManager() {
             );
           })}
         </div>
+        </DoorTurn>
       )}
 
       {pickRow && (
