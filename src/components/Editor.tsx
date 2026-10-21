@@ -9,6 +9,7 @@ import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
 import { newImage, newRect, newText } from '@/lib/elements';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
+import { DownloadIcon, FitIcon, RedoIcon, UndoIcon } from './Icons';
 import type { CanvasDoc, CanvasElement, Category, ImageAsset, Project, TextElement } from '@/lib/types';
 
 const PX = 3; // canvas pixels per mm at zoom 1
@@ -74,6 +75,9 @@ export default function Editor({ id }: { id: string }) {
   const [exporting, setExporting] = useState(false);
   const [activeField, setActiveField] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiTouched, setAiTouched] = useState<Set<string>>(new Set());
+  const aiTimer = useRef<number | undefined>(undefined);
   const { push } = useToast();
   const fieldRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const [doc, setDoc] = useState<CanvasDoc | null>(null);
@@ -175,6 +179,20 @@ export default function Editor({ id }: { id: string }) {
     setSave('dirty');
     bump((n) => n + 1);
   }, []);
+
+  /** Applies the assistant's card and briefly marks every element it touched. */
+  const applyAgent = useCallback(
+    (next: CanvasDoc) => {
+      const before = new Map(docRef.current?.elements.map((e) => [e.id, JSON.stringify(e)]));
+      const changed = new Set(next.elements.filter((e) => before.get(e.id) !== JSON.stringify(e)).map((e) => e.id));
+      commit(next);
+      setAiTouched(changed);
+      window.clearTimeout(aiTimer.current);
+      aiTimer.current = window.setTimeout(() => setAiTouched(new Set()), 2800);
+      return changed.size;
+    },
+    [commit],
+  );
 
   const patchElement = useCallback(
     (elId: string, patch: Partial<CanvasElement>, mergeKey?: string) => {
@@ -453,28 +471,30 @@ export default function Editor({ id }: { id: string }) {
             setSave('dirty');
           }}
         />
-        <button className="btn small" onClick={undo} disabled={!pastRef.current.length} title="ביטול (Ctrl+Z)">
-          ביטול
-        </button>
-        <button className="btn small" onClick={redo} disabled={!futureRef.current.length} title="חזרה (Ctrl+Y)">
-          חזרה
-        </button>
+        <span className="bar-group">
+          <button className="icon-btn" onClick={undo} disabled={!pastRef.current.length} aria-label="ביטול" title="ביטול (Ctrl+Z)">
+            <UndoIcon />
+          </button>
+          <button className="icon-btn" onClick={redo} disabled={!futureRef.current.length} aria-label="חזרה" title="חזרה (Ctrl+Y)">
+            <RedoIcon />
+          </button>
+        </span>
         <span className="spacer" />
-        <span className="zoom-controls row">
-        <button className="btn small" onClick={() => setZoomOverride(clamp(zoom - 0.1, 0.1, 3))} aria-label="הקטנה">
-          −
-        </button>
-        <span className="status" style={{ minWidth: 44, textAlign: 'center' }}>
-          {Math.round(zoom * 100)}%
+        <span className="bar-group zoom-controls">
+          <button className="icon-btn" onClick={() => setZoomOverride(clamp(zoom - 0.1, 0.1, 3))} aria-label="הקטנה">
+            −
+          </button>
+          <span className="zoom-val">{Math.round(zoom * 100)}%</span>
+          <button className="icon-btn" onClick={() => setZoomOverride(clamp(zoom + 0.1, 0.1, 3))} aria-label="הגדלה">
+            +
+          </button>
+          <button className="icon-btn" onClick={() => setZoomOverride(null)} aria-label="התאמה למסך" title="התאמה למסך">
+            <FitIcon />
+          </button>
         </span>
-        <button className="btn small" onClick={() => setZoomOverride(clamp(zoom + 0.1, 0.1, 3))} aria-label="הגדלה">
-          +
-        </button>
-        <button className="btn small" onClick={() => setZoomOverride(null)}>
-          התאמה למסך
-        </button>
+        <span className={'save-state ' + save} role="status">
+          {saveLabel}
         </span>
-        <span className="status" role="status">{saveLabel}</span>
         {full && (
           <>
             <span className={'badge ' + pubStatus}>{pubStatus === 'published' ? 'פורסם' : 'טיוטה'}</span>
@@ -489,7 +509,8 @@ export default function Editor({ id }: { id: string }) {
             )}
           </>
         )}
-        <button className="btn primary small" onClick={exportPng} disabled={exporting}>
+        <button className="btn primary small shine" onClick={exportPng} disabled={exporting}>
+          <DownloadIcon size={16} />
           {exporting ? 'מכין קובץ…' : full ? 'הורדת PNG (300dpi)' : 'הורדת הכרטיס'}
         </button>
       </div>
@@ -497,9 +518,10 @@ export default function Editor({ id }: { id: string }) {
       <div className={'editor' + (full ? '' : ' customer')}>
         {!full && (
           <aside className="left" aria-label="פרטי הכרטיס">
-            <h2 className="panel-title" style={{ order: -3 }}>
-              הפרטים בכרטיס
-            </h2>
+            <header className="panel-head" style={{ order: -3 }}>
+              <h2>הפרטים בכרטיס</h2>
+              <p>ממלאים, בוחרים צבע, וזהו. הכרטיס מתעדכן מולכם.</p>
+            </header>
             {hintOpen && (
               <div className="hint" style={{ order: -2 }} role="note">
                 <span>טיפ: לחצו על טקסט בכרטיס כדי לערוך אותו, וגררו אותו כדי להזיז. הצבעים נמצאים ליד כל שדה.</span>
@@ -519,15 +541,22 @@ export default function Editor({ id }: { id: string }) {
             )}
             {canAgent && (editableFields.length > 0 || swappables.length > 0) && (
               <div style={{ order: -2 }}>
-                <AgentPanel projectId={id} getDoc={() => docRef.current} onApply={(d) => commit(d)} placeholder="למשל: החתונה של דן ונועה, 12 במאי, אולם הגן" />
+                <AgentPanel
+                  projectId={id}
+                  getDoc={() => docRef.current}
+                  onApply={applyAgent}
+                  onBusyChange={setAiBusy}
+                  placeholder="למשל: החתונה של דן ונועה, 12 במאי, אולם הגן"
+                  suggestions={['נסחו לי הזמנה חגיגית', 'כל הטקסטים בזהב', 'קצרו את הנוסח']}
+                />
               </div>
             )}
             {editableFields.length === 0 && swappables.length === 0 ? (
               <p className="status">בתבנית הזו אין שדות לעריכה.</p>
             ) : (
               editableFields.map((f) => (
-                <div key={f.id} className="field">
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div key={f.id} className={'field field-card' + (aiTouched.has(f.id) ? ' ai-touched' : '')}>
+                  <div className="field-head">
                     <label htmlFor={`f-${f.id}`}>{f.label || 'טקסט'}</label>
                     <div className="swatches" role="group" aria-label={`צבע הטקסט: ${f.label || 'טקסט'}`}>
                       {SWATCHES.map((c) => (
@@ -568,8 +597,8 @@ export default function Editor({ id }: { id: string }) {
             {swappables.map((el) => {
               const options = library.images.filter((i) => !el.swapCategoryId || i.categoryId === el.swapCategoryId);
               return (
-                <div key={el.id} className="field" style={{ order: -1 }}>
-                  {el.label || 'תמונה'}
+                <div key={el.id} className={'field field-card' + (aiTouched.has(el.id) ? ' ai-touched' : '')} style={{ order: -1 }}>
+                  <span className="field-label">{el.label || 'תמונה'}</span>
                   {options.length === 0 ? (
                     <span className="status">אין תמונות להחלפה.</span>
                   ) : (
@@ -581,7 +610,6 @@ export default function Editor({ id }: { id: string }) {
                           className="pick"
                           title={img.name}
                           aria-pressed={!el.colorOverride && img.id === el.asset_id}
-                          style={!el.colorOverride && img.id === el.asset_id ? { borderColor: 'var(--green-700)', borderWidth: 2 } : undefined}
                           onClick={() => patchElement(el.id, { asset_id: img.id, colorOverride: undefined } as Partial<CanvasElement>)}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -590,7 +618,7 @@ export default function Editor({ id }: { id: string }) {
                       ))}
                     </div>
                   )}
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <div className="field-head">
                     <span>או צבע אחיד</span>
                     <div className="swatches" role="group" aria-label={`צבע אחיד: ${el.label || 'רקע'}`}>
                       {BG_SWATCHES.map((c) => (
@@ -616,8 +644,10 @@ export default function Editor({ id }: { id: string }) {
                 </div>
               );
             })}
-            {editableFields.length > 0 && <p className="status">אפשר לגרור כל טקסט בכרטיס כדי לשנות את מיקומו.</p>}
-            <p className="status">שינויים נשמרים אוטומטית. כשמסיימים אפשר להוריד את הכרטיס כקובץ תמונה.</p>
+            <footer className="panel-foot">
+              {editableFields.length > 0 && <p>אפשר לגרור כל טקסט בכרטיס כדי לשנות את מיקומו.</p>}
+              <p>שינויים נשמרים אוטומטית. כשמסיימים אפשר להוריד את הכרטיס כקובץ תמונה.</p>
+            </footer>
           </aside>
         )}
         {full && (
@@ -664,7 +694,14 @@ export default function Editor({ id }: { id: string }) {
             )}
           </div>
           {canAgent && (
-            <AgentPanel projectId={id} getDoc={() => docRef.current} onApply={(d) => commit(d)} placeholder="למשל: הוסף כותרת 'חתונה' ושדות לשמות החתן והכלה" />
+            <AgentPanel
+              projectId={id}
+              getDoc={() => docRef.current}
+              onApply={applyAgent}
+                  onBusyChange={setAiBusy}
+              placeholder="למשל: הוסף כותרת 'חתונה' ושדות לשמות החתן והכלה"
+              suggestions={['הוסף שדות לשמות, תאריך ומקום', 'סדר את הטקסטים במרכז']}
+            />
           )}
         </aside>
         )}
@@ -674,7 +711,10 @@ export default function Editor({ id }: { id: string }) {
           ref={wrapRef}
           onMouseDown={(e) => e.target === e.currentTarget && setSelectedId(null)}
         >
-          <div style={{ boxShadow: '0 2px 12px rgba(0,0,0,.18)', width: pageW * zoom, height: pageH * zoom, flex: 'none' }}>
+          <div
+            className={'stage-frame' + (aiBusy ? ' ai-working' : '') + (aiTouched.size ? ' ai-done' : '')}
+            style={{ width: pageW * zoom, height: pageH * zoom }}
+          >
             <Stage
               ref={stageRef}
               width={pageW * zoom}
@@ -791,6 +831,15 @@ export default function Editor({ id }: { id: string }) {
                 />
               </Layer>
             </Stage>
+            {aiBusy && (
+              <div className="ai-veil" aria-hidden="true">
+                <span className="ai-scan" />
+                <span className="ai-pill">
+                  <span className="ai-pill-dot" />
+                  העוזר מעצב את הכרטיס…
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
