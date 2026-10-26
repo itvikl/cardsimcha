@@ -7,7 +7,7 @@ import { audienceOf, type CarouselSetting } from '@/lib/categories';
 export const dynamic = 'force-dynamic';
 
 const MAX_SLIDES = 200;
-const IMAGE_RE = /^(\/categories\/[\w-]+\.svg|\/api\/uploads\/[\w.-]+|template:[\w-]+)$/;
+const IMAGE_RE = /^(\/categories\/[\w-]+\.(?:svg|webp)|\/api\/uploads\/[\w.-]+|template:[\w-]+)$/;
 
 function resolve(db: Db, image: string | null): string | null {
   if (!image?.startsWith('template:')) return image;

@@ -6,18 +6,18 @@ export type Audience = 'private' | 'business';
 
 /** the home-page categories, in display order; `image` is the cover shown in the carousel */
 export const CATEGORIES: { name: string; image: string; audience: Audience }[] = [
-  { name: 'בית כנסת', image: '/categories/synagogue.svg', audience: 'private' },
-  { name: 'תעודות', image: '/categories/certificates.svg', audience: 'private' },
-  { name: 'שלום זכר', image: '/categories/shalom-zachar.svg', audience: 'private' },
-  { name: 'שמחת בית השואבה', image: '/categories/simchat-beit-hashoeva.svg', audience: 'private' },
-  { name: 'חתונה', image: '/categories/wedding.svg', audience: 'private' },
-  { name: 'בר מצווה', image: '/categories/bar-mitzvah.svg', audience: 'private' },
-  { name: 'מודעות מבצע', image: '/categories/sale.svg', audience: 'business' },
-  { name: 'פתיחת עסק', image: '/categories/opening.svg', audience: 'business' },
-  { name: 'לוגו', image: '/categories/logo.svg', audience: 'business' },
-  { name: 'כרטיסי ביקור', image: '/categories/business-cards.svg', audience: 'business' },
-  { name: 'פוסטים לרשתות', image: '/categories/social.svg', audience: 'business' },
-  { name: 'תפריטים', image: '/categories/menus.svg', audience: 'business' },
+  { name: 'בית כנסת', image: '/categories/synagogue.webp', audience: 'private' },
+  { name: 'תעודות', image: '/categories/certificates.webp', audience: 'private' },
+  { name: 'שלום זכר', image: '/categories/shalom-zachar.webp', audience: 'private' },
+  { name: 'שמחת בית השואבה', image: '/categories/simchat-beit-hashoeva.webp', audience: 'private' },
+  { name: 'חתונה', image: '/categories/wedding.webp', audience: 'private' },
+  { name: 'בר מצווה', image: '/categories/bar-mitzvah.webp', audience: 'private' },
+  { name: 'מודעות מבצע', image: '/categories/sale.webp', audience: 'business' },
+  { name: 'פתיחת עסק', image: '/categories/opening.webp', audience: 'business' },
+  { name: 'לוגו', image: '/categories/logo.webp', audience: 'business' },
+  { name: 'כרטיסי ביקור', image: '/categories/business-cards.webp', audience: 'business' },
+  { name: 'פוסטים לרשתות', image: '/categories/social.webp', audience: 'business' },
+  { name: 'תפריטים', image: '/categories/menus.webp', audience: 'business' },
 ];
 
 /** the built-in default: topics an admin typed freely (not in CATEGORIES) belong to the private side */

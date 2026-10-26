@@ -125,6 +125,15 @@
 .root:not(.business) .hero {
   background: radial-gradient(700px circle at var(--sx) var(--sy), rgba(var(--spot-rgb), var(--glow)), rgba(var(--spot-rgb), 0) 70%);
 }
+/* the ambient loop behind the hero (public/hero/<door>.mp4, its .webp poster underneath); fades out into the ticker */
+.heroLoop {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0.45;
+  background: center / cover no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent);
+  mask-image: linear-gradient(180deg, #000 55%, transparent);
+}
+.business .heroLoop { opacity: 0.75; }
+.heroLoop video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .sparks { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .spark {
   position: absolute; border-radius: 50%; background: var(--accent-2);

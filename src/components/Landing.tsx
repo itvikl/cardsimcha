@@ -100,15 +100,15 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
     }
     return map;
   }, [templates]);
-  // one card per category for the table: the admin's carousel image, else a real design of that category, else the default cover
+  // one card per category for the table: the admin's carousel image, else the category's cover
+  // (a built-in photo, or for a free topic a real design of it; see defaultCards)
   const heroCards = useMemo<HeroCard[]>(
     () =>
       visible.map((c) => {
         const chosen = carousel.find((x) => x.name === c.name)?.src;
-        const thumb = byTopic.get(c.name)?.find((t) => t.thumbnail)?.thumbnail;
-        return { name: c.name, background: chosen ? `url("${chosen}")` : thumb ? `url("${thumb}")` : c.background };
+        return { name: c.name, background: chosen ? `url("${chosen}")` : c.background };
       }),
-    [visible, carousel, byTopic]
+    [visible, carousel]
   );
 
   // until the visitor picks one: the first category that has designs

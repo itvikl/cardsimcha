@@ -4,7 +4,13 @@ import { TopBar } from '@/components/TopBar';
 import { AuthProvider } from '@/components/Auth';
 import { ToastProvider } from '@/components/Toast';
 
-export const metadata: Metadata = { title: 'סטודיו עיצוב', description: 'יצירת עיצובים מקטגוריות ותמונות' };
+export const metadata: Metadata = {
+  // share previews (opengraph-image.jpg) need absolute URLs; set SITE_URL to the public address, e.g. https://example.co.il
+  metadataBase: process.env.SITE_URL ? new URL(process.env.SITE_URL) : undefined,
+  title: 'סטודיו עיצוב',
+  description: 'יצירת עיצובים מקטגוריות ותמונות',
+  openGraph: { siteName: 'סטודיו עיצוב', locale: 'he_IL', type: 'website' },
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

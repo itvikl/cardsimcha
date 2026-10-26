@@ -42,6 +42,10 @@ type Props = {
 export function TableHero({ audience, copy, name, onName, cards, onPick }: Props) {
   const heroRef = useRef<HTMLElement>(null);
   const [front, setFront] = useState<string | null>(null);
+  const [motion, setMotion] = useState(false);
+
+  // the ambient loop plays only when motion is welcome; otherwise its still poster stays
+  useEffect(() => setMotion(!window.matchMedia('(prefers-reduced-motion: reduce)').matches), []);
 
   // mouse parallax: written to CSS variables once per frame, no re-render
   useEffect(() => {
@@ -87,6 +91,9 @@ export function TableHero({ audience, copy, name, onName, cards, onPick }: Props
 
   return (
     <section ref={heroRef} className={s.hero}>
+      <div className={s.heroLoop} aria-hidden="true" style={{ backgroundImage: `url(/hero/${audience}.webp)` }}>
+        {motion && <video key={audience} src={`/hero/${audience}.mp4`} autoPlay muted loop playsInline />}
+      </div>
       <div className={s.sparks} aria-hidden="true">
         {SPARKS.map((p, i) => (
           <span key={i} className={s.spark} style={{ top: p.top, right: p.right, width: p.size, height: p.size, animationDelay: `${p.delay}, ${p.delay}` }} />
