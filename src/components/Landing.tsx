@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import { SiteFooter } from './SiteFooter';
+import { setMood } from './SiteBackdrop';
 import s from './festive.module.css';
+import { moodOf } from '@/lib/story';
 import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null };
@@ -75,6 +77,9 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
       .catch((e) => setError(e.message));
   }, []);
 
+  // leaving the home page returns the site to its plain light
+  useEffect(() => () => setMood(null), []);
+
   // the ring holds the categories: the ones the admin shows on this door, in their order, each with the picture
   // the admin chose for it (else its built-in cover; see applyCarousel and /carousel)
   const ring = useMemo<RingItem[]>(() => {
@@ -119,6 +124,8 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
               spinKey={audience}
               onOpen={(c) => router.push(categoryHref(c.id, audience))}
               openLabel="לכל העיצובים ←"
+              // the site takes on the light of the simcha in front (the business door keeps its own)
+              onFront={(c) => audience === 'private' && setMood(moodOf(c.id))}
             />
           </div>
         </div>

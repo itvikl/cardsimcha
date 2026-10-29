@@ -6,8 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useMe } from './Auth';
 import { flyCard, landCard } from './CardFlight';
 import { SiteFooter } from './SiteFooter';
+import { setMood } from './SiteBackdrop';
+import { StoryTable } from './StoryTable';
 import s from './festive.module.css';
 import { GENERAL_TOPIC, type Audience } from '@/lib/categories';
+import { moodOf, storyOf } from '@/lib/story';
 
 type Published = { id: string; name: string; topic: string | null; width_mm: number; height_mm: number; thumbnail: string | null };
 
@@ -23,6 +26,16 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const home = audience === 'business' ? '/business' : '/';
+  // a simcha with a story opens on its writing table (StoryTable); the plain gallery is one click away
+  const story = audience === 'private' ? storyOf(topic) : null;
+  const [gallery, setGallery] = useState(!story);
+
+  // the site takes on this simcha's light while its page is open
+  useEffect(() => {
+    if (audience !== 'private') return;
+    setMood(moodOf(topic));
+    return () => setMood(null);
+  }, [topic, audience]);
 
   useEffect(() => {
     fetch('/api/templates')
@@ -60,55 +73,67 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
     }
   }
 
+  // the plain gallery: every design of the category as a printed card
+  const galleryView = (
+    <>
+      <div className={`${s.head} ${s.rise}`}>
+        <span className={s.eyebrow}>קטגוריה</span>
+        <h1 className={s.h2}>{topic}</h1>
+        {items && items.length > 0 && <p>{items.length === 1 ? 'עיצוב אחד' : `${items.length} עיצובים`}. בחרו אחד, והוא נפתח בעורך.</p>}
+        {story && (
+          <button type="button" className={s.back} onClick={() => setGallery(false)}>
+            ✎ לכתוב את ההזמנה שלכם
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p className={s.error} role="alert">
+          {error}
+        </p>
+      )}
+
+      {items === null && !error ? (
+        <div className={s.designs} aria-busy="true" aria-label="טוען עיצובים">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={s.design}>
+              <span className={s.designFace} data-loading="true" style={{ aspectRatio: '210 / 297' }} />
+            </div>
+          ))}
+        </div>
+      ) : items && items.length === 0 ? (
+        <div className={s.emptyState}>
+          <strong>עוד אין כאן עיצובים</strong>
+          <span>אנחנו מכינים עיצובים חדשים לקטגוריה הזו. בינתיים אפשר להציץ בקטגוריות האחרות.</span>
+          <Link className={`${s.btn} ${s.dark}`} href={home}>
+            לכל הקטגוריות
+          </Link>
+        </div>
+      ) : (
+        <div className={`${s.designs} ${s.rise}`} style={{ animationDelay: '.15s' }}>
+          {items?.map((t) => (
+            <button key={t.id} type="button" className={s.design} onClick={(e) => open(t, e)} disabled={busy}>
+              <span
+                className={s.designFace}
+                style={{ aspectRatio: `${t.width_mm} / ${t.height_mm}`, ...(t.thumbnail ? { backgroundImage: `url("${t.thumbnail}")` } : {}) }}
+                aria-hidden="true"
+              />
+              <span className={s.designName}>{t.name}</span>
+              <span className={s.designHint}>לפתיחה בעורך</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className={audience === 'business' ? `${s.root} ${s.business}` : s.root}>
       <section className={`${s.wrap} ${s.catPage}`}>
         <Link className={s.back} href={home}>
           → כל הקטגוריות
         </Link>
-        <div className={`${s.head} ${s.rise}`}>
-          <span className={s.eyebrow}>קטגוריה</span>
-          <h1 className={s.h2}>{topic}</h1>
-          {items && items.length > 0 && <p>{items.length === 1 ? 'עיצוב אחד' : `${items.length} עיצובים`}. בחרו אחד, והוא נפתח בעורך.</p>}
-        </div>
-
-        {error && (
-          <p className={s.error} role="alert">
-            {error}
-          </p>
-        )}
-
-        {items === null && !error ? (
-          <div className={s.designs} aria-busy="true" aria-label="טוען עיצובים">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={s.design}>
-                <span className={s.designFace} data-loading="true" style={{ aspectRatio: '210 / 297' }} />
-              </div>
-            ))}
-          </div>
-        ) : items && items.length === 0 ? (
-          <div className={s.emptyState}>
-            <strong>עוד אין כאן עיצובים</strong>
-            <span>אנחנו מכינים עיצובים חדשים לקטגוריה הזו. בינתיים אפשר להציץ בקטגוריות האחרות.</span>
-            <Link className={`${s.btn} ${s.dark}`} href={home}>
-              לכל הקטגוריות
-            </Link>
-          </div>
-        ) : (
-          <div className={`${s.designs} ${s.rise}`} style={{ animationDelay: '.15s' }}>
-            {items?.map((t) => (
-              <button key={t.id} type="button" className={s.design} onClick={(e) => open(t, e)} disabled={busy}>
-                <span
-                  className={s.designFace}
-                  style={{ aspectRatio: `${t.width_mm} / ${t.height_mm}`, ...(t.thumbnail ? { backgroundImage: `url("${t.thumbnail}")` } : {}) }}
-                  aria-hidden="true"
-                />
-                <span className={s.designName}>{t.name}</span>
-                <span className={s.designHint}>לפתיחה בעורך</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {story && !gallery ? <StoryTable topic={topic} story={story} onSkip={() => setGallery(true)} /> : galleryView}
       </section>
       <SiteFooter />
     </div>

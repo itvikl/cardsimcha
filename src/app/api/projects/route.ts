@@ -29,9 +29,9 @@ export async function GET() {
 }
 
 /**
- * - { templateId, prefill? }: create the caller's own design as a copy of a template
+ * - { templateId, fill? }: create the caller's own design as a copy of a template
  *   (customers: published templates only; admins may copy any template to test it).
- *   `prefill` only fills an editable text field whose label mentions a name.
+ *   `fill` (element id -> text) sets the texts of editable fields, as the category page's story wrote them.
  * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  */
@@ -60,12 +60,16 @@ export async function POST(req: Request) {
       updatedAt: now,
       editedAt: null,
     };
-    // the name typed on the home page goes into the first editable field labelled as a name
-    const prefill = typeof body.prefill === 'string' ? body.prefill.trim().slice(0, 80) : '';
-    const field = prefill
-      ? copy.canvas.elements.find((e) => e.type === 'text' && e.editable && (e.label ?? '').includes('שם'))
-      : undefined;
-    if (field?.type === 'text') field.text = prefill;
+    // the story told on a category page: element id -> text, for the design's editable text fields only
+    const fill = body.fill && typeof body.fill === 'object' ? (body.fill as Record<string, unknown>) : {};
+    for (const e of copy.canvas.elements) {
+      const text = fill[e.id];
+      if (e.type === 'text' && e.editable && typeof text === 'string') {
+        e.text = text.slice(0, 300);
+        // it carries the customer's own details: it belongs in their basket right away
+        copy.editedAt = now;
+      }
+    }
     await setRow('projects', copy);
     return NextResponse.json({ id }, { status: 201 });
   }

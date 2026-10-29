@@ -138,11 +138,64 @@
 }
 .lead { margin: 0; max-width: 520px; font-size: 19px; line-height: 1.6; color: var(--text-2); text-wrap: balance; }
 
+/* ---------------------------------------------------------- a simcha's story (StoryTable): the invitation written in front of you */
+.story { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: calc(-1 * var(--sp-4)); }
+.storyStage {
+  display: grid; grid-template-columns: auto minmax(0, 400px); justify-content: center; align-items: center; gap: var(--sp-6);
+  perspective: 1200px;
+}
+/* the blank invitation: cream paper, a gold frame inside a gilded rim; as tall as the screen allows */
+.paper {
+  position: relative; height: clamp(380px, calc(100svh - 360px), 520px); aspect-ratio: 5 / 7; padding: 48px 32px; border-radius: var(--r-sm);
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; text-align: center;
+  background: radial-gradient(circle at 50% 30%, #fffaf0, #efe2c8 92%);
+  box-shadow: inset 0 0 0 14px rgba(255, 250, 240, 0.6), inset 0 0 0 15px var(--gold-line), 0 2px 0 rgba(176, 146, 98, 0.55), var(--sh-3);
+  transition: transform 0.9s var(--ease), opacity 0.9s var(--ease);
+}
+/* the story is told: the paper folds into the ring */
+.paper[data-folding='true'] { transform: translateY(60px) rotateX(24deg) scale(0.5); opacity: 0; }
+.paper p { margin: 0; max-width: 100%; font-family: var(--serif); color: #3b2e20; overflow-wrap: anywhere; transition: color 0.4s, text-shadow 0.4s; }
+.paper .paper_eyebrow { font-size: 15px; letter-spacing: 0.18em; color: #8a6a40; }
+.paper_title { font-size: clamp(28px, 3vw, 40px); font-weight: 700; line-height: 1.2; }
+.paper_line { font-size: 20px; }
+.paper .paper_small { font-size: 16px; color: #6b5a45; }
+/* the line being written glows in gold ink */
+.paper p[data-active='true'] { color: #8a6a40; text-shadow: 0 0 22px rgba(201, 168, 115, 0.5); }
+/* each letter flows from the pen */
+.inkLetter { display: inline-block; white-space: pre; animation: ink 0.55s var(--ease) both; }
+.quill {
+  display: inline-block; width: 2px; height: 0.95em; margin-inline-start: 3px; vertical-align: -0.1em;
+  background: #8a6a40; animation: quill 1s steps(2, start) infinite;
+}
+/* the Hebrew date is stamped on, not typed */
+.paper p[data-stamp='true'] { animation: stamp 0.6s var(--ease) both; }
+.ask { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+.ask label { font-family: var(--serif); font-size: clamp(26px, 2.6vw, 34px); font-weight: 700; line-height: 1.2; color: var(--text); }
+/* .ask prefix: outranks the global input rules */
+.ask .askInput {
+  width: 100%; min-height: 0; padding: 8px 2px 12px; border: 0; border-bottom: 1.5px solid var(--text); border-radius: 0;
+  background: transparent; box-shadow: none; color: var(--text); font-family: var(--serif); font-size: 26px;
+}
+.ask .askInput:focus { outline: none; border-bottom-color: var(--gold-text); }
+.askRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: var(--sp-1); }
+.dots { display: flex; gap: 8px; margin-top: var(--sp-1); }
+.dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background-color 0.4s; }
+.dots span[data-on='true'] { background: var(--gold-text); }
+.storySkip {
+  align-self: center; padding: 6px; border: 0; background: none; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 15px; text-decoration: underline; text-underline-offset: 4px;
+}
+.storySkip:hover { color: var(--text); }
+.storyWait { margin: var(--sp-5) 0; text-align: center; font-family: var(--serif); font-size: 24px; color: var(--text-2); animation: breathe 1.6s ease-in-out infinite; }
+.storyActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.storyActions .back { align-self: center; }
+
 /* ---------------------------------------------------------- a category's page: all its designs */
 .catPage { padding-block: var(--sp-4) var(--section); display: flex; flex-direction: column; gap: var(--sp-5); }
 .back {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 18px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--surface-glass); color: var(--text-2); font-size: 15px; font-weight: 500; text-decoration: none;
+  border: 1px solid var(--line); background: var(--surface-glass); color: var(--text-2);
+  font: inherit; font-size: 15px; font-weight: 500; text-decoration: none; cursor: pointer;
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: background-color 0.2s, color 0.2s;
 }
 .back:hover { background: var(--solid); color: var(--on-solid); }
@@ -213,7 +266,7 @@
   box-shadow: 0 2px 0 rgba(176, 146, 98, 0.55), 0 18px 36px rgba(var(--shade), 0.26);
   transition: box-shadow 0.4s;
 }
-.rface::before, .designFace::before {
+.rface::before, .designFace::before, .paper::before {
   content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; padding: 1.5px; pointer-events: none;
   background: linear-gradient(135deg, #f6e7c1 0%, #b8904f 28%, #fff4d6 50%, #a37a3c 72%, #f1dcae 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -241,6 +294,8 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent 60%, #000 100%);
   mask-image: linear-gradient(to bottom, transparent 60%, #000 100%);
 }
+/* a whole design on paper (the story's reveal), not a cover cropped to the card */
+.rface[data-fit='contain'], .rmirror[data-fit='contain'] { background-size: contain; }
 /* no picture yet: a blank invitation, cream with a gold inner frame and the name in the middle */
 .rface[data-blank='true'] {
   background: radial-gradient(circle at 50% 35%, #fffaf0, #efe2c8 85%);
@@ -371,12 +426,29 @@
   .ribbon ul { font-size: 16px; gap: 8px 18px; }
   .ribbon li { gap: 18px; }
   .designs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-2); }
+  .storyStage { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); justify-items: center; }
+  /* on a phone the card stays small above the question, so both still show with the keyboard open */
+  .story { margin-top: 0; gap: var(--sp-2); }
+  .story .head .h2 { font-size: 28px; }
+  .story .head p { display: none; }
+  .paper { height: auto; width: min(180px, 100%); padding: 26px 14px; gap: 6px; }
+  .paper .paper_eyebrow { font-size: 11px; }
+  .paper_title { font-size: 19px; }
+  .paper_line { font-size: 13px; }
+  .paper .paper_small { font-size: 12px; }
+  .ask label { font-size: 22px; }
+  .ask .askInput { font-size: 22px; }
+  .ask { width: 100%; }
   .designName { font-size: 17px; }
 }
 
 /* ---------------------------------------------------------- keyframes */
 @keyframes rise { from { opacity: 0; translate: 0 24px; } to { opacity: 1; translate: 0 0; } }
 @keyframes sheen { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+@keyframes ink { from { opacity: 0; filter: blur(4px); transform: translateY(5px); } to { opacity: 1; filter: none; transform: none; } }
+@keyframes quill { to { visibility: hidden; } }
+@keyframes stamp { 0% { opacity: 0; transform: scale(1.7) rotate(-4deg); } 60% { opacity: 1; transform: scale(0.96); } 100% { transform: none; } }
+@keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .root *, .root *::before, .root *::after { animation: none !important; transition: none !important; }
 }
