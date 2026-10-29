@@ -91,7 +91,7 @@ function CarouselManager() {
     }
     if (row.image) return row.image;
     const fixed = CATEGORIES.find((c) => c.name === row.name);
-    if (fixed) return fixed.image;
+    if (fixed?.image) return fixed.image;
     return templates.find((t) => (t.topic || GENERAL_TOPIC) === row.name && t.thumbnail)?.thumbnail ?? null;
   }
 
@@ -290,7 +290,7 @@ function CarouselManager() {
 
             <PickGroup
               title="תמונות הקטגוריות המובנות"
-              options={CATEGORIES.map((c) => ({ value: c.image, src: c.image, label: c.name }))}
+              options={CATEGORIES.flatMap((c) => (c.image ? [{ value: c.image, src: c.image, label: c.name }] : []))}
               current={pickRow.image}
               onPick={(v) => {
                 change(pickRow.name, { image: v });

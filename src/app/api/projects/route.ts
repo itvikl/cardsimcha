@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { newId, readDb, updateDb } from '@/lib/db';
+import { copyThumbnail, findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { summarize } from '@/lib/summary';
@@ -8,13 +8,21 @@ import type { Project } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+/** a design only reaches the basket once the customer edited it; older designs count if they were ever saved */
+const started = (p: Project) =>
+  p.kind !== 'design' || (p.editedAt === undefined ? p.updatedAt > p.createdAt : p.editedAt !== null);
+
 /** Admin: every template plus their own designs. Customer: their own designs. */
 export async function GET() {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const db = await readDb();
-  const list = db.projects
-    .filter((p) => (user.role === 'admin' ? p.kind === 'template' || p.ownerId === user.id : p.ownerId === user.id))
+  const [own, templates] = await Promise.all([
+    findRows('projects', { ownerId: user.id }),
+    user.role === 'admin' ? findRows('projects', { kind: 'template' }) : [],
+  ]);
+  const byId = new Map([...own, ...templates].map((p) => [p.id, p]));
+  const list = [...byId.values()]
+    .filter(started)
     .map(summarize)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return NextResponse.json(list);
@@ -34,32 +42,32 @@ export async function POST(req: Request) {
   const now = new Date().toISOString();
 
   if (typeof body?.templateId === 'string') {
-    const created = await updateDb((db) => {
-      const t = db.projects.find((p) => p.id === body.templateId && p.kind === 'template');
-      if (!t || (t.status !== 'published' && user.role !== 'admin')) return null;
-      const copy: Project = {
-        id: newId(),
-        kind: 'design',
-        ownerId: user.id,
-        templateId: t.id,
-        status: 'draft',
-        name: t.name,
-        canvas: structuredClone(t.canvas),
-        thumbnail: t.thumbnail,
-        createdAt: now,
-        updatedAt: now,
-      };
-      // the name typed on the home page goes into the first editable field labelled as a name
-      const prefill = typeof body.prefill === 'string' ? body.prefill.trim().slice(0, 80) : '';
-      const field = prefill
-        ? copy.canvas.elements.find((e) => e.type === 'text' && e.editable && (e.label ?? '').includes('שם'))
-        : undefined;
-      if (field?.type === 'text') field.text = prefill;
-      db.projects.push(copy);
-      return copy;
-    });
-    if (!created) return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
-    return NextResponse.json({ id: created.id }, { status: 201 });
+    const t = await getRow('projects', body.templateId);
+    if (!t || t.kind !== 'template' || (t.status !== 'published' && user.role !== 'admin')) {
+      return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
+    }
+    const id = newId();
+    const copy: Project = {
+      id,
+      kind: 'design',
+      ownerId: user.id,
+      templateId: t.id,
+      status: 'draft',
+      name: t.name,
+      canvas: structuredClone(t.canvas),
+      thumbnail: await copyThumbnail(t.thumbnail, id),
+      createdAt: now,
+      updatedAt: now,
+      editedAt: null,
+    };
+    // the name typed on the home page goes into the first editable field labelled as a name
+    const prefill = typeof body.prefill === 'string' ? body.prefill.trim().slice(0, 80) : '';
+    const field = prefill
+      ? copy.canvas.elements.find((e) => e.type === 'text' && e.editable && (e.label ?? '').includes('שם'))
+      : undefined;
+    if (field?.type === 'text') field.text = prefill;
+    await setRow('projects', copy);
+    return NextResponse.json({ id }, { status: 201 });
   }
 
   if (user.role !== 'admin') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
@@ -67,8 +75,7 @@ export async function POST(req: Request) {
   const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : '';
   const canvas = validateDoc(emptyDoc(Number(body?.width_mm) || 210, Number(body?.height_mm) || 297));
   if (!canvas) return NextResponse.json({ error: 'מידות לא תקינות' }, { status: 400 });
-  const db = await readDb();
-  const bg = typeof body?.backgroundAssetId === 'string' ? db.images.find((i) => i.id === body.backgroundAssetId) : undefined;
+  const bg = typeof body?.backgroundAssetId === 'string' ? await getRow('images', body.backgroundAssetId) : null;
   if (bg) {
     // fill the page like CSS "cover": scale to the larger side, centred, anything beyond the page is cropped
     const { width_mm: pw, height_mm: ph } = canvas.page;
@@ -91,7 +98,7 @@ export async function POST(req: Request) {
   const audience = parseAudience(body?.audience);
   // fail before the upload work below is wasted (checked again, atomically, when saving)
   if (audience) {
-    const why = topicConflict(db, topic, audience);
+    const why = topicConflict(await readDb(['projects', 'carousel']), topic, audience);
     if (why) return NextResponse.json({ error: why }, { status: 400 });
   }
   const project: Project = {
@@ -111,7 +118,7 @@ export async function POST(req: Request) {
     if (audience) claimTopic(db, topic, audience);
     db.projects.push(project);
     return null;
-  });
+  }, ['projects', 'carousel']);
   if (conflict) return NextResponse.json({ error: conflict }, { status: 400 });
   return NextResponse.json({ id: project.id }, { status: 201 });
 }

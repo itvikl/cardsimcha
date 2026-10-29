@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readDb } from '@/lib/db';
+import { getRow, readDb } from '@/lib/db';
 import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
@@ -32,12 +32,13 @@ export async function POST(req: Request, { params }: Ctx) {
     .slice(-10)
     .map((t: ChatTurn) => ({ role: t.role, text: t.text.slice(0, 1000) }));
 
-  const db = await readDb();
-  const project = db.projects.find((p) => p.id === id);
+  const project = await getRow('projects', id);
   if (!project || !canRead(user, project) || !canWrite(user, project)) {
     return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   }
 
+  // the assistant picks from the whole library, so it needs every category and image
+  const db = await readDb(['categories', 'images']);
   const mode: AgentMode = project.kind === 'template' ? 'full' : 'customer';
   // the same rules as saving: a customer's copy only takes the changes a customer may make
   const enforce = (d: unknown): CanvasDoc | null =>

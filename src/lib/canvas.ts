@@ -119,3 +119,10 @@ export function applyCustomerEdits(
 }
 
 const clampTo = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
+
+/** The library images a client-sent canvas points at: all `applyCustomerEdits` needs to look up. */
+export function sentAssetIds(incoming: unknown): string[] {
+  const els = (incoming as CanvasDoc | null)?.elements;
+  if (!Array.isArray(els)) return [];
+  return els.flatMap((e) => (e?.type === 'image' && typeof e.asset_id === 'string' ? [e.asset_id] : [])).slice(0, 200);
+}

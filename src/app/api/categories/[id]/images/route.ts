@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const auth = await requireAdmin();
   if (auth instanceof Response) return auth;
   const { id } = await params;
-  const db = await readDb();
+  const db = await readDb(['categories']);
   if (!db.categories.some((c) => c.id === id)) {
     return NextResponse.json({ error: 'הקטגוריה לא נמצאה' }, { status: 404 });
   }
@@ -54,7 +54,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!d.categories.some((c) => c.id === id)) return false;
     d.images.push(asset);
     return true;
-  });
+  }, ['categories', 'images']);
   if (!ok) {
     await removeUploads([fileName]);
     return NextResponse.json({ error: 'הקטגוריה נמחקה' }, { status: 404 });

@@ -39,13 +39,28 @@ html, body { margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 
 body {
-  background: var(--bg);
+  background: #efe7da;
   color: var(--text);
   font-family: 'Heebo', 'Assistant', 'Segoe UI', Arial, sans-serif;
   font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
+
+/* the bokeh behind every page (SiteBackdrop); pages keep their own backgrounds transparent so it shows */
+.site-backdrop { position: fixed; inset: 0; z-index: -1; pointer-events: none; background: #efe7da; }
+.site-backdrop[data-door='business'] { background: #0b1f4d; }
+.site-backdrop-media { position: absolute; inset: 0; opacity: 0.45; background: center / cover no-repeat; }
+.site-backdrop[data-door='business'] .site-backdrop-media { opacity: 0.75; }
+.site-backdrop video { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* the card flying from the home page's ring into the editor (CardFlight) */
+.card-flight {
+  position: fixed; z-index: 200; pointer-events: none; transform-origin: 0 0; will-change: transform, opacity;
+  border-radius: 10px; background: #f8f3ea center / contain no-repeat;
+  box-shadow: 0 18px 36px rgba(60, 40, 20, 0.26); outline: 1.5px solid rgba(201, 168, 115, 0.8);
+}
+.card-flight-veil { position: fixed; inset: 0; z-index: 199; pointer-events: none; opacity: 0; background: rgba(239, 231, 218, 0.88); }
 
 a { color: inherit; text-decoration: none; }
 h1, h2, h3 { letter-spacing: -0.01em; }
@@ -56,8 +71,10 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   position: sticky; top: 0; z-index: 50;
   display: flex; align-items: center; gap: 20px;
   padding: 0 clamp(16px, 4vw, 48px); height: var(--header-h);
-  background: #1a1714; color: #fff;
-  border-bottom: 1px solid rgba(239, 231, 218, 0.08);
+  /* dark glass: the site backdrop glows through it instead of being cut by a solid bar */
+  background: rgba(26, 23, 20, 0.78); color: #fff;
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid rgba(214, 194, 161, 0.18);
 }
 .topbar .brand { display: inline-flex; align-items: center; gap: 10px; font-family: 'Frank Ruhl Libre', serif; font-weight: 900; font-size: 22px; color: #efe7da; }
 .logo-mark {
@@ -99,7 +116,19 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   .revolving-icon { transition: none; }
 }
 
-.topbar.business { background: #071640; border-bottom-color: rgba(244, 246, 255, 0.1); }
+/* the customer's basket: their cards live behind it, not on the home page */
+.basket-link {
+  position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  color: #d6c2a1; border: 1px solid rgba(214, 194, 161, 0.35); transition: background-color 0.2s, color 0.2s;
+}
+.basket-link:hover, .basket-link[aria-current='page'] { background: rgba(214, 194, 161, 0.14); color: #f3e8d6; }
+.basket-count {
+  position: absolute; top: -4px; inset-inline-start: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  display: grid; place-items: center; background: #d6c2a1; color: #1a1714; font-size: 12px; font-weight: 800; line-height: 1;
+}
+.topbar.business .basket-link { color: #ffc53d; border-color: rgba(255, 197, 61, 0.4); }
+.topbar.business .basket-count { background: #ffc53d; color: #0b1f4d; }
+.topbar.business { background: rgba(7, 22, 64, 0.78); border-bottom-color: rgba(244, 246, 255, 0.1); }
 .topbar.business .logo-mark { background: #ffc53d; }
 
 /* ---------------------------------------------------------- layout */
@@ -330,14 +359,13 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
   --shadow: 0 1px 2px rgba(60, 40, 20, 0.06), 0 10px 30px rgba(60, 40, 20, 0.08);
   --serif: 'Frank Ruhl Libre', serif;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  background: var(--bg);
 }
 .editor-wrap .btn:hover { border-color: rgba(122, 92, 54, 0.3); }
 .editor-wrap .btn.primary { background: #1a1714; color: #efe7da; box-shadow: 0 8px 22px rgba(60, 40, 20, 0.22); }
 .editor-wrap .btn.primary:hover { background: #2a2520; box-shadow: 0 12px 28px rgba(60, 40, 20, 0.3); }
 .editor-wrap input:focus, .editor-wrap textarea:focus, .editor-wrap select:focus { border-color: var(--brand-2); box-shadow: 0 0 0 4px rgba(154, 119, 74, 0.16); }
 .editor-wrap .editor-bar { background: rgba(251, 248, 242, 0.92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-.editor-wrap .editor .stage-wrap { background: radial-gradient(60% 55% at 50% 0%, #f6efe3 0%, rgba(246, 239, 227, 0) 70%), #e4d9c6; }
+.editor-wrap .editor .stage-wrap { background: radial-gradient(60% 55% at 50% 0%, rgba(246, 239, 227, 0.6) 0%, rgba(246, 239, 227, 0) 70%), rgba(228, 217, 198, 0.35); }
 .editor-wrap .editor aside { background: linear-gradient(180deg, #fbf8f2 0%, #f6f0e6 100%); gap: 14px; padding: 22px 20px 28px; scrollbar-width: thin; scrollbar-color: rgba(122, 92, 54, 0.3) transparent; }
 .editor-wrap .pick[aria-pressed='true'] { border: 2px solid var(--text); }
 

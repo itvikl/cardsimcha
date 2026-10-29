@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const user: User = { id: newId(), email, name, role, passwordHash: hash, salt, createdAt: new Date().toISOString() };
     db.users.push(user);
     return user;
-  });
+  }, ['users']);
   if (!result) return NextResponse.json({ error: 'האימייל כבר רשום' }, { status: 409 });
 
   const res = NextResponse.json(publicUser(result), { status: 201 });

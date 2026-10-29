@@ -7,6 +7,6 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const auth = await requireUser();
   if (auth instanceof Response) return auth;
-  const db = await readDb();
+  const db = await readDb(['categories', 'images']);
   return NextResponse.json({ categories: db.categories, images: db.images });
 }

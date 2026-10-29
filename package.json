@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "eval:agent": "tsx scripts/eval-agent.ts",
-    "migrate:firebase": "tsx --env-file=.env.local scripts/migrate-to-firebase.ts"
+    "migrate:firebase": "tsx --env-file=.env.local scripts/migrate-to-firebase.ts",
+    "migrate:thumbnails": "tsx --env-file=.env.local scripts/migrate-thumbnails.ts"
   },
   "keywords": [],
   "author": "",

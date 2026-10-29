@@ -20,7 +20,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
     if (typeof body?.description === 'string') cat.description = body.description.trim().slice(0, 300);
     return cat;
-  });
+  }, ['categories']);
   if (result === 'missing') return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   if (result === 'invalid') return NextResponse.json({ error: 'שם לא תקין' }, { status: 400 });
   if (result === 'duplicate') return NextResponse.json({ error: 'קטגוריה בשם הזה כבר קיימת' }, { status: 409 });
@@ -37,7 +37,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     db.images = db.images.filter((i) => i.categoryId !== id);
     db.categories = db.categories.filter((c) => c.id !== id);
     return removed;
-  });
+  }, ['categories', 'images']);
   if (!files) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   await removeUploads(files);
   return NextResponse.json({ ok: true });

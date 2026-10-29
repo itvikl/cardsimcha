@@ -15,7 +15,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     const i = db.images.find((x) => x.id === id);
     if (i) i.name = name;
     return i ?? null;
-  });
+  }, ['images']);
   if (!img) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   return NextResponse.json(img);
 }
@@ -29,7 +29,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     if (!i) return null;
     db.images = db.images.filter((x) => x.id !== id);
     return i.file;
-  });
+  }, ['images']);
   if (!file) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   await removeUploads([file]);
   return NextResponse.json({ ok: true });

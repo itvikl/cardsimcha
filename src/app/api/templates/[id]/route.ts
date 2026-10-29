@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readDb } from '@/lib/db';
+import { getRow } from '@/lib/db';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic';
 /** Public preview of one published template (no canvas data, only what the page needs). */
 export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
-  const db = await readDb();
-  const p = db.projects.find((x) => x.id === id && x.kind === 'template' && x.status === 'published');
-  if (!p) return NextResponse.json({ error: 'הכרטיס לא נמצא' }, { status: 404 });
+  const p = await getRow('projects', id);
+  if (!p || p.kind !== 'template' || p.status !== 'published') return NextResponse.json({ error: 'הכרטיס לא נמצא' }, { status: 404 });
   return NextResponse.json({
     id: p.id,
     name: p.name,

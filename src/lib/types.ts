@@ -109,6 +109,11 @@ export type Project = {
   thumbnail?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * designs only: when the customer first changed the content or name. null = opened but never edited
+   * (kept out of the basket); missing = created before this was tracked.
+   */
+  editedAt?: string | null;
 };
 
 /** admin's choices for one home-page carousel card, keyed by its topic name */

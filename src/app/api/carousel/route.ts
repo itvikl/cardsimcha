@@ -1,7 +1,7 @@
 import { requireAdmin } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { readDb, updateDb } from '@/lib/db';
-import type { CarouselSlide, Db } from '@/lib/types';
+import { getRows, readDb, updateDb } from '@/lib/db';
+import type { CarouselSlide, Db, Project } from '@/lib/types';
 import { audienceOf, type CarouselSetting } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
@@ -9,21 +9,22 @@ export const dynamic = 'force-dynamic';
 const MAX_SLIDES = 200;
 const IMAGE_RE = /^(\/categories\/[\w-]+\.(?:svg|webp)|\/api\/uploads\/[\w.-]+|template:[\w-]+)$/;
 
-function resolve(db: Db, image: string | null): string | null {
-  if (!image?.startsWith('template:')) return image;
-  const id = image.slice('template:'.length);
-  return db.projects.find((p) => p.id === id && p.kind === 'template')?.thumbnail ?? null;
-}
+const templateId = (image: string | null) => (image?.startsWith('template:') ? image.slice('template:'.length) : '');
 
-function list(db: Db): CarouselSetting[] {
+/** The slides with each `template:<id>` image resolved to that template's thumbnail; loads only those templates. */
+async function list(db: Db): Promise<CarouselSetting[]> {
+  const templates = new Map<string, Project>(
+    (await getRows('projects', db.carousel.map((s) => templateId(s.image)))).filter((p) => p.kind === 'template').map((p) => [p.id, p]),
+  );
+  const resolve = (image: string | null) => (templateId(image) ? (templates.get(templateId(image))?.thumbnail ?? null) : image);
   return [...db.carousel]
     .sort((a, b) => a.order - b.order)
-    .map((s) => ({ name: s.name, image: s.image, src: resolve(db, s.image), hidden: s.hidden, audience: s.audience ?? audienceOf(s.name) }));
+    .map((s) => ({ name: s.name, image: s.image, src: resolve(s.image), hidden: s.hidden, audience: s.audience ?? audienceOf(s.name) }));
 }
 
 /** The admin's carousel choices. Public on purpose: the home page needs them before sign-in. */
 export async function GET() {
-  return NextResponse.json(list(await readDb()));
+  return NextResponse.json(await list(await readDb(['carousel'])));
 }
 
 /** Replaces the whole carousel setup: body `{ slides: [{ name, image, hidden, audience }] }` in display order. */
@@ -53,7 +54,7 @@ export async function PUT(req: Request) {
       if (!seen.has(old.name)) slides.push({ ...old, order: slides.length });
     }
     db.carousel = slides;
-    return list(db);
-  });
-  return NextResponse.json(result);
+    return db;
+  }, ['carousel']);
+  return NextResponse.json(await list(result));
 }

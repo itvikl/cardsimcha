@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
-import { readDb } from '@/lib/db';
+import { findRows } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 /** Published templates. Public on purpose: this is the gallery visitors see before signing up. */
 export async function GET() {
-  const db = await readDb();
-  const list = db.projects
-    .filter((p) => p.kind === 'template' && p.status === 'published')
+  const published = await findRows('projects', { kind: 'template', status: 'published' });
+  const list = published
     .map((p) => ({
       id: p.id,
       name: p.name,

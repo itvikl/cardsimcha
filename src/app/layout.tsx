@@ -3,6 +3,8 @@ import './globals.css';
 import { TopBar } from '@/components/TopBar';
 import { AuthProvider } from '@/components/Auth';
 import { ToastProvider } from '@/components/Toast';
+import { SiteBackdrop } from '@/components/SiteBackdrop';
+import { CardFlight } from '@/components/CardFlight';
 
 export const metadata: Metadata = {
   // share previews (opengraph-image.jpg) need absolute URLs; set SITE_URL to the public address, e.g. https://example.co.il
@@ -24,10 +26,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <SiteBackdrop />
         <ToastProvider>
           <AuthProvider>
             <TopBar />
             {children}
+            <CardFlight />
           </AuthProvider>
         </ToastProvider>
       </body>

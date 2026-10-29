@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const category: Category = { id: newId(), name, description, createdAt: new Date().toISOString() };
     db.categories.push(category);
     return category;
-  });
+  }, ['categories']);
   if (!result) return NextResponse.json({ error: 'קטגוריה בשם הזה כבר קיימת' }, { status: 409 });
   return NextResponse.json(result, { status: 201 });
 }

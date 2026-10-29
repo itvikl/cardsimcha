@@ -9,6 +9,7 @@ import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
 import { newImage, newRect, newText } from '@/lib/elements';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
+import { landCard } from './CardFlight';
 import { DownloadIcon, FitIcon, RedoIcon, UndoIcon } from './Icons';
 import type { CanvasDoc, CanvasElement, Category, ImageAsset, Project, TextElement } from '@/lib/types';
 
@@ -87,6 +88,8 @@ export default function Editor({ id }: { id: string }) {
   const [libCat, setLibCat] = useState<string>('');
   const [zoomOverride, setZoomOverride] = useState<number | null>(null);
   const [fit, setFit] = useState(0.5);
+  /** the canvas has its real fitted size (not the 0.5 placeholder) */
+  const [fitted, setFitted] = useState(false);
   const [save, setSave] = useState<SaveState>('saved');
   const [loadError, setLoadError] = useState('');
   const [fontsTick, setFontsTick] = useState(0);
@@ -147,6 +150,7 @@ export default function Editor({ id }: { id: string }) {
       const w = el.clientWidth - 48;
       const h = el.clientHeight - 48;
       setFit(clamp(Math.min(w / (doc.page.width_mm * PX), h / (doc.page.height_mm * PX)), 0.1, 3));
+      setFitted(true);
     };
     calc();
     const ro = new ResizeObserver(calc);
@@ -155,6 +159,30 @@ export default function Editor({ id }: { id: string }) {
   }, [doc?.page.width_mm, doc?.page.height_mm, !!doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const zoom = zoomOverride ?? fit;
+
+  // a card flying in from the home page lands on the canvas once it has its fitted size and its pictures
+  // (otherwise the flying card fades into a bare canvas); see CardFlight. Runs once, when the editor opens.
+  useEffect(() => {
+    if (loadError) {
+      landCard(null);
+      return;
+    }
+    if (!fitted || !doc) return;
+    let alive = true;
+    const files = doc.elements.flatMap((e) => (e.type === 'image' ? library.images.filter((i) => i.id === e.asset_id).map((i) => i.file) : []));
+    const loads = files.map((f) => {
+      const img = new Image();
+      img.src = `/api/uploads/${f}`;
+      return img.decode().catch(() => {});
+    });
+    // a slow picture does not hold the card in the air for long
+    Promise.race([Promise.all(loads), new Promise((r) => setTimeout(r, 2500))]).then(() =>
+      requestAnimationFrame(() => alive && landCard(wrapRef.current?.querySelector('.stage-frame')?.getBoundingClientRect() ?? null)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [fitted, loadError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- history-aware updates ----------------------------------------------
   // The current doc and the undo/redo stacks live in refs so updates stay free of

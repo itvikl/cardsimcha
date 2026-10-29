@@ -1,9 +1,10 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMe } from './Auth';
-import { LogoIcon } from './Icons';
+import { BasketIcon, LogoIcon } from './Icons';
 
 export function TopBar() {
   const pathname = usePathname();
@@ -19,15 +20,29 @@ export function TopBar() {
     await refresh();
     router.push('/');
   }
-  const links = [
-    { href: '/', label: me?.role === 'admin' ? 'תבניות' : 'הכרטיסים שלי' },
-    ...(me?.role === 'admin'
-      ? [
-          { href: '/categories', label: 'קטגוריות ותמונות' },
-          { href: '/carousel', label: 'קרוסלה' },
-        ]
-      : []),
-  ];
+  const admin = me?.role === 'admin';
+  // customers reach their cards only through the basket; admins get their tools instead
+  const links = admin
+    ? [
+        { href: '/', label: 'תבניות' },
+        { href: '/categories', label: 'קטגוריות ותמונות' },
+        { href: '/carousel', label: 'קרוסלה' },
+      ]
+    : [];
+
+  // how many cards are in the basket, refreshed on every page change (leaving the editor may add one)
+  const [inBasket, setInBasket] = useState(0);
+  useEffect(() => {
+    if (!me || admin) return;
+    let alive = true;
+    fetch('/api/projects')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { kind: string }[]) => alive && setInBasket(list.filter((p) => p.kind === 'design').length))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [me, admin, pathname]);
   return (
     <header className={pathname.startsWith('/business') ? 'topbar business' : 'topbar'}>
       <Link href="/" className="brand">
@@ -46,17 +61,31 @@ export function TopBar() {
       )}
       {me && (
         <>
-          <nav aria-label="ראשי">
-            {links.map((l) => {
-              const active = l.href === '/' ? pathname === '/' || pathname.startsWith('/editor') : pathname.startsWith(l.href);
-              return (
-                <Link key={l.href} href={l.href} aria-current={active ? 'page' : undefined}>
-                  {l.label}
-                </Link>
-              );
-            })}
-          </nav>
+          {links.length > 0 && (
+            <nav aria-label="ראשי">
+              {links.map((l) => {
+                const active = l.href === '/' ? pathname === '/' || pathname.startsWith('/editor') : pathname.startsWith(l.href);
+                return (
+                  <Link key={l.href} href={l.href} aria-current={active ? 'page' : undefined}>
+                    {l.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
           <span className="spacer" />
+          {!admin && (
+            <Link
+              href="/my-cards"
+              className="basket-link"
+              aria-current={pathname === '/my-cards' ? 'page' : undefined}
+              aria-label={inBasket ? `הסלסלה שלי, ${inBasket} כרטיסים` : 'הסלסלה שלי'}
+              title="הסלסלה שלי"
+            >
+              <BasketIcon />
+              {inBasket > 0 && <span className="basket-count">{inBasket}</span>}
+            </Link>
+          )}
           <span className="status">{me.authDisabled ? me.name : me.name + (me.role === 'admin' ? ' · מנהל' : '')}</span>
           {me.authDisabled ? (
             <button className="btn small" onClick={switchMode}>
