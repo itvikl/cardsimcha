@@ -10,9 +10,10 @@ import { setMood } from './SiteBackdrop';
 import { StoryTable } from './StoryTable';
 import s from './festive.module.css';
 import { GENERAL_TOPIC, type Audience } from '@/lib/categories';
+import { formatPrice } from '@/lib/price';
 import { moodOf, storyOf } from '@/lib/story';
 
-type Published = { id: string; name: string; topic: string | null; width_mm: number; height_mm: number; thumbnail: string | null };
+type Published = { id: string; name: string; topic: string | null; price: number | null; width_mm: number; height_mm: number; thumbnail: string | null };
 
 /**
  * A category's page, reached from the home page's ring: all its designs as printed cards.
@@ -119,6 +120,7 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
                 aria-hidden="true"
               />
               <span className={s.designName}>{t.name}</span>
+              {t.price !== null && <span className={s.designPrice}>{formatPrice(t.price)}</span>}
               <span className={s.designHint}>לפתיחה בעורך</span>
             </button>
           ))}

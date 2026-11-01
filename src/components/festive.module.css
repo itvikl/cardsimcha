@@ -222,6 +222,7 @@
 .design:hover .designFace::after { animation: sheen 1.3s var(--ease) both; }
 .designFace[data-loading='true'] { background: var(--surface-2); box-shadow: none; opacity: 0.5; }
 .designName { font-family: var(--serif); font-size: 20px; font-weight: 700; line-height: 1.2; }
+.designPrice { margin-top: -8px; font-size: 16px; font-weight: 700; }
 .designHint { margin-top: -8px; font-size: 14px; color: var(--muted); }
 
 /* ---------------------------------------------------------- the ring (MirrorRing), straight on the backdrop */

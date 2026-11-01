@@ -13,6 +13,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   return NextResponse.json({
     id: p.id,
     name: p.name,
+    price: p.price ?? null,
     width_mm: p.canvas.page.width_mm,
     height_mm: p.canvas.page.height_mm,
     thumbnail: p.thumbnail ?? null,

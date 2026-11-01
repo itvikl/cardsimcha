@@ -20,6 +20,6 @@ export async function GET(req: Request) {
   return NextResponse.json(
     published
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .map((p) => ({ id: p.id, name: p.name, thumbnail: p.thumbnail ?? null, canvas: { ...p.canvas, elements: p.canvas.elements.map(withSrc) } })),
+      .map((p) => ({ id: p.id, name: p.name, price: p.price ?? null, thumbnail: p.thumbnail ?? null, canvas: { ...p.canvas, elements: p.canvas.elements.map(withSrc) } })),
   );
 }

@@ -11,6 +11,7 @@ export async function GET() {
       id: p.id,
       name: p.name,
       topic: p.topic ?? null,
+      price: p.price ?? null,
       width_mm: p.canvas.page.width_mm,
       height_mm: p.canvas.page.height_mm,
       thumbnail: p.thumbnail ?? null,

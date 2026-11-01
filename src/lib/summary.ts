@@ -6,6 +6,7 @@ export const summarize = (p: Project) => ({
   status: p.status,
   name: p.name,
   topic: p.topic ?? null,
+  price: p.price ?? null,
   updatedAt: p.updatedAt,
   width_mm: p.canvas.page.width_mm,
   height_mm: p.canvas.page.height_mm,

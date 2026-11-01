@@ -7,10 +7,11 @@ import { useMe } from './Auth';
 import { flyCard, landCard } from './CardFlight';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
+import { formatPrice } from '@/lib/price';
 import { applyFill, fillFor, type Answers, type CardLine, type Story } from '@/lib/story';
 import { renderCard, type DrawableDoc } from '@/lib/renderCard';
 
-type Design = { id: string; name: string; thumbnail: string | null; canvas: DrawableDoc };
+type Design = { id: string; name: string; price: number | null; thumbnail: string | null; canvas: DrawableDoc };
 
 const segmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter('he', { granularity: 'grapheme' }) : null;
 const HEBREW_OR_SPACE = /[\p{Script=Hebrew}\s]/u;
@@ -108,7 +109,7 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
         const fill = fillFor(d.canvas, answers);
         fills.current.set(d.id, fill);
         const image = await renderCard(applyFill(d.canvas, fill)).catch(() => d.thumbnail);
-        items.push({ id: d.id, name: d.name, image, note: 'עם הפרטים שלכם' });
+        items.push({ id: d.id, name: d.name, image, note: d.price === null ? 'עם הפרטים שלכם' : `עם הפרטים שלכם · ${formatPrice(d.price)}` });
       }
       if (alive) setRing(items);
     })();

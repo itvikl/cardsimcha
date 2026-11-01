@@ -105,6 +105,8 @@ export type Project = {
   name: string;
   /** topic shown to customers as a category tile on the home page, e.g. "בית כנסת" (templates only) */
   topic?: string;
+  /** price in shekels shown to customers, set by an admin; unset shows no price (templates only) */
+  price?: number;
   canvas: CanvasDoc;
   thumbnail?: string;
   createdAt: string;

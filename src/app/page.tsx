@@ -7,6 +7,7 @@ import { PAGE_PRESETS } from '@/lib/canvas';
 import { useMe } from '@/components/Auth';
 import { Landing } from '@/components/Landing';
 import { CATEGORIES, GENERAL_TOPIC, topicAudience, type CarouselSetting } from '@/lib/categories';
+import { MAX_PRICE, parsePrice } from '@/lib/price';
 import { DoorTurn, RevolvingDoor, useAdminDoor } from '@/components/RevolvingDoor';
 
 type Item = {
@@ -15,6 +16,7 @@ type Item = {
   status: 'draft' | 'published';
   name: string;
   topic: string | null;
+  price: number | null;
   updatedAt: string;
   width_mm: number;
   height_mm: number;
@@ -173,6 +175,34 @@ function AdminHome() {
     }
   }
 
+  async function savePrice(it: Item, input: HTMLInputElement) {
+    const saved = it.price === null ? '' : String(it.price);
+    // text the browser cannot read as a number comes back empty, which must not clear the price
+    const next = input.validity.badInput ? 'invalid' : input.value === '' ? null : parsePrice(Number(input.value));
+    if (next === 'invalid') {
+      input.value = saved;
+      setError('מחיר לא תקין');
+      return;
+    }
+    if (next === it.price) {
+      input.value = saved;
+      return;
+    }
+    setError('');
+    try {
+      await api(`/api/projects/${it.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: next }),
+      });
+      input.value = next === null ? '' : String(next);
+      await load();
+    } catch (err) {
+      input.value = saved;
+      setError((err as Error).message);
+    }
+  }
+
   const inDoor = (topicName: string) => topicAudience(topicName, carousel) === door;
   // a template without a topic lands in "כללי", which is on the private side
   const templates = items?.filter((i) => i.kind === 'template' && inDoor(i.topic || GENERAL_TOPIC)) ?? [];
@@ -278,6 +308,19 @@ function AdminHome() {
                   placeholder="לא הוגדר נושא"
                   maxLength={60}
                   onBlur={(e) => saveTopic(it, e.currentTarget)}
+                />
+              </label>
+              <label className="field" style={{ fontSize: 13 }}>
+                מחיר בשקלים
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={MAX_PRICE}
+                  step="0.01"
+                  defaultValue={it.price ?? ''}
+                  placeholder="ללא מחיר"
+                  onBlur={(e) => savePrice(it, e.currentTarget)}
                 />
               </label>
               <div className="row">

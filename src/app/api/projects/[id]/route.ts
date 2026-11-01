@@ -4,6 +4,7 @@ import { applyCustomerEdits, sentAssetIds, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
+import { parsePrice } from '@/lib/price';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
 import type { ImageAsset, Project } from '@/lib/types';
 
@@ -50,6 +51,8 @@ export async function PUT(req: Request, { params }: Ctx) {
   const status = body?.status === 'draft' || body?.status === 'published' ? body.status : undefined;
   const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : undefined;
   const audience = parseAudience(body?.audience);
+  const price = body?.price === undefined ? undefined : parsePrice(body.price);
+  if (price === 'invalid') return NextResponse.json({ error: 'מחיר לא תקין' }, { status: 400 });
   // a customer may only swap to library images; load just the ones the canvas points at
   const assets: ImageAsset[] = body?.canvas !== undefined ? await getRows('images', sentAssetIds(body.canvas)) : [];
 
@@ -76,6 +79,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       p.thumbnail = thumb.url;
     }
     if (status && p.kind === 'template') p.status = status;
+    if (price !== undefined && p.kind === 'template') p.price = price ?? undefined;
     p.updatedAt = new Date().toISOString();
     return { id: p.id, updatedAt: p.updatedAt, oldThumb };
   };
