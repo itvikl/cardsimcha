@@ -3,6 +3,7 @@ import { deleteRow, getRow, getRows, removeThumbnail, thumbnailFile, updateDb, u
 import { applyCustomerEdits, sentAssetIds, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
+import { visibleImages } from '@/lib/brand';
 import { AGENT_ENABLED } from '@/lib/config';
 import { parsePrice } from '@/lib/price';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
@@ -54,7 +55,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   const price = body?.price === undefined ? undefined : parsePrice(body.price);
   if (price === 'invalid') return NextResponse.json({ error: 'מחיר לא תקין' }, { status: 400 });
   // a customer may only swap to library images; load just the ones the canvas points at
-  const assets: ImageAsset[] = body?.canvas !== undefined ? await getRows('images', sentAssetIds(body.canvas)) : [];
+  const assets: ImageAsset[] = body?.canvas !== undefined ? visibleImages(await getRows('images', sentAssetIds(body.canvas)), user.id) : [];
 
   type Result = 'missing' | 'invalid' | { conflict: string } | { id: string; updatedAt: string; oldThumb?: string };
   /** Applies the request to `p` in place. */

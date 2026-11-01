@@ -9,9 +9,12 @@ import { SiteFooter } from './SiteFooter';
 import { setMood } from './SiteBackdrop';
 import { StoryTable } from './StoryTable';
 import s from './festive.module.css';
+import { brandPreview, hasBrandRoles } from '@/lib/brand';
 import { GENERAL_TOPIC, type Audience } from '@/lib/categories';
 import { formatPrice } from '@/lib/price';
+import { renderCard, type DrawableDoc } from '@/lib/renderCard';
 import { moodOf, storyOf } from '@/lib/story';
+import type { BrandKit } from '@/lib/types';
 
 type Published = { id: string; name: string; topic: string | null; price: number | null; width_mm: number; height_mm: number; thumbnail: string | null };
 
@@ -30,6 +33,30 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
   // a simcha with a story opens on its writing table (StoryTable); the plain gallery is one click away
   const story = audience === 'private' ? storyOf(topic) : null;
   const [gallery, setGallery] = useState(!story);
+  // a business with a brand kit sees each design drawn with its own logo and details: template id -> picture
+  const [brand, setBrand] = useState<BrandKit | null>(null);
+  const [branded, setBranded] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (audience !== 'business' || !me) return;
+    let alive = true;
+    (async () => {
+      const kit = (await fetch('/api/brand').then((r) => (r.ok ? r.json() : null))) as BrandKit | null;
+      if (!alive || !kit?.businessName) return;
+      setBrand(kit);
+      const res = await fetch(`/api/templates/canvas?topic=${encodeURIComponent(topic)}`);
+      if (!res.ok) return;
+      for (const d of (await res.json()) as { id: string; canvas: DrawableDoc }[]) {
+        if (!alive) return;
+        if (!hasBrandRoles(d.canvas)) continue;
+        const image = await renderCard(brandPreview(d.canvas, kit)).catch(() => null);
+        if (alive && image) setBranded((b) => ({ ...b, [d.id]: image }));
+      }
+    })().catch(() => {}); // the plain gallery still works
+    return () => {
+      alive = false;
+    };
+  }, [audience, me, topic]);
 
   // the site takes on this simcha's light while its page is open
   useEffect(() => {
@@ -57,12 +84,12 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
     setError('');
     // the card lifts off the page right away and lands on the editor's canvas once it is ready
     const face = e.currentTarget.firstElementChild as HTMLElement | null;
-    if (face) flyCard(face.getBoundingClientRect(), t.thumbnail);
+    if (face) flyCard(face.getBoundingClientRect(), branded[t.id] ?? t.thumbnail);
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: t.id }),
+        body: JSON.stringify({ templateId: t.id, useBrand: !!brand }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'לא הצלחנו לפתוח את העיצוב');
@@ -85,6 +112,11 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
           <button type="button" className={s.back} onClick={() => setGallery(false)}>
             ✎ לכתוב את ההזמנה שלכם
           </button>
+        )}
+        {audience === 'business' && (
+          <Link className={s.back} href="/business/brand">
+            {brand ? `✎ המיתוג של ${brand.businessName}` : '✎ להוסיף לוגו ופרטי עסק לכל העיצובים'}
+          </Link>
         )}
       </div>
 
@@ -116,7 +148,7 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
             <button key={t.id} type="button" className={s.design} onClick={(e) => open(t, e)} disabled={busy}>
               <span
                 className={s.designFace}
-                style={{ aspectRatio: `${t.width_mm} / ${t.height_mm}`, ...(t.thumbnail ? { backgroundImage: `url("${t.thumbnail}")` } : {}) }}
+                style={{ aspectRatio: `${t.width_mm} / ${t.height_mm}`, ...((branded[t.id] ?? t.thumbnail) ? { backgroundImage: `url("${branded[t.id] ?? t.thumbnail}")` } : {}) }}
                 aria-hidden="true"
               />
               <span className={s.designName}>{t.name}</span>

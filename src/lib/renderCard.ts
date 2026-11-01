@@ -45,6 +45,7 @@ export async function renderCard(doc: DrawableDoc, width = 500): Promise<string>
           ...box,
           text: e.text,
           align: e.align,
+          direction: 'rtl', // same as the editor; this stage is off the page, so it would not inherit it
           fontFamily: e.font.family,
           fontStyle: e.font.weight === 700 ? 'bold' : 'normal',
           fontSize: e.font.size_pt * PT_TO_MM * px,

@@ -20,8 +20,8 @@ export async function POST(req: Request) {
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const result = await updateDb((db) => {
     if (db.users.some((u) => u.email === email)) return null;
-    // ADMIN_EMAIL decides who is admin; without it the very first account is the admin.
-    const role = adminEmail ? (email === adminEmail ? 'admin' : 'user') : db.users.length === 0 ? 'admin' : 'user';
+    // only ADMIN_EMAIL is admin: being the first to register must not hand a stranger the site
+    const role = email === adminEmail ? 'admin' : 'user';
     const user: User = { id: newId(), email, name, role, passwordHash: hash, salt, createdAt: new Date().toISOString() };
     db.users.push(user);
     return user;

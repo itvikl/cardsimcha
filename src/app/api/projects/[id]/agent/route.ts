@@ -3,6 +3,7 @@ import { getRow, readDb } from '@/lib/db';
 import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
+import { visibleImages } from '@/lib/brand';
 import { AGENT_ENABLED } from '@/lib/config';
 import { runAgent, type ChatTurn } from '@/lib/agent/run';
 import type { AgentMode } from '@/lib/agent/tools';
@@ -37,16 +38,17 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   }
 
-  // the assistant picks from the whole library, so it needs every category and image
+  // the assistant picks from the whole library, so it needs every category and image (but other businesses' logos)
   const db = await readDb(['categories', 'images']);
+  const images = visibleImages(db.images, user.id);
   const mode: AgentMode = project.kind === 'template' ? 'full' : 'customer';
   // the same rules as saving: a customer's copy only takes the changes a customer may make
   const enforce = (d: unknown): CanvasDoc | null =>
-    mode === 'full' ? validateDoc(d) : applyCustomerEdits(project.canvas, d, db.images);
+    mode === 'full' ? validateDoc(d) : applyCustomerEdits(project.canvas, d, images);
   const base = enforce(body?.canvas);
   if (!base) return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
 
-  const state = { doc: structuredClone(base), mode, images: db.images, categories: db.categories, changed: false };
+  const state = { doc: structuredClone(base), mode, images, categories: db.categories, changed: false };
   try {
     const { reply } = await runAgent(state, message, history);
     const canvas = state.changed ? enforce(state.doc) : base;

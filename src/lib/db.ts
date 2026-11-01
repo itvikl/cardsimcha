@@ -6,7 +6,7 @@ import type { Db } from './types';
 // Data lives in Firebase: one Firestore document per record (collections named after the Db
 // keys) and uploaded images in Cloud Storage under "uploads/". Everything goes through this
 // module, so callers still see a plain `Db` object.
-const KEYS = ['categories', 'carousel', 'images', 'projects', 'users', 'sessions'] as const;
+const KEYS = ['brands', 'categories', 'carousel', 'images', 'projects', 'users', 'sessions'] as const;
 type Key = (typeof KEYS)[number];
 
 type Row<K extends Key> = Db[K][number];

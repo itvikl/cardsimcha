@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { copyThumbnail, findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
+import { applyBrand, hasBrandRoles } from '@/lib/brand';
 import { summarize } from '@/lib/summary';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
 import type { Project } from '@/lib/types';
@@ -29,9 +30,10 @@ export async function GET() {
 }
 
 /**
- * - { templateId, fill? }: create the caller's own design as a copy of a template
+ * - { templateId, fill?, useBrand? }: create the caller's own design as a copy of a template
  *   (customers: published templates only; admins may copy any template to test it).
  *   `fill` (element id -> text) sets the texts of editable fields, as the category page's story wrote them.
+ *   `useBrand` writes the caller's brand kit into the copy; the kit is read here, never taken from the client.
  * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  */
@@ -47,6 +49,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
     }
     const id = newId();
+    const kit = body.useBrand === true && hasBrandRoles(t.canvas) ? await getRow('brands', user.id) : null;
+    // a logo uploaded before the form was ever saved is not a kit yet: it would empty the design's texts
+    const brand = kit?.businessName ? kit : null;
     const copy: Project = {
       id,
       kind: 'design',
@@ -54,11 +59,13 @@ export async function POST(req: Request) {
       templateId: t.id,
       status: 'draft',
       name: t.name,
-      canvas: structuredClone(t.canvas),
-      thumbnail: await copyThumbnail(t.thumbnail, id),
+      canvas: brand ? applyBrand(structuredClone(t.canvas), brand) : structuredClone(t.canvas),
+      // the template's preview shows its sample details: a branded copy gets its own when the editor first saves it
+      thumbnail: brand ? undefined : await copyThumbnail(t.thumbnail, id),
       createdAt: now,
       updatedAt: now,
-      editedAt: null,
+      // a branded copy carries the business's details: it belongs in their basket right away
+      editedAt: brand ? now : null,
     };
     // the story told on a category page: element id -> text, for the design's editable text fields only
     const fill = body.fill && typeof body.fill === 'object' ? (body.fill as Record<string, unknown>) : {};

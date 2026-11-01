@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Stage, Layer, Rect, Text, Image as KImage, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import type Konva from 'konva';
+import { BRAND_COLOR_ROLES, BRAND_TEXT_ROLES, isBrandColorRole, isBrandTextRole } from '@/lib/brand';
 import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
 import { newImage, newRect, newText } from '@/lib/elements';
 import { useToast } from './Toast';
@@ -805,6 +806,8 @@ export default function Editor({ id }: { id: string }) {
                       rotation={el.rotation}
                       text={el.text}
                       align={el.align}
+                      // explicit, not inherited: the PNG and the preview are drawn on a canvas off the page, which is left-to-right
+                      direction="rtl"
                       fontFamily={el.font.family}
                       fontStyle={el.font.weight === 700 ? 'bold' : 'normal'}
                       fontSize={el.font.size_pt * PT_TO_MM * PX}
@@ -973,6 +976,28 @@ export default function Editor({ id }: { id: string }) {
                         />
                       </label>
                     )}
+                    <label className="field">
+                      פרט מהמיתוג של העסק
+                      <select value={textEl.role ?? ''} onChange={(e) => updateText({ role: isBrandTextRole(e.target.value) ? e.target.value : undefined })}>
+                        <option value="">בלי (טקסט רגיל)</option>
+                        {BRAND_TEXT_ROLES.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      צבע מהמיתוג של העסק
+                      <select value={textEl.colorRole ?? ''} onChange={(e) => updateText({ colorRole: isBrandColorRole(e.target.value) ? e.target.value : undefined })}>
+                        <option value="">בלי (הצבע שנבחר)</option>
+                        {BRAND_COLOR_ROLES.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                   <div className="seg" role="group" aria-label="יישור">
                     {(['right', 'center', 'left'] as const).map((a) => (
@@ -985,10 +1010,26 @@ export default function Editor({ id }: { id: string }) {
               )}
 
               {selected.type === 'rect' && (
-                <label className="field">
-                  צבע מילוי
-                  <input type="color" value={selected.fill} onChange={(e) => patchElement(selected.id, { fill: e.target.value }, 'fill:' + selected.id)} />
-                </label>
+                <>
+                  <label className="field">
+                    צבע מילוי
+                    <input type="color" value={selected.fill} onChange={(e) => patchElement(selected.id, { fill: e.target.value }, 'fill:' + selected.id)} />
+                  </label>
+                  <label className="field">
+                    צבע מהמיתוג של העסק
+                    <select
+                      value={selected.colorRole ?? ''}
+                      onChange={(e) => patchElement(selected.id, { colorRole: isBrandColorRole(e.target.value) ? e.target.value : undefined } as Partial<CanvasElement>)}
+                    >
+                      <option value="">בלי (הצבע שנבחר)</option>
+                      {BRAND_COLOR_ROLES.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
               )}
 
               {selected.type === 'image' && (
@@ -1008,6 +1049,14 @@ export default function Editor({ id }: { id: string }) {
                         }
                       />
                       <span>הלקוח יכול להחליף את התמונה</span>
+                    </label>
+                    <label className="row" style={{ gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.role === 'logo'}
+                        onChange={(e) => patchElement(selected.id, { role: e.target.checked ? 'logo' : undefined } as Partial<CanvasElement>)}
+                      />
+                      <span>כאן יופיע הלוגו של העסק</span>
                     </label>
                     {selected.swappable && (
                       <>

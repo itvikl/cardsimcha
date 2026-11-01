@@ -21,6 +21,11 @@ export type PageSpec = {
   background: string;
 };
 
+/** which detail of a business's brand kit a text shows */
+export type BrandTextRole = 'businessName' | 'phone' | 'slogan' | 'address' | 'website';
+/** which colour of a business's brand kit an element takes */
+export type BrandColorRole = 'primaryColor' | 'secondaryColor';
+
 export type TextElement = {
   id: string;
   type: 'text';
@@ -35,6 +40,9 @@ export type TextElement = {
   editable?: boolean;
   /** field name shown to the customer */
   label?: string;
+  /** a business's copy shows this detail of its brand kit instead of the sample text */
+  role?: BrandTextRole;
+  colorRole?: BrandColorRole;
   font: { family: string; weight: 400 | 700; size_pt: number; color: string };
 };
 
@@ -55,6 +63,8 @@ export type ImageElement = {
   colorOverride?: string;
   /** name shown to the customer, e.g. "רקע" */
   label?: string;
+  /** a business's copy shows its own logo here, fitted inside this box */
+  role?: 'logo';
 };
 
 export type ShapeElement = {
@@ -67,6 +77,7 @@ export type ShapeElement = {
   rotation: number;
   z: number;
   fill: string;
+  colorRole?: BrandColorRole;
 };
 
 export type CanvasElement = TextElement | ImageElement | ShapeElement;
@@ -130,7 +141,22 @@ export type CarouselSlide = {
   audience?: 'private' | 'business';
 };
 
+/** A business's details, written once and dealt into every design. Each user has one: its id is the user's id. */
+export type BrandKit = {
+  id: string;
+  businessName: string;
+  phone: string;
+  slogan: string;
+  address: string;
+  website: string;
+  primaryColor: string;
+  secondaryColor: string;
+  logo?: { assetId: string; file: string; width: number; height: number };
+  updatedAt: string;
+};
+
 export type Db = {
+  brands: BrandKit[];
   categories: Category[];
   carousel: CarouselSlide[];
   images: ImageAsset[];

@@ -109,6 +109,11 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
               {copy.title[0]} {copy.title[1]} <span className={s.shine}>{copy.title[2]}</span>
             </h1>
             <p className={s.lead}>{copy.lead}</p>
+            {audience === 'business' && (
+              <Link className={s.back} href="/business/brand">
+                ✎ לוגו ופרטי העסק, פעם אחת על כל העיצובים
+              </Link>
+            )}
           </div>
 
           {error && (

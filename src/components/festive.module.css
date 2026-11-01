@@ -199,6 +199,23 @@
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: background-color 0.2s, color 0.2s;
 }
 .back:hover { background: var(--solid); color: var(--on-solid); }
+/* under a centred heading it stays centred too */
+.head .back, .heroHead .back { align-self: center; }
+/* the brand kit: the form beside a sample of how its details read */
+.brandLayout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--sp-4); align-items: start; width: 100%; max-width: 880px; margin-inline: auto; }
+.brandForm { display: grid; gap: 14px; color: var(--text); }
+.brandLogoRow { display: flex; flex-wrap: wrap; gap: 8px; }
+.brandLogoRow label { position: relative; }
+.brandLogoRow label:focus-within { outline: 2px solid currentColor; outline-offset: 2px; }
+.brandFile { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.brandColors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.brandSample {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: var(--sp-4); border-radius: 12px;
+  background: #fff; color: #333; text-align: center; box-shadow: var(--sh-2); overflow-wrap: anywhere;
+}
+.brandSample img { max-width: 60%; max-height: 120px; object-fit: contain; }
+.brandSample strong { font-family: var(--serif); font-size: 28px; line-height: 1.2; }
+.brandStrip { width: 64px; height: 4px; border-radius: 2px; }
 /* centred columns of a fixed range, so a category with one or two designs does not lean to one side */
 .designs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 280px)); justify-content: center; gap: var(--sp-5) var(--sp-4); }
 .design {
