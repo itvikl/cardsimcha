@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMe } from './Auth';
 import { BasketIcon, LogoIcon } from './Icons';
+import { useDoor } from './SiteBackdrop';
 
 export function TopBar() {
   const pathname = usePathname();
   const { me, logout, refresh } = useMe();
+  const door = useDoor();
   const router = useRouter();
 
   async function switchMode() {
@@ -44,7 +46,7 @@ export function TopBar() {
     };
   }, [me, admin, pathname]);
   return (
-    <header className={pathname.startsWith('/business') ? 'topbar business' : 'topbar'}>
+    <header className={door === 'business' ? 'topbar business' : 'topbar'}>
       <Link href="/" className="brand">
         <span className="logo-mark">
           <LogoIcon />
@@ -74,6 +76,11 @@ export function TopBar() {
             </nav>
           )}
           <span className="spacer" />
+          {!admin && pathname.startsWith('/business') && (
+            <Link className="btn small" href="/business/billing">
+              התוכנית שלי
+            </Link>
+          )}
           {!admin && (
             <Link
               href="/my-cards"

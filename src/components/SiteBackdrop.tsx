@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import type { Audience } from '@/lib/categories';
 import type { Mood } from '@/lib/story';
 
 const MOODS: Mood[] = ['candle', 'dawn', 'gold', 'evening'];
@@ -15,14 +16,30 @@ export function setMood(mood: Mood | null) {
   bus.dispatchEvent(new CustomEvent<Mood | null>('mood', { detail: mood }));
 }
 
+/** Tells the site which door this page belongs to when its address doesn't say: a design in the editor (null: by the address). */
+export function setDoor(door: Audience | null) {
+  bus.dispatchEvent(new CustomEvent<Audience | null>('door', { detail: door }));
+}
+
+/** the door of the current page: /business pages by their address, others as they said with setDoor */
+export function useDoor(): Audience {
+  const pathname = usePathname();
+  const [told, setTold] = useState<Audience | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setTold((e as CustomEvent<Audience | null>).detail);
+    bus.addEventListener('door', on);
+    return () => bus.removeEventListener('door', on);
+  }, []);
+  return pathname.startsWith('/business') ? 'business' : (told ?? 'private');
+}
+
 /**
  * The ambient bokeh behind every page (public/hero/<door>.mp4, its .webp poster underneath).
  * Fixed to the viewport, so the content scrolls over it; the business pages get their own loop.
  * Over it, one tint per mood: all are always there and only their opacity changes, so the light crossfades.
  */
 export function SiteBackdrop() {
-  const pathname = usePathname();
-  const door = pathname.startsWith('/business') ? 'business' : 'private';
+  const door = useDoor();
   const [motion, setMotion] = useState(false);
   const [mood, setMoodState] = useState<Mood | null>(null);
 

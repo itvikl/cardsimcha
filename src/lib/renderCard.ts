@@ -38,7 +38,7 @@ export async function renderCard(doc: DrawableDoc, width = 500): Promise<string>
       if (e.colorOverride) layer.add(new Konva.Rect({ ...box, height: e.h_mm * px, fill: e.colorOverride }));
       else if (img) layer.add(new Konva.Image({ ...box, height: e.h_mm * px, image: img }));
     } else if (e.type === 'rect') {
-      layer.add(new Konva.Rect({ ...box, height: e.h_mm * px, fill: e.fill }));
+      layer.add(new Konva.Rect({ ...box, height: e.h_mm * px, fill: e.fill, cornerRadius: (e.cornerRadius_mm ?? 0) * px, opacity: e.opacity ?? 1 }));
     } else {
       layer.add(
         new Konva.Text({

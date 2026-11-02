@@ -1,6 +1,9 @@
 /** templates without a topic are listed here, so nothing becomes invisible */
 export const GENERAL_TOPIC = 'כללי';
 
+/** the category whose designs a business can keep as its logo (see "זה הלוגו שלי" in the editor) */
+export const LOGO_TOPIC = 'לוגו';
+
 /** who a category is for: the home page has a door for each (`/` and `/business`) */
 export type Audience = 'private' | 'business';
 
@@ -9,7 +12,7 @@ export type Audience = 'private' | 'business';
  * `image` is the built-in cover; null until one is made: the ring then shows a plain gilded card with the name,
  * and the admin can pick a picture for it in /carousel.
  */
-export const CATEGORIES: { name: string; image: string | null; audience: Audience }[] = [
+export const CATEGORIES: { name: string; image: string | null; audience: Audience; hidden?: boolean }[] = [
   { name: 'חתונה', image: '/categories/wedding.webp', audience: 'private' },
   { name: 'אירוסין', image: null, audience: 'private' },
   { name: 'קידוש', image: null, audience: 'private' },
@@ -23,12 +26,20 @@ export const CATEGORIES: { name: string; image: string | null; audience: Audienc
   { name: 'בית כנסת', image: '/categories/synagogue.webp', audience: 'private' },
   { name: 'תעודות', image: '/categories/certificates.webp', audience: 'private' },
   { name: 'שמחת בית השואבה', image: '/categories/simchat-beit-hashoeva.webp', audience: 'private' },
+  { name: 'ברכות', image: '/categories/greetings.webp', audience: 'private' },
+  { name: 'איחולים', image: '/categories/wishes.webp', audience: 'private' },
+  { name: 'מיתוג שמחה', image: '/categories/simcha-set.webp', audience: 'private' },
+  { name: 'ייעוץ משכנתאות', image: '/categories/mortgage.webp', audience: 'business' },
+  { name: 'מיזוג אוויר', image: '/categories/air-conditioning.webp', audience: 'business' },
+  { name: 'ייעוץ עסקי', image: '/categories/consulting.webp', audience: 'business' },
+  { name: LOGO_TOPIC, image: '/categories/logo.webp', audience: 'business' },
+  { name: 'זמני שבת', image: '/categories/shabbat.webp', audience: 'business' },
   { name: 'מודעות מבצע', image: '/categories/sale.webp', audience: 'business' },
   { name: 'פתיחת עסק', image: '/categories/opening.webp', audience: 'business' },
-  { name: 'לוגו', image: '/categories/logo.webp', audience: 'business' },
-  { name: 'כרטיסי ביקור', image: '/categories/business-cards.webp', audience: 'business' },
   { name: 'פוסטים לרשתות', image: '/categories/social.webp', audience: 'business' },
-  { name: 'תפריטים', image: '/categories/menus.webp', audience: 'business' },
+  // not advertising, so they step back from the door; the admin can bring them back in /carousel
+  { name: 'כרטיסי ביקור', image: '/categories/business-cards.webp', audience: 'business', hidden: true },
+  { name: 'תפריטים', image: '/categories/menus.webp', audience: 'business', hidden: true },
 ];
 
 /** the built-in default: topics an admin typed freely (not in CATEGORIES) belong to the private side */
@@ -55,14 +66,14 @@ export const decodeTopic = (segment: string) => {
 export type CarouselSetting = { name: string; image: string | null; src: string | null; hidden: boolean; audience: Audience };
 
 /** `image` is the cover's URL (null: none, `background` then holds a gradient); `background` is it as a CSS value */
-export type HomeCard = { name: string; image: string | null; background: string };
+export type HomeCard = { name: string; image: string | null; background: string; hidden?: boolean };
 
 /** the fixed categories first, then any other topic an admin gave a published template */
 export function defaultCards(templates: { topic: string | null; thumbnail: string | null }[]): HomeCard[] {
   const list: HomeCard[] = CATEGORIES.map((c) => {
     // no built-in cover yet: one of the category's own designs, else a plain gilded card (see MirrorRing)
     const image = c.image ?? templates.find((t) => (t.topic || GENERAL_TOPIC) === c.name && t.thumbnail)?.thumbnail ?? null;
-    return { name: c.name, image, background: image ? `url(${image})` : 'linear-gradient(160deg, #fbf6ec, #efe2c8)' };
+    return { name: c.name, image, hidden: c.hidden, background: image ? `url(${image})` : 'linear-gradient(160deg, #fbf6ec, #efe2c8)' };
   });
   const known = new Set(list.map((c) => c.name));
   for (const t of templates) {
@@ -88,7 +99,8 @@ export function applyCarousel(cards: HomeCard[], settings: CarouselSetting[]): (
         name: c.name,
         image: s?.src ?? c.image,
         background: s?.src ? `url(${s.src})` : c.background,
-        hidden: !!s?.hidden,
+        // the admin's choice wins over the built-in default
+        hidden: s ? !!s.hidden : !!c.hidden,
         rank: pos.get(c.name) ?? settings.length + i,
       };
     })

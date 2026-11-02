@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
-import { copyThumbnail, findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
+import { findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
-import { applyBrand, hasBrandRoles } from '@/lib/brand';
+import { parseColors } from '@/lib/brand';
+import { copyTemplate } from '@/lib/copyTemplate';
+import { hasActiveSubscription } from '@/lib/entitlement';
+import { comingShabbat } from '@/lib/shabbat';
+import { cityById, hasShabbatRoles, SHABBAT_CITIES } from '@/lib/shabbatDoc';
 import { summarize } from '@/lib/summary';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
 import type { Project } from '@/lib/types';
@@ -30,10 +34,11 @@ export async function GET() {
 }
 
 /**
- * - { templateId, fill?, useBrand? }: create the caller's own design as a copy of a template
+ * - { templateId, fill?, useBrand?, colors?, shabbatCity? }: create the caller's own design as a copy of a template
  *   (customers: published templates only; admins may copy any template to test it).
  *   `fill` (element id -> text) sets the texts of editable fields, as the category page's story wrote them.
  *   `useBrand` writes the caller's brand kit into the copy; the kit is read here, never taken from the client.
+ *   `shabbatCity` writes that city's coming Shabbat into a design with Shabbat fields; the times are worked out here too.
  * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  */
@@ -48,37 +53,18 @@ export async function POST(req: Request) {
     if (!t || t.kind !== 'template' || (t.status !== 'published' && user.role !== 'admin')) {
       return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
     }
-    const id = newId();
-    const kit = body.useBrand === true && hasBrandRoles(t.canvas) ? await getRow('brands', user.id) : null;
-    // a logo uploaded before the form was ever saved is not a kit yet: it would empty the design's texts
-    const brand = kit?.businessName ? kit : null;
-    const copy: Project = {
-      id,
-      kind: 'design',
-      ownerId: user.id,
-      templateId: t.id,
-      status: 'draft',
-      name: t.name,
-      canvas: brand ? applyBrand(structuredClone(t.canvas), brand) : structuredClone(t.canvas),
-      // the template's preview shows its sample details: a branded copy gets its own when the editor first saves it
-      thumbnail: brand ? undefined : await copyThumbnail(t.thumbnail, id),
-      createdAt: now,
-      updatedAt: now,
-      // a branded copy carries the business's details: it belongs in their basket right away
-      editedAt: brand ? now : null,
-    };
-    // the story told on a category page: element id -> text, for the design's editable text fields only
-    const fill = body.fill && typeof body.fill === 'object' ? (body.fill as Record<string, unknown>) : {};
-    for (const e of copy.canvas.elements) {
-      const text = fill[e.id];
-      if (e.type === 'text' && e.editable && typeof text === 'string') {
-        e.text = text.slice(0, 300);
-        // it carries the customer's own details: it belongs in their basket right away
-        copy.editedAt = now;
-      }
-    }
+    const [brand, noCredit] = await Promise.all([body.useBrand === true ? getRow('brands', user.id) : null, hasActiveSubscription(user.id)]);
+    const copy = await copyTemplate(t, user.id, {
+      brand,
+      noCredit,
+      colors: parseColors(body.colors),
+      // opened without choosing a city (a direct link, an admin's test): the first city, whose name shows on the design
+      times: hasShabbatRoles(t.canvas) ? comingShabbat(cityById(body.shabbatCity)?.id ?? SHABBAT_CITIES[0].id) : null,
+      // the story told on a category page: element id -> text
+      fill: body.fill && typeof body.fill === 'object' ? (body.fill as Record<string, unknown>) : undefined,
+    });
     await setRow('projects', copy);
-    return NextResponse.json({ id }, { status: 201 });
+    return NextResponse.json({ id: copy.id }, { status: 201 });
   }
 
   if (user.role !== 'admin') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });

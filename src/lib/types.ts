@@ -21,10 +21,14 @@ export type PageSpec = {
   background: string;
 };
 
-/** which detail of a business's brand kit a text shows */
-export type BrandTextRole = 'businessName' | 'phone' | 'slogan' | 'address' | 'website';
-/** which colour of a business's brand kit an element takes */
-export type BrandColorRole = 'primaryColor' | 'secondaryColor';
+/** the details a business writes in its brand kit */
+export type BrandDetail = 'businessName' | 'phone' | 'slogan' | 'address' | 'website';
+/** which detail of the week's Shabbat times a text shows */
+export type ShabbatTextRole = 'parsha' | 'candles' | 'havdalah' | 'city' | 'hebrewDate';
+/** which detail of a business's brand kit a text shows; `initial` is the first letter of its name (for monograms) */
+export type BrandTextRole = BrandDetail | 'initial';
+/** which colour of a business's brand kit an element takes; `on…` is black or white, whichever reads on that colour */
+export type BrandColorRole = 'primaryColor' | 'secondaryColor' | 'onPrimary' | 'onSecondary';
 
 export type TextElement = {
   id: string;
@@ -43,6 +47,10 @@ export type TextElement = {
   /** a business's copy shows this detail of its brand kit instead of the sample text */
   role?: BrandTextRole;
   colorRole?: BrandColorRole;
+  /** this text is filled from the week's Shabbat times (see shabbat.ts); nobody types it */
+  shabbatRole?: ShabbatTextRole;
+  /** the site's credit line: stays on free copies, a subscriber's copy doesn't get it */
+  credit?: boolean;
   font: { family: string; weight: 400 | 700; size_pt: number; color: string };
 };
 
@@ -65,6 +73,8 @@ export type ImageElement = {
   label?: string;
   /** a business's copy shows its own logo here, fitted inside this box */
   role?: 'logo';
+  /** in the design's video, this picture is replaced by that moving background (see shabbatLoops.ts) */
+  loopId?: string;
 };
 
 export type ShapeElement = {
@@ -78,6 +88,12 @@ export type ShapeElement = {
   z: number;
   fill: string;
   colorRole?: BrandColorRole;
+  /** the plate behind the business's logo: it goes with the logo when the business has none */
+  role?: 'logoPlate';
+  /** rounded corners; half the shorter side makes a pill or a circle */
+  cornerRadius_mm?: number;
+  /** 0 to 1; unset is solid */
+  opacity?: number;
 };
 
 export type CanvasElement = TextElement | ImageElement | ShapeElement;
@@ -118,6 +134,12 @@ export type Project = {
   topic?: string;
   /** price in shekels shown to customers, set by an admin; unset shows no price (templates only) */
   price?: number;
+  /** templates sharing this name are one series: a customer can take them all at once (templates only) */
+  series?: string;
+  /** designs only: the copies made together from a series share this, and are paid for together */
+  seriesRun?: string;
+  /** designs only: the Friday (YYYY-MM-DD) whose Shabbat times were written in; after it the design is out of date */
+  shabbatFor?: string;
   canvas: CanvasDoc;
   thumbnail?: string;
   createdAt: string;
@@ -155,7 +177,37 @@ export type BrandKit = {
   updatedAt: string;
 };
 
+/** A customer's monthly plan. Each user has at most one: its id is the user's id. */
+export type Subscription = {
+  id: string;
+  /** canceled: no more charges, and it still counts until currentPeriodEnd */
+  status: 'active' | 'canceled';
+  currentPeriodEnd: string;
+  provider: string;
+  providerRef: string;
+  updatedAt: string;
+};
+
+/** One payment attempt. The amount is worked out on the server when it starts. */
+export type Purchase = {
+  id: string;
+  userId: string;
+  kind: 'ad' | 'series' | 'subscription';
+  /** kind 'ad': the design it opens */
+  projectId?: string;
+  /** kind 'series': the designs it opens, which share this */
+  seriesRun?: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'failed' | 'canceled';
+  provider: string;
+  providerRef?: string;
+  createdAt: string;
+  settledAt?: string;
+};
+
 export type Db = {
+  subscriptions: Subscription[];
+  purchases: Purchase[];
   brands: BrandKit[];
   categories: Category[];
   carousel: CarouselSlide[];

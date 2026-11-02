@@ -7,11 +7,13 @@ import { useMe } from './Auth';
 import { flyCard, landCard } from './CardFlight';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
+import { applyColors, type BrandColors } from '@/lib/brand';
 import { formatPrice } from '@/lib/price';
-import { applyFill, fillFor, type Answers, type CardLine, type Story } from '@/lib/story';
+import { applyFill, fillFor, INVITATION_WORDS, type Answers, type CardLine, type Story } from '@/lib/story';
 import { renderCard, type DrawableDoc } from '@/lib/renderCard';
+import { takeSeries } from '@/lib/takeSeries';
 
-type Design = { id: string; name: string; price: number | null; thumbnail: string | null; canvas: DrawableDoc };
+type Design = { id: string; name: string; price: number | null; series: string | null; thumbnail: string | null; canvas: DrawableDoc };
 
 const segmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter('he', { granularity: 'grapheme' }) : null;
 const HEBREW_OR_SPACE = /[\p{Script=Hebrew}\s]/u;
@@ -57,6 +59,9 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
   const { me } = useMe();
   const router = useRouter();
   const qs = story.questions;
+  const words = story.words ?? INVITATION_WORDS;
+  const [palette, setPalette] = useState(0);
+  const colors: BrandColors | null = story.palettes?.[palette] ?? null;
   const [answers, setAnswers] = useState<Answers>({});
   const [step, setStep] = useState(0);
   const [phase, setPhase] = useState<'writing' | 'folding' | 'reveal'>('writing');
@@ -83,6 +88,8 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
   }, [topic]);
 
   useEffect(() => {
+    // nothing told yet: must not overwrite a story that the effect above has yet to restore
+    if (Object.keys(answers).length === 0) return;
     try {
       sessionStorage.setItem(storageKey(topic), JSON.stringify(answers));
     } catch {}
@@ -108,7 +115,8 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
       for (const d of designs) {
         const fill = fillFor(d.canvas, answers);
         fills.current.set(d.id, fill);
-        const image = await renderCard(applyFill(d.canvas, fill)).catch(() => d.thumbnail);
+        const filled = applyFill(d.canvas, fill);
+        const image = await renderCard(colors ? applyColors(filled, colors) : filled).catch(() => d.thumbnail);
         items.push({ id: d.id, name: d.name, image, note: d.price === null ? 'עם הפרטים שלכם' : `עם הפרטים שלכם · ${formatPrice(d.price)}` });
       }
       if (alive) setRing(items);
@@ -116,7 +124,7 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
     return () => {
       alive = false;
     };
-  }, [phase, designs, answers]);
+  }, [phase, designs, answers, colors]);
 
   // the paper folds away, then the ring is dealt
   useEffect(() => {
@@ -162,10 +170,10 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
         const res = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ templateId: item.id, fill: fills.current.get(item.id) ?? {} }),
+          body: JSON.stringify({ templateId: item.id, fill: fills.current.get(item.id) ?? {}, colors }),
         });
         const d = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(d.error || 'לא הצלחנו לפתוח את ההזמנה');
+        if (!res.ok) throw new Error(d.error || 'לא הצלחנו לפתוח את העיצוב');
         router.push(`/editor/${d.id}`);
       } catch (err) {
         landCard(null);
@@ -173,12 +181,31 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
         setBusy(false);
       }
     },
-    [me, router],
+    [me, router, colors],
   );
+
+  const series = designs?.find((d) => d.series)?.series ?? null;
+
+  /** the whole set in one action, with the answers and colours already in it */
+  async function takeAll() {
+    if (!me) {
+      router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await takeSeries({ series, answers, colors }, Object.fromEntries((ring ?? []).map((r) => [r.id, r.image])));
+      router.push('/my-cards');
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
 
   const lines = useMemo(() => story.card(answers), [story, answers]);
   const paper = (
-    <div className={s.paper} data-folding={phase === 'folding'} aria-label="ההזמנה שלכם">
+    <div className={s.paper} data-folding={phase === 'folding'} aria-label={`${words.one} שלכם`}>
       {lines.map((l: CardLine, i) =>
         l.text || l.from === q?.key ? (
           <p
@@ -201,17 +228,28 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
         <div className={`${s.head} ${s.rise}`}>
           <span className={s.eyebrow}>{topic}</span>
           <h1 className={s.h2}>
-            ההזמנות <span className={s.shine}>שלכם</span>
+            {words.many} <span className={s.shine}>שלכם</span>
           </h1>
-          <p>כל העיצובים כבר כתובים עם הפרטים שלכם. בחרו את זו שמדברת אליכם.</p>
+          <p>{words.pick}</p>
         </div>
+        {story.palettes && (
+          <div className={s.filters} role="group" aria-label="צבעי האירוע">
+            {story.palettes.map((p, i) => (
+              <button key={p.name} type="button" className={s.filter} aria-pressed={i === palette} onClick={() => setPalette(i)}>
+                <span className={s.paletteDot} style={{ background: p.primaryColor }} />
+                <span className={s.paletteDot} style={{ background: p.secondaryColor }} />
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
         {error && (
           <p className={s.error} role="alert">
             {error}
           </p>
         )}
         {ring === null ? (
-          <p className={s.storyWait}>ההזמנות נכתבות…</p>
+          <p className={s.storyWait}>{words.wait}</p>
         ) : ring.length === 0 ? (
           <div className={s.emptyState}>
             <strong>עוד אין עיצובים לשמחה הזו</strong>
@@ -221,7 +259,12 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
             </Link>
           </div>
         ) : (
-          <MirrorRing items={ring} label={`ההזמנות שלכם, ${topic}`} spinKey={topic} onOpen={open} openLabel={busy ? 'פותח…' : 'לפתוח את ההזמנה ←'} fit="contain" />
+          <MirrorRing items={ring} label={`${words.many} שלכם, ${topic}`} spinKey={`${topic}:${palette}`} onOpen={open} openLabel={busy ? 'פותח…' : `לפתוח את ${words.one} ←`} fit="contain" />
+        )}
+        {series && ring && ring.length > 0 && (
+          <button type="button" className={`${s.btn} ${s.dark}`} style={{ justifySelf: 'center' }} disabled={busy} onClick={takeAll}>
+            {busy ? 'מכין…' : `לקחת את כל ${ring.length} הפריטים ←`}
+          </button>
         )}
         <div className={s.storyActions}>
           <button
@@ -249,7 +292,7 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
         <h1 className={s.h2}>
           {story.blessing.split('!')[0]}! <span className={s.shine}>{story.blessing.split('!').slice(1).join('!').trim()}</span>
         </h1>
-        <p>ספרו לנו כמה פרטים, ונכתוב אותם על ההזמנה.</p>
+        <p>{words.write}</p>
       </div>
 
       <div className={`${s.storyStage} ${s.rise}`} style={{ animationDelay: '.15s' }}>
@@ -280,7 +323,7 @@ export function StoryTable({ topic, story, onSkip }: { topic: string; story: Sto
                 </button>
               )}
               <button type="submit" className={`${s.btn} ${s.dark}`} disabled={!canGo}>
-                {step < qs.length - 1 ? 'המשך ←' : 'לראות את ההזמנות ✦'}
+                {step < qs.length - 1 ? 'המשך ←' : `לראות את ${words.many} ✦`}
               </button>
             </div>
             <div className={s.dots} aria-label={`שאלה ${step + 1} מתוך ${qs.length}`}>

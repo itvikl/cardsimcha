@@ -12,6 +12,7 @@ export async function GET() {
       name: p.name,
       topic: p.topic ?? null,
       price: p.price ?? null,
+      series: p.series ?? null,
       width_mm: p.canvas.page.width_mm,
       height_mm: p.canvas.page.height_mm,
       thumbnail: p.thumbnail ?? null,

@@ -118,6 +118,29 @@
 .heroHead { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
 .heroHead .doors { margin-bottom: var(--sp-1); }
 
+/* the chips that narrow a list: formats, professions, an event's colours */
+.filters { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); margin-block-end: var(--sp-3); }
+.filter {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 var(--sp-2);
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface-glass); color: var(--text);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.filter[aria-pressed='true'] { background: var(--solid); color: var(--on-solid); border-color: var(--solid); }
+.paletteDot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.5); }
+
+/* ready advertising messages */
+.messages { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--sp-2); }
+.message { display: grid; gap: var(--sp-1); align-content: start; }
+.message textarea { width: 100%; resize: vertical; line-height: 1.5; }
+
+/* the billing page */
+.plan { display: grid; gap: var(--sp-1); justify-items: start; max-width: 560px; margin-inline: auto; }
+.plan p { margin: 0; }
+
+/* the week's Shabbat, above its designs */
+.shabbatBar { display: grid; gap: var(--sp-1); max-width: 560px; margin: 0 auto var(--sp-3); }
+.shabbatTimes { display: flex; flex-wrap: wrap; gap: 6px var(--sp-2); margin: 0; font-size: 1.05rem; }
+
 /* the two doors: private celebrations / business */
 .doors {
   display: inline-flex; gap: 4px; padding: 5px; border-radius: 999px;

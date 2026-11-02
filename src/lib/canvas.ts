@@ -1,4 +1,6 @@
 import { isBrandColorRole, isBrandTextRole } from './brand';
+import { isShabbatRole } from './shabbatDoc';
+import { isLoopId } from './shabbatLoops';
 import type { CanvasDoc, CanvasElement } from './types';
 
 export const PAGE_PRESETS = [
@@ -44,6 +46,8 @@ export function validateDoc(input: unknown): CanvasDoc | null {
       if (e.label !== undefined && (typeof e.label !== 'string' || e.label.length > 60)) return null;
       if (e.role !== undefined && !isBrandTextRole(e.role)) return null;
       if (e.colorRole !== undefined && !isBrandColorRole(e.colorRole)) return null;
+      if (e.shabbatRole !== undefined && !isShabbatRole(e.shabbatRole)) return null;
+      if (e.credit !== undefined && typeof e.credit !== 'boolean') return null;
       const f = e.font;
       if (!f || typeof f.family !== 'string' || f.family.length > 60) return null;
       if (!(f.weight === 400 || f.weight === 700) || !isNum(f.size_pt, 4, 400) || !isColor(f.color)) return null;
@@ -55,10 +59,14 @@ export function validateDoc(input: unknown): CanvasDoc | null {
       if (e.swapCategoryId !== undefined && (typeof e.swapCategoryId !== 'string' || e.swapCategoryId.length > 64)) return null;
       if (e.label !== undefined && (typeof e.label !== 'string' || e.label.length > 60)) return null;
       if (e.role !== undefined && e.role !== 'logo') return null;
+      if (e.loopId !== undefined && !isLoopId(e.loopId)) return null;
       elements.push({ ...e });
     } else if (e.type === 'rect') {
       if (!isNum(e.w_mm, 1, 2000) || !isNum(e.h_mm, 1, 2000) || !isColor(e.fill)) return null;
       if (e.colorRole !== undefined && !isBrandColorRole(e.colorRole)) return null;
+      if (e.role !== undefined && e.role !== 'logoPlate') return null;
+      if (e.cornerRadius_mm !== undefined && !isNum(e.cornerRadius_mm, 0, 1000)) return null;
+      if (e.opacity !== undefined && !isNum(e.opacity, 0, 1)) return null;
       elements.push({ ...e });
     } else {
       return null;

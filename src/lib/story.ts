@@ -15,7 +15,7 @@ import type { CanvasDoc } from './types';
 export type Mood = 'candle' | 'dawn' | 'gold' | 'evening';
 
 export type Answers = Partial<Record<AnswerKey, string>>;
-export type AnswerKey = 'groom' | 'bride' | 'groomParents' | 'brideParents' | 'family' | 'parents' | 'honoree' | 'date' | 'time' | 'venue';
+export type AnswerKey = 'groom' | 'bride' | 'groomParents' | 'brideParents' | 'family' | 'parents' | 'honoree' | 'recipient' | 'sender' | 'date' | 'time' | 'venue';
 
 export type Question = {
   key: AnswerKey;
@@ -35,7 +35,40 @@ export type Story = {
   questions: Question[];
   /** the card being written, from what has been answered so far */
   card: (a: Answers) => CardLine[];
+  /** how the page speaks of what is being made; unset: invitations */
+  words?: StoryWords;
+  /** an event's own colours to choose from; the designs' brand colours take them */
+  palettes?: { name: string; primaryColor: string; secondaryColor: string }[];
 };
+
+export type StoryWords = { one: string; many: string; wait: string; pick: string; write: string };
+
+export const INVITATION_WORDS: StoryWords = {
+  one: 'ההזמנה',
+  many: 'ההזמנות',
+  wait: 'ההזמנות נכתבות…',
+  pick: 'כל העיצובים כבר כתובים עם הפרטים שלכם. בחרו את זו שמדברת אליכם.',
+  write: 'ספרו לנו כמה פרטים, ונכתוב אותם על ההזמנה.',
+};
+
+const GREETING_WORDS: StoryWords = {
+  one: 'הברכה',
+  many: 'הברכות',
+  wait: 'הברכות נכתבות…',
+  pick: 'כל הברכות כבר כתובות עם השמות. בחרו את זו שמדברת אליכם.',
+  write: 'ספרו לנו למי הברכה וממי, ונכתוב את השמות.',
+};
+
+const greetingCard = (title: string): Story['card'] => (a) => [
+  { text: title, size: 'eyebrow' },
+  { text: a.recipient ?? '', size: 'title', from: 'recipient' },
+  { text: a.sender ?? '', size: 'line', from: 'sender' },
+];
+
+const GREETING_QUESTIONS: Question[] = [
+  { key: 'recipient', ask: 'למי הברכה?', placeholder: 'למשל: למשפחת כהן' },
+  { key: 'sender', ask: 'ממי הברכה?', placeholder: 'למשל: ממשפחת לוי', optional: true },
+];
 
 const DATE: Question = { key: 'date', ask: 'מתי השמחה?', kind: 'date' };
 const TIME: Question = { key: 'time', ask: 'ובאיזו שעה?', kind: 'time', optional: true };
@@ -154,6 +187,39 @@ const STORIES: Record<string, Story> = {
     ],
     card: named('חנוכת הבית', 'family', 'משפחת '),
   },
+  'ברכות': {
+    mood: 'gold',
+    blessing: 'מכל הלב! מילה טובה עושה טוב',
+    questions: GREETING_QUESTIONS,
+    card: greetingCard('ברכה'),
+    words: GREETING_WORDS,
+  },
+  'איחולים': {
+    mood: 'dawn',
+    blessing: 'בשעה טובה! איחול קטן, שמחה גדולה',
+    questions: GREETING_QUESTIONS,
+    card: greetingCard('איחול'),
+    words: GREETING_WORDS,
+  },
+  'מיתוג שמחה': {
+    mood: 'gold',
+    blessing: 'מזל טוב! אירוע אחד, מראה אחד',
+    questions: [{ key: 'honoree', ask: 'של מי השמחה?', placeholder: 'למשל: דן ונועה' }, DATE, VENUE, TIME],
+    card: named('הסט של השמחה', 'honoree'),
+    words: {
+      one: 'הפריט',
+      many: 'הסט',
+      wait: 'הסט נכתב…',
+      pick: 'הזמנה, שלט, סטטוס ותודה, כולם באותו מראה ועם אותם פרטים. בוחרים צבעים ולוקחים את כולם.',
+      write: 'ספרו לנו על השמחה, וכל הפריטים ייכתבו יחד.',
+    },
+    palettes: [
+      { name: 'כחול וזהב', primaryColor: '#14336B', secondaryColor: '#B08A3C' },
+      { name: 'ירוק ושמנת', primaryColor: '#23483A', secondaryColor: '#A98B4F' },
+      { name: 'בורדו וזהב', primaryColor: '#5E1B2B', secondaryColor: '#B58A45' },
+      { name: 'שחור וזהב', primaryColor: '#1B1B1B', secondaryColor: '#B9975B' },
+    ],
+  },
   'קידוש': {
     mood: 'gold',
     blessing: 'מזל טוב! לחיים',
@@ -190,6 +256,8 @@ const like = (sample: string, value: string, lead: string) => (sample.trim().sta
  * empty it: a sample name or address left on a personal card would be wrong.
  */
 const FILL_RULES: Rule[] = [
+  { label: /^למי/, value: (a) => a.recipient },
+  { label: /^ממי/, value: (a) => a.sender ?? (a.recipient ? '' : undefined) },
   { label: /שמות? החתן והכלה|שם החתן והכלה/, value: (a, s) => (a.groom || a.bride ? like(s, names(a), 'של ') : undefined) },
   { label: /^שם החתן/, value: (a) => a.groom },
   { label: /^שם הכלה/, value: (a) => a.bride },

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { SiteFooter } from './SiteFooter';
 import s from './festive.module.css';
 import { emptyBrand, type BrandFields } from '@/lib/brand';
+import { categoryHref, LOGO_TOPIC } from '@/lib/categories';
 import type { BrandKit } from '@/lib/types';
 
 const TEXT_FIELDS: { key: keyof BrandFields; label: string; placeholder: string; maxLength: number; dir?: 'ltr'; required?: boolean }[] = [
@@ -152,6 +153,11 @@ export function BrandKitForm() {
                   )}
                 </div>
                 <span className="status">PNG עם רקע שקוף נראה הכי טוב. עד 5MB.</span>
+                {!kit.logo && (
+                  <Link className={s.back} href={categoryHref(LOGO_TOPIC, 'business')}>
+                    ✎ אין לכם לוגו? יוצרים אחד כאן
+                  </Link>
+                )}
               </div>
 
               {TEXT_FIELDS.map((f) => (

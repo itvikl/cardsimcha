@@ -360,6 +360,17 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .hint-x { flex: none; border: 0; background: transparent; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: 6px; }
 .hint-x:hover { background: rgba(0, 0, 0, 0.06); }
 
+/* what the customer sees until the design is paid for; the file itself never carries it (it is not on the canvas) */
+.watermark {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='180'%3E%3Ctext x='130' y='90' font-family='Arial' font-size='22' font-weight='700' fill='rgba(20,20,20,.28)' text-anchor='middle' transform='rotate(-28 130 90)'%3E%D7%98%D7%99%D7%95%D7%98%D7%94%3C/text%3E%3C/svg%3E");
+}
+.stage-frame { position: relative; }
+.paywall { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(16, 20, 30, 0.55); }
+.paywall-card { display: grid; gap: 10px; width: min(440px, 100%); padding: 24px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.paywall-card h2 { margin: 0; }
+.paywall-card p { margin: 0 0 6px; color: var(--muted); }
+
 /* ---------------------------------------------- editor: festive table theme
    Same tokens as the home page (beige base, black type, gold accents), so the
    existing editor rules pick them up without being rewritten. */
@@ -379,6 +390,28 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
   --serif: 'Frank Ruhl Libre', serif;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+.editor-wrap.for-business {
+  --bg: #e6ebf3;
+  --surface: #f7f9fc;
+  --text: #101a2e;
+  --muted: #55607a;
+  --line: rgba(16, 26, 46, 0.12);
+  --brand-1: #101a2e;
+  --brand-2: #2f5fb3;
+  --brand-text: #24498c;
+  --mint: #7fa2de;
+  --mint-soft: #e6edf8;
+  --gold: #a9bfe6;
+  --shadow: 0 1px 2px rgba(16, 26, 46, 0.06), 0 10px 30px rgba(16, 26, 46, 0.08);
+  --serif: 'Heebo', sans-serif;
+}
+.editor-wrap.for-business .btn.primary { background: #101a2e; color: #f2f5fb; box-shadow: 0 8px 22px rgba(16, 26, 46, 0.22); }
+.editor-wrap.for-business .btn.primary:hover { background: #1c2a47; box-shadow: 0 12px 28px rgba(16, 26, 46, 0.3); }
+.editor-wrap.for-business .editor-bar { background: rgba(247, 249, 252, 0.92); }
+.editor-wrap.for-business .agent { background: radial-gradient(120% 80% at 100% 0%, #24406f 0%, rgba(36, 64, 111, 0) 60%), #101a2e; box-shadow: 0 18px 40px rgba(16, 26, 46, 0.28); }
+.editor-wrap.for-business .editor .stage-wrap { background: radial-gradient(60% 55% at 50% 0%, rgba(214, 226, 245, 0.7) 0%, rgba(214, 226, 245, 0) 70%), rgba(198, 211, 233, 0.4); }
+.editor-wrap.for-business .editor aside { background: linear-gradient(180deg, #f7f9fc 0%, #edf1f8 100%); }
+.editor-wrap.for-business input:focus, .editor-wrap.for-business textarea:focus, .editor-wrap.for-business select:focus { box-shadow: 0 0 0 4px rgba(47, 95, 179, 0.16); }
 .editor-wrap .btn:hover { border-color: rgba(122, 92, 54, 0.3); }
 .editor-wrap .btn.primary { background: #1a1714; color: #efe7da; box-shadow: 0 8px 22px rgba(60, 40, 20, 0.22); }
 .editor-wrap .btn.primary:hover { background: #2a2520; box-shadow: 0 12px 28px rgba(60, 40, 20, 0.3); }

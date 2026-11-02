@@ -17,6 +17,7 @@ type Item = {
   name: string;
   topic: string | null;
   price: number | null;
+  series: string | null;
   updatedAt: string;
   width_mm: number;
   height_mm: number;
@@ -175,6 +176,23 @@ function AdminHome() {
     }
   }
 
+  async function saveSeries(it: Item, input: HTMLInputElement) {
+    const next = input.value.trim();
+    if (next === (it.series ?? '')) return;
+    setError('');
+    try {
+      await api(`/api/projects/${it.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ series: next }),
+      });
+      await load();
+    } catch (err) {
+      input.value = it.series ?? '';
+      setError((err as Error).message);
+    }
+  }
+
   async function savePrice(it: Item, input: HTMLInputElement) {
     const saved = it.price === null ? '' : String(it.price);
     // text the browser cannot read as a number comes back empty, which must not clear the price
@@ -309,6 +327,10 @@ function AdminHome() {
                   maxLength={60}
                   onBlur={(e) => saveTopic(it, e.currentTarget)}
                 />
+              </label>
+              <label className="field" style={{ fontSize: 13 }}>
+                סדרה (תבניות עם אותו שם נלקחות יחד)
+                <input type="text" defaultValue={it.series ?? ''} placeholder="בלי סדרה" maxLength={60} onBlur={(e) => saveSeries(it, e.currentTarget)} />
               </label>
               <label className="field" style={{ fontSize: 13 }}>
                 מחיר בשקלים

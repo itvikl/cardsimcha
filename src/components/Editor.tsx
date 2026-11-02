@@ -7,10 +7,16 @@ import useImage from 'use-image';
 import type Konva from 'konva';
 import { BRAND_COLOR_ROLES, BRAND_TEXT_ROLES, isBrandColorRole, isBrandTextRole } from '@/lib/brand';
 import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
+import { categoryHref, LOGO_TOPIC, type Audience } from '@/lib/categories';
+import { SHABBAT_TOPIC } from '@/lib/shabbatDoc';
+import { formatPrice } from '@/lib/price';
+import { VIDEO_WIDTH } from '@/lib/shabbatLoops';
+import { trimTransparent } from '@/lib/trimCanvas';
 import { newImage, newRect, newText } from '@/lib/elements';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
 import { landCard } from './CardFlight';
+import { setDoor } from './SiteBackdrop';
 import { DownloadIcon, FitIcon, RedoIcon, UndoIcon } from './Icons';
 import type { CanvasDoc, CanvasElement, Category, ImageAsset, Project, TextElement } from '@/lib/types';
 
@@ -22,6 +28,37 @@ const BG_SWATCHES = ['#FAF8F3', '#FFFFFF', '#E4ECE3', '#DCE7DA', '#2F5D46', '#1F
 const SWATCHES = ['#1F3A2E', '#2F5D46', '#C9A24B', '#FAF8F3', '#1B1F1C'];
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error';
+type Billing = { allowed: true } | { allowed: false; price: number; seriesPrice: number | null; subscriptionPrice: number };
+
+/** the editor's words, by the door the design came through */
+const WORDS = {
+  private: {
+    download: 'הורדת הכרטיס',
+    downloaded: 'הכרטיס הורד למחשב',
+    panelLabel: 'פרטי הכרטיס',
+    panelTitle: 'הפרטים בכרטיס',
+    panelLead: 'ממלאים, בוחרים צבע, וזהו. הכרטיס מתעדכן מולכם.',
+    tip: 'טיפ: לחצו על טקסט בכרטיס כדי לערוך אותו, וגררו אותו כדי להזיז. הצבעים נמצאים ליד כל שדה.',
+    drag: 'אפשר לגרור כל טקסט בכרטיס כדי לשנות את מיקומו.',
+    foot: 'שינויים נשמרים אוטומטית. כשמסיימים אפשר להוריד את הכרטיס כקובץ תמונה.',
+    working: 'העוזר מעצב את הכרטיס…',
+    placeholder: 'למשל: החתונה של דן ונועה, 12 במאי, אולם הגן',
+    suggestions: ['נסחו לי הזמנה חגיגית', 'כל הטקסטים בזהב', 'קצרו את הנוסח'],
+  },
+  business: {
+    download: 'הורדת המודעה',
+    downloaded: 'המודעה הורדה למחשב. עכשיו אפשר לשלוח אותה למי שרוצים.',
+    panelLabel: 'פרטי המודעה',
+    panelTitle: 'הפרטים במודעה',
+    panelLead: 'הפרטים של העסק כבר בפנים. מחדדים את המסר, מורידים ושולחים למי שרוצים.',
+    tip: 'טיפ: לחצו על טקסט במודעה כדי לערוך אותו, וגררו אותו כדי להזיז. הצבעים נמצאים ליד כל שדה.',
+    drag: 'אפשר לגרור כל טקסט במודעה כדי לשנות את מיקומו.',
+    foot: 'שינויים נשמרים אוטומטית. כשמסיימים מורידים את המודעה כקובץ תמונה ושולחים אותה בעצמכם.',
+    working: 'העוזר עובד על המודעה…',
+    placeholder: 'למשל: מבצע לשבוע הקרוב, ניקוי מזגן לפני הקיץ',
+    suggestions: ['תציע לי שלושה כיוונים למודעה', 'חדד לי את הכותרת', 'קצר את הנוסח'],
+  },
+} satisfies Record<Audience, unknown>;
 
 const normalize = (els: CanvasElement[]): CanvasElement[] => els.map((e, i) => ({ ...e, z: i }));
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
@@ -75,6 +112,16 @@ export default function Editor({ id }: { id: string }) {
   const [pubStatus, setPubStatus] = useState<'draft' | 'published'>('draft');
   const [pubBusy, setPubBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [topic, setTopic] = useState<string | null>(null);
+  const [audience, setAudience] = useState<Audience>('private');
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoSaved, setLogoSaved] = useState(false);
+  const [billing, setBilling] = useState<Billing>({ allowed: true });
+  const [paywall, setPaywall] = useState(false);
+  const [payBusy, setPayBusy] = useState(false);
+  const [outOfDate, setOutOfDate] = useState(false);
+  const [hasVideo, setHasVideo] = useState(false);
+  const [videoBusy, setVideoBusy] = useState(false);
   const [activeField, setActiveField] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -97,6 +144,7 @@ export default function Editor({ id }: { id: string }) {
 
   const stageRef = useRef<Konva.Stage>(null);
   const trRef = useRef<Konva.Transformer>(null);
+  const pageRef = useRef<Konva.Rect>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const lastMerge = useRef<{ key: string; at: number } | null>(null);
   const loadedRef = useRef(false);
@@ -107,7 +155,12 @@ export default function Editor({ id }: { id: string }) {
       try {
         const [pRes, lRes] = await Promise.all([fetch(`/api/projects/${id}`), fetch('/api/library')]);
         if (!pRes.ok) throw new Error(pRes.status === 404 ? 'העיצוב לא נמצא' : 'טעינת העיצוב נכשלה');
-        const p: Project & { canManage: boolean; canAgent: boolean } = await pRes.json();
+        const p: Project & { canManage: boolean; canAgent: boolean; topic: string | null; audience: Audience; billing: Billing; shabbatOutOfDate: boolean; hasVideo: boolean } = await pRes.json();
+        setBilling(p.billing);
+        setOutOfDate(p.shabbatOutOfDate);
+        setHasVideo(p.hasVideo);
+        setTopic(p.topic);
+        setAudience(p.audience);
         setCanManage(p.canManage);
         setCanAgent(p.canAgent);
         setPubStatus(p.status);
@@ -125,6 +178,12 @@ export default function Editor({ id }: { id: string }) {
       }
     })();
   }, [id]);
+
+  // a business's ad takes that door's look, around the editor too
+  useEffect(() => {
+    setDoor(audience);
+    return () => setDoor(null);
+  }, [audience]);
 
   useEffect(() => {
     try {
@@ -385,12 +444,42 @@ export default function Editor({ id }: { id: string }) {
     }
   };
 
+  /** whether this design may be taken away right now; the server decides, and otherwise the paywall opens */
+  const mayDownload = async () => {
+    const res = await fetch(`/api/projects/${id}/export`, { method: 'POST' });
+    if (res.status === 402) {
+      setBilling(await res.json());
+      setPaywall(true);
+      return false;
+    }
+    if (!res.ok) throw new Error();
+    return true;
+  };
+
+  const startPayment = async (kind: 'ad' | 'series' | 'subscription') => {
+    setPayBusy(true);
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, projectId: id }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error);
+      window.location.href = d.url;
+    } catch (e) {
+      push((e as Error).message || 'לא הצלחנו לפתוח את התשלום. נסו שוב.', 'error');
+      setPayBusy(false);
+    }
+  };
+
   const exportPng = async () => {
     const stage = stageRef.current;
     if (!stage || !doc || exporting) return;
     setExporting(true);
     await new Promise((r) => setTimeout(r, 40)); // let the button show its busy state before the heavy render
     try {
+      if (!(await mayDownload())) return;
       const tr = trRef.current;
       tr?.visible(false);
       stage.draw();
@@ -402,11 +491,85 @@ export default function Editor({ id }: { id: string }) {
       a.href = url;
       a.download = `${(name || 'עיצוב').replace(/[\\/:*?"<>|]/g, '_')}.png`;
       a.click();
-      push('הכרטיס הורד למחשב', 'success');
+      push(WORDS[audience].downloaded, 'success');
     } catch {
       push('לא הצלחנו להכין את הקובץ. נסו שוב.', 'error');
     } finally {
       setExporting(false);
+    }
+  };
+
+  /** The design as a video: the server puts the moving background under what is drawn here. */
+  const exportVideo = async () => {
+    const stage = stageRef.current;
+    if (!stage || !doc || videoBusy) return;
+    setVideoBusy(true);
+    const hidden = doc.elements.flatMap((e) => (e.type === 'image' && e.loopId ? [stage.findOne('#' + e.id)] : []));
+    try {
+      if (!(await mayDownload())) return;
+      trRef.current?.visible(false);
+      pageRef.current?.visible(false);
+      hidden.forEach((n) => n?.visible(false));
+      stage.draw();
+      const overlay = stage.toCanvas({ pixelRatio: VIDEO_WIDTH / stage.width() });
+      trRef.current?.visible(true);
+      pageRef.current?.visible(true);
+      hidden.forEach((n) => n?.visible(true));
+      stage.draw();
+      const blob = await new Promise<Blob | null>((r) => overlay.toBlob(r, 'image/png'));
+      if (!blob) throw new Error();
+      const form = new FormData();
+      form.set('overlay', new File([blob], 'overlay.png', { type: 'image/png' }));
+      const res = await fetch(`/api/projects/${id}/video`, { method: 'POST', body: form });
+      if (res.status === 402) {
+        setBilling(await res.json());
+        setPaywall(true);
+        return;
+      }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `${(name || 'עיצוב').replace(/[\\/:*?"<>|]/g, '_')}.mp4`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      push('הסרטון הורד למחשב. עכשיו אפשר להעלות אותו לסטטוס.', 'success');
+    } catch (e) {
+      push((e as Error).message || 'הכנת הסרטון נכשלה. נסו שוב.', 'error');
+    } finally {
+      setVideoBusy(false);
+    }
+  };
+
+  /** Keeps this design as the business's logo: no page behind it and no empty margin, so it sits cleanly on any ad. */
+  const saveAsLogo = async () => {
+    const stage = stageRef.current;
+    if (!stage || logoBusy) return;
+    setLogoBusy(true);
+    try {
+      trRef.current?.visible(false);
+      pageRef.current?.visible(false);
+      stage.draw();
+      const drawn = stage.toCanvas({ pixelRatio: 1600 / stage.width() });
+      trRef.current?.visible(true);
+      pageRef.current?.visible(true);
+      stage.draw();
+      const logo = trimTransparent(drawn);
+      if (!logo) throw new Error('הלוגו ריק. כתבו בו משהו ונסו שוב.');
+      const blob = await new Promise<Blob | null>((r) => logo.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('לא הצלחנו להכין את הקובץ. נסו שוב.');
+      const form = new FormData();
+      form.set('file', new File([blob], 'logo.png', { type: 'image/png' }));
+      form.set('width', String(logo.width));
+      form.set('height', String(logo.height));
+      const res = await fetch('/api/brand/logo', { method: 'POST', body: form });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'השמירה נכשלה');
+      setLogoSaved(true);
+      push('הלוגו נשמר במיתוג של העסק', 'success');
+    } catch (e) {
+      push((e as Error).message, 'error');
+    } finally {
+      setLogoBusy(false);
     }
   };
 
@@ -480,6 +643,7 @@ export default function Editor({ id }: { id: string }) {
   const saveLabel = { saved: 'נשמר', saving: 'שומר…', dirty: 'שינויים לא שמורים', error: 'השמירה נכשלה, מנסה שוב בעריכה הבאה' }[save];
 
   const full = canManage;
+  const words = WORDS[audience];
   const swappables = doc.elements.filter((e): e is Extract<CanvasElement, { type: 'image' }> => e.type === 'image' && !!e.swappable);
   const editableFields = doc.elements.filter((e): e is TextElement => e.type === 'text' && !!e.editable);
   const textEl = selected?.type === 'text' ? selected : null;
@@ -487,7 +651,7 @@ export default function Editor({ id }: { id: string }) {
   const num = (v: string) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
   return (
-    <div className="editor-wrap">
+    <div className={audience === 'business' ? 'editor-wrap for-business' : 'editor-wrap'}>
       <div className="editor-bar">
         <input
           className="title"
@@ -538,22 +702,61 @@ export default function Editor({ id }: { id: string }) {
             )}
           </>
         )}
-        <button className="btn primary small shine" onClick={exportPng} disabled={exporting}>
+        {hasVideo && !outOfDate && (
+          <button className="btn small" onClick={exportVideo} disabled={videoBusy}>
+            {videoBusy ? 'מכין סרטון… (עד דקה)' : 'הורדת סרטון לסטטוס'}
+          </button>
+        )}
+        <button className="btn primary small shine" onClick={exportPng} disabled={exporting || outOfDate}>
           <DownloadIcon size={16} />
-          {exporting ? 'מכין קובץ…' : full ? 'הורדת PNG (300dpi)' : 'הורדת הכרטיס'}
+          {exporting ? 'מכין קובץ…' : full ? 'הורדת PNG (300dpi)' : words.download}
         </button>
       </div>
 
+      {outOfDate && (
+        <p className="hint" role="alert" style={{ margin: 0, borderRadius: 0 }}>
+          <span>
+            הזמנים בעיצוב הזה הם של שבת שכבר עברה, ולכן אי אפשר להוריד אותו.{' '}
+            <Link href={categoryHref(SHABBAT_TOPIC, 'business')} style={{ textDecoration: 'underline' }}>
+              לזמנים של השבת הקרובה ←
+            </Link>
+          </span>
+        </p>
+      )}
+
+      {paywall && !billing.allowed && (
+        <div className="paywall" role="dialog" aria-modal="true" aria-label="תשלום להורדה">
+          <div className="paywall-card">
+            <h2>להורדה בלי סימן מים</h2>
+            <p>העיצוב שמור אצלכם. בוחרים איך להמשיך:</p>
+            <button className="btn primary" disabled={payBusy} onClick={() => startPayment('ad')}>
+              העיצוב הזה, {formatPrice(billing.price)} חד־פעמי
+            </button>
+            {billing.seriesPrice !== null && (
+              <button className="btn" disabled={payBusy} onClick={() => startPayment('series')}>
+                כל הסדרה, {formatPrice(billing.seriesPrice)} חד־פעמי
+              </button>
+            )}
+            <button className="btn" disabled={payBusy} onClick={() => startPayment('subscription')}>
+              מנוי, {formatPrice(billing.subscriptionPrice)} לחודש: כל העיצובים, בלי קרדיט
+            </button>
+            <button className="btn small" onClick={() => setPaywall(false)}>
+              אחר כך
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className={'editor' + (full ? '' : ' customer')}>
         {!full && (
-          <aside className="left" aria-label="פרטי הכרטיס">
+          <aside className="left" aria-label={words.panelLabel}>
             <header className="panel-head" style={{ order: -3 }}>
-              <h2>הפרטים בכרטיס</h2>
-              <p>ממלאים, בוחרים צבע, וזהו. הכרטיס מתעדכן מולכם.</p>
+              <h2>{words.panelTitle}</h2>
+              <p>{words.panelLead}</p>
             </header>
             {hintOpen && (
               <div className="hint" style={{ order: -2 }} role="note">
-                <span>טיפ: לחצו על טקסט בכרטיס כדי לערוך אותו, וגררו אותו כדי להזיז. הצבעים נמצאים ליד כל שדה.</span>
+                <span>{words.tip}</span>
                 <button
                   className="hint-x"
                   aria-label="סגירת הטיפ"
@@ -575,8 +778,9 @@ export default function Editor({ id }: { id: string }) {
                   getDoc={() => docRef.current}
                   onApply={applyAgent}
                   onBusyChange={setAiBusy}
-                  placeholder="למשל: החתונה של דן ונועה, 12 במאי, אולם הגן"
-                  suggestions={['נסחו לי הזמנה חגיגית', 'כל הטקסטים בזהב', 'קצרו את הנוסח']}
+                  placeholder={words.placeholder}
+                  suggestions={words.suggestions}
+                  audience={audience}
                 />
               </div>
             )}
@@ -673,9 +877,23 @@ export default function Editor({ id }: { id: string }) {
                 </div>
               );
             })}
+            {topic === LOGO_TOPIC && (
+              <div className="field field-card">
+                <span className="field-label">הלוגו של העסק</span>
+                <p className="status" style={{ margin: 0 }}>הרקע יורד, והלוגו נכנס לכל המודעות של העסק.</p>
+                <button className="btn primary small" onClick={saveAsLogo} disabled={logoBusy}>
+                  {logoBusy ? 'שומר…' : 'זה הלוגו שלי'}
+                </button>
+                {logoSaved && (
+                  <Link className="status" href="/business/brand" style={{ textDecoration: 'underline' }}>
+                    נשמר. למיתוג של העסק ←
+                  </Link>
+                )}
+              </div>
+            )}
             <footer className="panel-foot">
-              {editableFields.length > 0 && <p>אפשר לגרור כל טקסט בכרטיס כדי לשנות את מיקומו.</p>}
-              <p>שינויים נשמרים אוטומטית. כשמסיימים אפשר להוריד את הכרטיס כקובץ תמונה.</p>
+              {editableFields.length > 0 && <p>{words.drag}</p>}
+              <p>{words.foot}</p>
             </footer>
           </aside>
         )}
@@ -758,7 +976,7 @@ export default function Editor({ id }: { id: string }) {
               }}
             >
               <Layer>
-                <Rect x={0} y={0} width={pageW} height={pageH} fill={doc.page.background} onMouseDown={() => { setSelectedId(null); setActiveField(null); }} onTap={() => { setSelectedId(null); setActiveField(null); }} />
+                <Rect ref={pageRef} x={0} y={0} width={pageW} height={pageH} fill={doc.page.background} onMouseDown={() => { setSelectedId(null); setActiveField(null); }} onTap={() => { setSelectedId(null); setActiveField(null); }} />
                 {doc.elements.map((el) => {
                   const onSelect = () => setSelectedId(el.id);
                   const focusField = () => {
@@ -781,6 +999,8 @@ export default function Editor({ id }: { id: string }) {
                         height={el.h_mm * PX}
                         rotation={el.rotation}
                         fill={el.fill}
+                        cornerRadius={(el.cornerRadius_mm ?? 0) * PX}
+                        opacity={el.opacity ?? 1}
                         draggable={full}
                         onMouseDown={full ? onSelect : undefined}
                         onTap={full ? onSelect : undefined}
@@ -862,12 +1082,13 @@ export default function Editor({ id }: { id: string }) {
                 />
               </Layer>
             </Stage>
+            {!billing.allowed && <div className="watermark" aria-hidden="true" />}
             {aiBusy && (
               <div className="ai-veil" aria-hidden="true">
                 <span className="ai-scan" />
                 <span className="ai-pill">
                   <span className="ai-pill-dot" />
-                  העוזר מעצב את הכרטיס…
+                  {words.working}
                 </span>
               </div>
             )}
@@ -1015,6 +1236,42 @@ export default function Editor({ id }: { id: string }) {
                     צבע מילוי
                     <input type="color" value={selected.fill} onChange={(e) => patchElement(selected.id, { fill: e.target.value }, 'fill:' + selected.id)} />
                   </label>
+                  <label className="row" style={{ gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={selected.role === 'logoPlate'}
+                      onChange={(e) => patchElement(selected.id, { role: e.target.checked ? 'logoPlate' : undefined } as Partial<CanvasElement>)}
+                    />
+                    <span>משטח מאחורי הלוגו (יורד כשלעסק אין לוגו)</span>
+                  </label>
+                  <div className="row">
+                    <label className="field" style={{ width: 110 }}>
+                      פינות מעוגלות (מ״מ)
+                      <input
+                        type="number"
+                        min={0}
+                        max={1000}
+                        value={selected.cornerRadius_mm ?? 0}
+                        onChange={(e) => {
+                          const v = num(e.target.value);
+                          if (v !== null) patchElement(selected.id, { cornerRadius_mm: clamp(v, 0, 1000) } as Partial<CanvasElement>, 'radius:' + selected.id);
+                        }}
+                      />
+                    </label>
+                    <label className="field" style={{ width: 90 }}>
+                      אטימות (%)
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={Math.round((selected.opacity ?? 1) * 100)}
+                        onChange={(e) => {
+                          const v = num(e.target.value);
+                          if (v !== null) patchElement(selected.id, { opacity: clamp(v, 0, 100) / 100 } as Partial<CanvasElement>, 'opacity:' + selected.id);
+                        }}
+                      />
+                    </label>
+                  </div>
                   <label className="field">
                     צבע מהמיתוג של העסק
                     <select

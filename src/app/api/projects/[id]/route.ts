@@ -5,6 +5,10 @@ import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { visibleImages } from '@/lib/brand';
 import { AGENT_ENABLED } from '@/lib/config';
+import { BILLING_ENABLED } from '@/lib/config';
+import { entitlement } from '@/lib/entitlement';
+import { projectContext } from '@/lib/projectContext';
+import { isLoopId } from '@/lib/shabbatLoops';
 import { parsePrice } from '@/lib/price';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
 import type { ImageAsset, Project } from '@/lib/types';
@@ -34,6 +38,11 @@ export async function GET(_req: Request, { params }: Ctx) {
     ...project,
     canManage: canWrite(user, project) && project.kind === 'template',
     canAgent: AGENT_ENABLED && canWrite(user, project),
+    ...(await projectContext(project)),
+    billing: BILLING_ENABLED ? await entitlement(user, project) : { allowed: true },
+    // the times written in a Shabbat design are for that Friday only
+    shabbatOutOfDate: !!project.shabbatFor && project.shabbatFor < new Date().toISOString().slice(0, 10),
+    hasVideo: project.canvas.elements.some((e) => e.type === 'image' && isLoopId(e.loopId)),
   });
 }
 
@@ -52,6 +61,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   const status = body?.status === 'draft' || body?.status === 'published' ? body.status : undefined;
   const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : undefined;
   const audience = parseAudience(body?.audience);
+  const series = typeof body?.series === 'string' ? body.series.trim().slice(0, 60) : undefined;
   const price = body?.price === undefined ? undefined : parsePrice(body.price);
   if (price === 'invalid') return NextResponse.json({ error: 'מחיר לא תקין' }, { status: 400 });
   // a customer may only swap to library images; load just the ones the canvas points at
@@ -81,6 +91,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
     if (status && p.kind === 'template') p.status = status;
     if (price !== undefined && p.kind === 'template') p.price = price ?? undefined;
+    if (series !== undefined && p.kind === 'template') p.series = series || undefined;
     p.updatedAt = new Date().toISOString();
     return { id: p.id, updatedAt: p.updatedAt, oldThumb };
   };

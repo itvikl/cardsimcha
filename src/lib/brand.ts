@@ -1,4 +1,4 @@
-import type { BrandColorRole, BrandKit, BrandTextRole, CanvasDoc, CanvasElement, ImageAsset } from './types';
+import type { BrandColorRole, BrandDetail, BrandKit, BrandTextRole, CanvasDoc, CanvasElement, ImageAsset } from './types';
 
 /**
  * A business's brand kit, and how it reaches a design: an admin tags a template's elements with a role
@@ -11,11 +11,14 @@ export const BRAND_TEXT_ROLES: { id: BrandTextRole; label: string }[] = [
   { id: 'slogan', label: 'סלוגן' },
   { id: 'address', label: 'כתובת' },
   { id: 'website', label: 'אתר' },
+  { id: 'initial', label: 'האות הראשונה של שם העסק' },
 ];
 
 export const BRAND_COLOR_ROLES: { id: BrandColorRole; label: string }[] = [
   { id: 'primaryColor', label: 'צבע ראשי' },
   { id: 'secondaryColor', label: 'צבע משני' },
+  { id: 'onPrimary', label: 'שחור או לבן, מה שקריא על הצבע הראשי' },
+  { id: 'onSecondary', label: 'שחור או לבן, מה שקריא על הצבע המשני' },
 ];
 
 export const isBrandTextRole = (v: unknown): v is BrandTextRole => BRAND_TEXT_ROLES.some((r) => r.id === v);
@@ -35,14 +38,14 @@ export const emptyBrand = (id: string): BrandKit => ({
   updatedAt: new Date().toISOString(),
 });
 
-export type BrandFields = Pick<BrandKit, BrandTextRole | BrandColorRole>;
+export type BrandFields = Pick<BrandKit, BrandDetail | 'primaryColor' | 'secondaryColor'>;
 
-const LIMITS: Record<BrandTextRole, number> = { businessName: 80, phone: 30, slogan: 120, address: 120, website: 120 };
+const LIMITS: Record<BrandDetail, number> = { businessName: 80, phone: 30, slogan: 120, address: 120, website: 120 };
 
 /** The kit's fields from a request, or the reason they can't be saved. */
 export function parseBrand(body: unknown): BrandFields | string {
   const b = (body ?? {}) as Record<string, unknown>;
-  const text = (k: BrandTextRole) => (typeof b[k] === 'string' ? b[k].trim().slice(0, LIMITS[k]) : '');
+  const text = (k: BrandDetail) => (typeof b[k] === 'string' ? b[k].trim().slice(0, LIMITS[k]) : '');
   if (!text('businessName')) return 'שם העסק חובה';
   if (!/^[0-9+\-() ]*$/.test(text('phone'))) return 'מספר הטלפון לא תקין';
   if (!isColor(b.primaryColor) || !isColor(b.secondaryColor)) return 'צבע לא תקין';
@@ -68,9 +71,35 @@ export const visibleImages = (images: ImageAsset[], userId: string) =>
 
 /* ------------------------------------------------------------------ the kit -> a design */
 
+/** black or white, whichever has the stronger contrast on `hex` (WCAG relative luminance) */
+export function readableOn(hex: string): string {
+  const channel = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const l = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  return l > 0.179 ? '#111111' : '#FFFFFF';
+}
+
+export const brandText = (brand: BrandKit, role: BrandTextRole) => (role === 'initial' ? Array.from(brand.businessName.trim())[0] ?? '' : brand[role]);
+
+export type BrandColors = Pick<BrandKit, 'primaryColor' | 'secondaryColor'>;
+
+/** two colours from a request, or null */
+export const parseColors = (v: unknown): BrandColors | null => {
+  const c = (v ?? {}) as Record<string, unknown>;
+  return isColor(c.primaryColor) && isColor(c.secondaryColor) ? { primaryColor: c.primaryColor, secondaryColor: c.secondaryColor } : null;
+};
+
+export function brandColor(brand: BrandColors, role: BrandColorRole): string {
+  if (role === 'onPrimary') return readableOn(brand.primaryColor);
+  if (role === 'onSecondary') return readableOn(brand.secondaryColor);
+  return brand[role];
+}
+
 /** whether a brand kit would change anything on this design */
 export const hasBrandRoles = (doc: CanvasDoc) =>
-  doc.elements.some((e) => (e.type === 'text' ? e.role || e.colorRole : e.type === 'image' ? e.role : e.colorRole));
+  doc.elements.some((e) => (e.type === 'text' ? e.role || e.colorRole : e.type === 'image' ? e.role : e.colorRole || e.role));
 
 /** the logo inside the element's box, whole and centred (a box's rotation turns around its top-left corner) */
 function fitLogo(e: Extract<CanvasElement, { type: 'image' }>, logo: NonNullable<BrandKit['logo']>) {
@@ -95,12 +124,15 @@ export function applyBrand<D extends CanvasDoc>(doc: D, brand: BrandKit): D {
         return [
           {
             ...e,
-            text: e.role ? brand[e.role] : e.text,
-            font: e.colorRole ? { ...e.font, color: brand[e.colorRole] } : e.font,
+            text: e.role ? brandText(brand, e.role) : e.text,
+            font: e.colorRole ? { ...e.font, color: brandColor(brand, e.colorRole) } : e.font,
           },
         ];
       }
-      if (e.type === 'rect') return [e.colorRole ? { ...e, fill: brand[e.colorRole] } : e];
+      if (e.type === 'rect') {
+        if (e.role === 'logoPlate' && !brand.logo) return [];
+        return [e.colorRole ? { ...e, fill: brandColor(brand, e.colorRole) } : e];
+      }
       if (e.role !== 'logo') return [e];
       if (!brand.logo) return [];
       const { colorOverride: _old, ...rest } = e;
@@ -109,6 +141,16 @@ export function applyBrand<D extends CanvasDoc>(doc: D, brand: BrandKit): D {
     }),
   };
 }
+
+/** only the colours: an event's own colours on a simcha's set, with no business behind it */
+export const applyColors = <D extends CanvasDoc>(doc: D, colors: BrandColors): D => ({
+  ...doc,
+  elements: doc.elements.map((e) => {
+    if (e.type === 'text' && e.colorRole) return { ...e, font: { ...e.font, color: brandColor(colors, e.colorRole) } };
+    if (e.type === 'rect' && e.colorRole) return { ...e, fill: brandColor(colors, e.colorRole) };
+    return e;
+  }),
+});
 
 /** the same, ready for renderCard: the logo also carries the URL of its picture (never saved on a design) */
 export function brandPreview<D extends CanvasDoc>(doc: D, brand: BrandKit): D {

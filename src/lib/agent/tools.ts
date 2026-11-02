@@ -13,6 +13,8 @@ export type AgentState = {
   images: ImageAsset[];
   categories: Category[];
   changed: boolean;
+  /** what the assistant should know about this business, when the design is a business's */
+  brief?: string;
 };
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/).describe('hex colour like #1F3A2E');
