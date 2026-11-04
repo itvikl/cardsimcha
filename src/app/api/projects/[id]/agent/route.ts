@@ -8,6 +8,7 @@ import { AGENT_ENABLED } from '@/lib/config';
 import { runAgent, type ChatTurn } from '@/lib/agent/run';
 import { businessBrief } from '@/lib/businessBrief';
 import { projectContext } from '@/lib/projectContext';
+import { withSentWording } from '@/lib/wordingSave';
 import type { AgentMode } from '@/lib/agent/tools';
 import type { CanvasDoc, Project } from '@/lib/types';
 
@@ -51,10 +52,12 @@ export async function POST(req: Request, { params }: Ctx) {
   // the assistant picks from the whole library, so it needs every category and image (but other businesses' logos)
   const db = await readDb(['categories', 'images']);
   const images = visibleImages(db.images, user.id);
-  const mode: AgentMode = project.kind === 'template' ? 'full' : 'customer';
-  // the same rules as saving: a customer's copy only takes the changes a customer may make
+  const mode: AgentMode = project.kind !== 'design' ? 'full' : 'customer';
+  // the same rules as saving: a customer's copy only takes the changes a customer may make.
+  // The editor's canvas may be on a wording it hasn't saved yet, so the rules apply to the design as it stands on that wording.
+  const stored = mode === 'full' ? project.canvas : await withSentWording(project, body?.canvas, user);
   const enforce = (d: unknown): CanvasDoc | null =>
-    mode === 'full' ? validateDoc(d) : applyCustomerEdits(project.canvas, d, images);
+    mode === 'full' ? validateDoc(d) : applyCustomerEdits(stored, d, images);
   const base = enforce(body?.canvas);
   if (!base) return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
 

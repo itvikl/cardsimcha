@@ -19,6 +19,21 @@ const loadImage = (src: string) =>
  * drawing (Editor.tsx: same Konva nodes, line height and wrapping) so a preview matches what opens in the editor.
  */
 export async function renderCard(doc: DrawableDoc, width = 500): Promise<string> {
+  const stage = await drawCard(doc, width);
+  const url = stage.toDataURL({ mimeType: 'image/jpeg', quality: 0.86 });
+  stage.destroy();
+  return url;
+}
+
+/** The card without its texts, as pixels: what its texts have to read against (see fitColor.ts). */
+export async function cardPixels(doc: DrawableDoc, width = 240): Promise<ImageData> {
+  const stage = await drawCard({ ...doc, elements: doc.elements.filter((e) => e.type !== 'text') }, width);
+  const canvas = stage.toCanvas({ pixelRatio: 1 });
+  stage.destroy();
+  return canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+async function drawCard(doc: DrawableDoc, width: number) {
   const { default: Konva } = await import('konva');
   const px = width / doc.page.width_mm;
   const fonts = new Set(doc.elements.flatMap((e) => (e.type === 'text' ? [`${e.font.weight} 16px "${e.font.family}"`] : [])));
@@ -57,7 +72,5 @@ export async function renderCard(doc: DrawableDoc, width = 500): Promise<string>
     }
   });
   layer.draw();
-  const url = stage.toDataURL({ mimeType: 'image/jpeg', quality: 0.86 });
-  stage.destroy();
-  return url;
+  return stage;
 }

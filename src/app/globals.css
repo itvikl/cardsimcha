@@ -368,6 +368,13 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .stage-frame { position: relative; }
 .ad-issues { display: grid; gap: 6px; margin: 0; padding-inline-start: 18px; font-size: 14px; color: var(--text); }
 .ad-issues .tip { color: var(--muted); }
+.wording-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wording-pick { display: grid; gap: 4px; align-content: start; min-width: 0; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font: inherit; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.wording-pick:hover { border-color: var(--brand-2); transform: translateY(-1px); }
+.wording-pick[aria-pressed='true'] { border: 2px solid var(--text); padding: 2px; }
+.wording-face { display: block; overflow: hidden; border-radius: 7px; background: var(--mint-soft); }
+.wording-face img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wording-name { font-size: 12px; line-height: 1.25; text-align: center; color: var(--text); overflow-wrap: anywhere; }
 .size-picker { display: grid; gap: 8px; }
 .size-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .size-current { background: var(--solid, var(--text)); color: var(--on-solid, #fff); cursor: default; }

@@ -12,6 +12,7 @@ import { projectContext } from '@/lib/projectContext';
 import { isLoopId } from '@/lib/shabbatLoops';
 import { parsePrice } from '@/lib/price';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
+import { withSentWording } from '@/lib/wordingSave';
 import type { ImageAsset, Project } from '@/lib/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -43,7 +44,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   return NextResponse.json({
     sizes,
     ...project,
-    canManage: canWrite(user, project) && project.kind === 'template',
+    canManage: canWrite(user, project) && project.kind !== 'design',
     canAgent: AGENT_ENABLED && canWrite(user, project),
     ...(await projectContext(project)),
     billing: BILLING_ENABLED ? await entitlement(user, project) : { allowed: true },
@@ -82,8 +83,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     const before = sameKeys(p.canvas);
     const oldName = p.name;
     if (body?.canvas !== undefined) {
-      // admin editing a template: full control. A customer's design: text of editable fields only.
-      const next = p.kind === 'template' ? validateDoc(body.canvas) : applyCustomerEdits(p.canvas, body.canvas, assets);
+      // admin editing a template or wording: full control. A customer's design: its wording, and text of editable fields only.
+      const next = p.kind !== 'design' ? validateDoc(body.canvas) : applyCustomerEdits(await withSentWording(p, body.canvas, user), body.canvas, assets);
       if (!next) return 'invalid';
       p.canvas = next;
     }
@@ -98,7 +99,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       oldThumb = p.thumbnail;
       p.thumbnail = thumb.url;
     }
-    if (status && p.kind === 'template') p.status = status;
+    if (status && p.kind !== 'design') p.status = status;
     if (price !== undefined && p.kind === 'template') p.price = price ?? undefined;
     if (series !== undefined && p.kind === 'template') p.series = series || undefined;
     p.updatedAt = new Date().toISOString();
@@ -118,12 +119,12 @@ export async function PUT(req: Request, { params }: Ctx) {
         const p = db.projects.find((x) => x.id === id);
         if (!p || !canWrite(user, p)) return 'missing';
         // checked before anything changes: a template only takes a topic of the admin's current door
-        if (p.kind === 'template' && audience) {
+        if (p.kind !== 'design' && audience) {
           const why = topicConflict(db, topic, audience);
           if (why) return { conflict: why };
         }
         const r = await apply(p);
-        if (typeof r === 'object' && p.kind === 'template') {
+        if (typeof r === 'object' && p.kind !== 'design') {
           p.topic = topic || undefined;
           if (audience) claimTopic(db, topic, audience);
         }

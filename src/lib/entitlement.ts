@@ -14,7 +14,7 @@ export type Entitlement = { allowed: true } | { allowed: false; price: number; s
 /** What it costs to take this design away; while billing is off, everything is free to download. */
 export async function entitlement(user: User, p: Project): Promise<Entitlement> {
   if (!BILLING_ENABLED || user.role === 'admin') return { allowed: true };
-  if (p.kind === 'template') return { allowed: false, price: 0, seriesPrice: null, subscriptionPrice: SUBSCRIPTION_PRICE };
+  if (p.kind !== 'design') return { allowed: false, price: 0, seriesPrice: null, subscriptionPrice: SUBSCRIPTION_PRICE };
   const template = p.templateId ? await getRow('projects', p.templateId) : null;
   const price = template?.price ?? 0;
   if (price === 0) return { allowed: true };

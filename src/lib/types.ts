@@ -51,6 +51,10 @@ export type TextElement = {
   shabbatRole?: ShabbatTextRole;
   /** the site's credit line: stays on free copies, a subscriber's copy doesn't get it */
   credit?: boolean;
+  /** a wording's field for the customer's own details: what they wrote stays when they change wording, by `label` */
+  detail?: boolean;
+  /** the colour the designer gave this wording's text; matching it to a background always starts from here */
+  designColor?: string;
   font: { family: string; weight: 400 | 700; size_pt: number; color: string };
 };
 
@@ -104,6 +108,8 @@ export type CanvasDoc = {
   schema_version: 1;
   page: PageSpec;
   elements: CanvasElement[];
+  /** the wording this card's texts came from; only a card that has one can change wording (see wording.ts) */
+  wordingId?: string;
 };
 
 export type Role = 'admin' | 'user';
@@ -124,10 +130,13 @@ export type Session = {
   expiresAt: number;
 };
 
-/** A template is built by an admin; a design is a customer's copy of a template. */
+/**
+ * A template is built by an admin; a design is a customer's copy of a template.
+ * A wording is also built by an admin: designed texts that any card of its topic and page size can take.
+ */
 export type Project = {
   id: string;
-  kind: 'template' | 'design';
+  kind: 'template' | 'design' | 'wording';
   ownerId: string;
   templateId?: string;
   status: 'draft' | 'published'; // only meaningful for templates

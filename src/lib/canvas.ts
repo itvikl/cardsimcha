@@ -48,6 +48,8 @@ export function validateDoc(input: unknown): CanvasDoc | null {
       if (e.colorRole !== undefined && !isBrandColorRole(e.colorRole)) return null;
       if (e.shabbatRole !== undefined && !isShabbatRole(e.shabbatRole)) return null;
       if (e.credit !== undefined && typeof e.credit !== 'boolean') return null;
+      if (e.detail !== undefined && typeof e.detail !== 'boolean') return null;
+      if (e.designColor !== undefined && !isColor(e.designColor)) return null;
       const f = e.font;
       if (!f || typeof f.family !== 'string' || f.family.length > 60) return null;
       if (!(f.weight === 400 || f.weight === 700) || !isNum(f.size_pt, 4, 400) || !isColor(f.color)) return null;
@@ -73,7 +75,8 @@ export function validateDoc(input: unknown): CanvasDoc | null {
       return null;
     }
   }
-  return { schema_version: 1, page: { width_mm, height_mm, background }, elements };
+  if (d.wordingId !== undefined && (typeof d.wordingId !== 'string' || d.wordingId.length > 64)) return null;
+  return { schema_version: 1, page: { width_mm, height_mm, background }, elements, ...(d.wordingId ? { wordingId: d.wordingId } : {}) };
 }
 
 /**

@@ -19,15 +19,16 @@ export const dynamic = 'force-dynamic';
 const started = (p: Project) =>
   p.kind !== 'design' || (p.editedAt === undefined ? p.updatedAt > p.createdAt : p.editedAt !== null);
 
-/** Admin: every template plus their own designs. Customer: their own designs. */
+/** Admin: every template and wording plus their own designs. Customer: their own designs. */
 export async function GET() {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const [own, templates] = await Promise.all([
+  const [own, templates, wordings] = await Promise.all([
     findRows('projects', { ownerId: user.id }),
     user.role === 'admin' ? findRows('projects', { kind: 'template' }) : [],
+    user.role === 'admin' ? findRows('projects', { kind: 'wording' }) : [],
   ]);
-  const byId = new Map([...own, ...templates].map((p) => [p.id, p]));
+  const byId = new Map([...own, ...templates, ...wordings].map((p) => [p.id, p]));
   const list = [...byId.values()]
     .filter(started)
     .map(summarize)
@@ -41,8 +42,9 @@ export async function GET() {
  *   `useBrand` writes the caller's brand kit into the copy; the kit is read here, never taken from the client.
  *   `shabbatCity` writes that city's coming Shabbat into a design with Shabbat fields; the times are worked out here too.
  *   `itemId` puts an item of the caller's own catalog on the ad. `adTexts` (field label -> text) are the ad's words; without them the item's are used.
- * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
+ * - { name, width_mm, height_mm, topic?, audience?, wording? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
+ *   `wording` makes it a wording instead, which needs a topic: the cards that can take it are found by that.
  */
 export async function POST(req: Request) {
   const user = await requireUser();
@@ -79,6 +81,7 @@ export async function POST(req: Request) {
   if (user.role !== 'admin') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 100) : 'תבנית חדשה';
   const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : '';
+  if (body?.wording === true && !topic) return NextResponse.json({ error: 'לנוסח צריך לבחור נושא.' }, { status: 400 });
   const canvas = validateDoc(emptyDoc(Number(body?.width_mm) || 210, Number(body?.height_mm) || 297));
   if (!canvas) return NextResponse.json({ error: 'מידות לא תקינות' }, { status: 400 });
   const bg = typeof body?.backgroundAssetId === 'string' ? await getRow('images', body.backgroundAssetId) : null;
@@ -109,7 +112,7 @@ export async function POST(req: Request) {
   }
   const project: Project = {
     id: newId(),
-    kind: 'template',
+    kind: body?.wording === true ? 'wording' : 'template',
     ownerId: user.id,
     status: 'draft',
     name,

@@ -12,7 +12,7 @@ import { DoorTurn, RevolvingDoor, useAdminDoor } from '@/components/RevolvingDoo
 
 type Item = {
   id: string;
-  kind: 'template' | 'design';
+  kind: 'template' | 'design' | 'wording';
   status: 'draft' | 'published';
   name: string;
   topic: string | null;
@@ -86,6 +86,7 @@ function AdminHome() {
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [preset, setPreset] = useState<string>(PAGE_PRESETS[0].id);
+  const [isWording, setIsWording] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [bgFile, setBgFile] = useState<File | null>(null);
@@ -112,7 +113,7 @@ function AdminHome() {
       const r = await api<{ id: string }>('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, topic, audience: door, width_mm: p.width_mm, height_mm: p.height_mm, backgroundAssetId }),
+        body: JSON.stringify({ name, topic, audience: door, width_mm: p.width_mm, height_mm: p.height_mm, backgroundAssetId, wording: !business && isWording }),
       });
       router.push(`/editor/${r.id}`);
     } catch (err) {
@@ -224,6 +225,7 @@ function AdminHome() {
   const inDoor = (topicName: string) => topicAudience(topicName, carousel) === door;
   // a template without a topic lands in "כללי", which is on the private side
   const templates = items?.filter((i) => i.kind === 'template' && inDoor(i.topic || GENERAL_TOPIC)) ?? [];
+  const wordings = items?.filter((i) => i.kind === 'wording' && inDoor(i.topic || GENERAL_TOPIC)) ?? [];
   /** example topics shown to the admin as suggestions; any free text is accepted */
   const topicOptions = Array.from(
     new Set([
@@ -245,9 +247,18 @@ function AdminHome() {
       </p>
 
       <form className="card row" onSubmit={create} style={{ marginBottom: 24, alignItems: 'end' }}>
+        {!business && (
+          <label className="field">
+            מה יוצרים
+            <select value={isWording ? 'wording' : 'card'} onChange={(e) => setIsWording(e.target.value === 'wording')}>
+              <option value="card">כרטיס (רקע ונוסח)</option>
+              <option value="wording">נוסח לבחירה בכרטיסים</option>
+            </select>
+          </label>
+        )}
         <label className="field" style={{ flex: 1, minWidth: 200 }}>
-          שם התבנית
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="תבנית חדשה" maxLength={100} />
+          {!business && isWording ? 'שם הנוסח' : 'שם התבנית'}
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={!business && isWording ? 'למשל: מסורתי' : 'תבנית חדשה'} maxLength={100} />
         </label>
         <label className="field">
           גודל
@@ -268,12 +279,12 @@ function AdminHome() {
             onChange={(e) => setTopic(e.target.value)}
             placeholder={business ? 'למשל: מודעות מבצע' : 'למשל: בית כנסת'}
             maxLength={60}
-            // without a topic a template lands in "כללי", on the private side
-            required={business}
+            // without a topic a template lands in "כללי", on the private side; a wording is found by its topic
+            required={business || isWording}
           />
         </label>
         <label className="field">
-          תמונת רקע (לא חובה)
+          {!business && isWording ? 'רקע לתצוגה (לא חובה)' : 'תמונת רקע (לא חובה)'}
           <input
             key={fileKey}
             type="file"
@@ -282,7 +293,7 @@ function AdminHome() {
           />
         </label>
         <button className="btn primary" type="submit" disabled={busy}>
-          {busy && bgFile ? 'מעלה…' : 'תבנית חדשה'}
+          {busy && bgFile ? 'מעלה…' : !business && isWording ? 'נוסח חדש' : 'תבנית חדשה'}
         </button>
       </form>
 
@@ -368,6 +379,43 @@ function AdminHome() {
             </div>
           ))}
         </div>
+      )}
+
+      {!business && wordings.length > 0 && (
+        <>
+          <h2 style={{ marginTop: 32 }}>נוסחים</h2>
+          <p className="sub">לקוח בתוך כרטיס יכול לעבור לכל נוסח שפורסם באותו נושא ובאותו גודל. שינוי בנוסח חל על בחירות חדשות, וכרטיסים קיימים נשארים כמו שהם.</p>
+          <div className="grid">
+            {wordings.map((it) => (
+              <div key={it.id} className="card" style={{ display: 'grid', gap: 8 }}>
+                <Link href={`/editor/${it.id}`}>
+                  <Preview src={it.thumbnail} label={`תצוגה מקדימה של ${it.name}`} />
+                </Link>
+                <div className="row">
+                  <Link href={`/editor/${it.id}`} style={{ fontWeight: 700, fontSize: 18 }}>
+                    {it.name}
+                  </Link>
+                  <span className="spacer" />
+                  <span className={'badge ' + it.status}>{it.status === 'published' ? 'פורסם' : 'טיוטה'}</span>
+                </div>
+                <span className="status">
+                  {it.topic} · {it.width_mm}×{it.height_mm} מ״מ
+                </span>
+                <div className="row">
+                  <Link className="btn small primary" href={`/editor/${it.id}`}>
+                    עריכה
+                  </Link>
+                  <button className="btn small" onClick={() => setStatus(it, it.status === 'published' ? 'draft' : 'published')}>
+                    {it.status === 'published' ? 'ביטול פרסום' : 'פרסום'}
+                  </button>
+                  <button className="btn small danger" onClick={() => remove(it)}>
+                    מחיקה
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       </DoorTurn>
     </main>

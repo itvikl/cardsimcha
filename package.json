@@ -10,7 +10,8 @@
     "eval:agent": "tsx scripts/eval-agent.ts",
     "migrate:firebase": "tsx --env-file=.env.local scripts/migrate-to-firebase.ts",
     "migrate:thumbnails": "tsx --env-file=.env.local scripts/migrate-thumbnails.ts",
-    "seed:content": "tsx --env-file=.env.local scripts/seed-content.ts"
+    "seed:content": "tsx --env-file=.env.local scripts/seed-content.ts",
+    "seed:wording-pilot": "tsx --env-file=.env.local scripts/seed-wording-pilot.ts"
   },
   "keywords": [],
   "author": "",

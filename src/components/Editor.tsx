@@ -17,8 +17,12 @@ import { professionOf } from '@/lib/professions';
 import { VIDEO_WIDTH } from '@/lib/shabbatLoops';
 import { trimTransparent } from '@/lib/trimCanvas';
 import { newImage, newRect, newText } from '@/lib/elements';
+import { fitDocColors } from '@/lib/fitColor';
+import { cardPixels, type DrawableDoc } from '@/lib/renderCard';
+import { applyWording, type Wording } from '@/lib/wording';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
+import { WordingPicker } from './WordingPicker';
 import { landCard } from './CardFlight';
 import { setDoor } from './SiteBackdrop';
 import { DownloadIcon, FitIcon, RedoIcon, UndoIcon } from './Icons';
@@ -283,6 +287,8 @@ export default function Editor({ id }: { id: string }) {
     };
   }, [fitted, loadError]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const isWording = project?.kind === 'wording';
+
   // ---- history-aware updates ----------------------------------------------
   // The current doc and the undo/redo stacks live in refs so updates stay free of
   // side effects inside state updaters; `setDoc` just triggers the re-render.
@@ -329,6 +335,53 @@ export default function Editor({ id }: { id: string }) {
     },
     [commit],
   );
+
+  /** the card as renderCard draws it: each picture with its URL */
+  const drawable = (d: CanvasDoc): DrawableDoc => ({
+    ...d,
+    elements: d.elements.map((e) => {
+      if (e.type !== 'image') return e;
+      const asset = library.images.find((i) => i.id === e.asset_id);
+      return { ...e, src: asset ? `/api/uploads/${asset.file}` : null };
+    }),
+  });
+
+  const fitSeq = useRef(0);
+  /**
+   * A change to what is under a wording's texts, or to the wording itself: its colours follow, in one undo step. Finding them
+   * takes a moment, so the change is applied again to the card as it stands by then, and only the last change counts.
+   */
+  const commitFitted = async (change: (d: CanvasDoc) => CanvasDoc, mergeKey?: string) => {
+    const cur = docRef.current;
+    if (!cur) return;
+    const draft = change(cur);
+    if (!draft.wordingId) {
+      commit(draft, mergeKey);
+      return;
+    }
+    const seq = ++fitSeq.current;
+    const fitted = await cardPixels(drawable(draft)).then((px) => fitDocColors(draft, px)).catch((e) => {
+      console.error('could not match the colours', e);
+      return draft;
+    });
+    if (seq !== fitSeq.current || !docRef.current) return;
+    const colors = new Map(fitted.elements.flatMap((e) => (e.type === 'text' ? [[e.id, e.font.color] as const] : [])));
+    const now = change(docRef.current);
+    commit(
+      { ...now, elements: now.elements.map((e) => (e.type === 'text' && colors.has(e.id) ? { ...e, font: { ...e.font, color: colors.get(e.id)! } } : e)) },
+      mergeKey,
+    );
+  };
+
+  /** a change to a background the customer can swap */
+  const patchBackground = (elId: string, patch: Partial<CanvasElement>, mergeKey?: string) =>
+    commitFitted((d) => ({ ...d, elements: d.elements.map((e) => (e.id === elId ? ({ ...e, ...patch } as CanvasElement) : e)) }), mergeKey);
+
+  const pickWording = (w: Wording) => {
+    setSelectedId(null);
+    setActiveField(null);
+    return commitFitted((d) => applyWording(d, w));
+  };
 
   const undo = useCallback(() => {
     const cur = docRef.current;
@@ -475,7 +528,8 @@ export default function Editor({ id }: { id: string }) {
       if (!res.ok) throw new Error();
       setPubStatus(status);
       setSave((v) => (v === 'dirty' ? v : 'saved'));
-      push(status === 'published' ? 'התבנית פורסמה. לקוחות רואים אותה עכשיו בגלריה.' : 'הפרסום בוטל. הלקוחות כבר לא רואים את התבנית.', 'success');
+      if (isWording) push(status === 'published' ? 'הנוסח פורסם. לקוחות יכולים לבחור בו בעריכת הכרטיס.' : 'הפרסום בוטל. לקוחות כבר לא יכולים לבחור בנוסח הזה.', 'success');
+      else push(status === 'published' ? 'התבנית פורסמה. לקוחות רואים אותה עכשיו בגלריה.' : 'הפרסום בוטל. הלקוחות כבר לא רואים את התבנית.', 'success');
     } catch {
       push('הפעולה נכשלה. נסו שוב.', 'error');
     } finally {
@@ -1087,8 +1141,11 @@ export default function Editor({ id }: { id: string }) {
                 </div>
               ))
             )}
+            {doc.wordingId && topic && <WordingPicker doc={doc} topic={topic} manage={false} drawable={drawable} onPick={pickWording} />}
             {swappables.map((el) => {
-              const options = library.images.filter((i) => !el.swapCategoryId || i.categoryId === el.swapCategoryId);
+              // a background of a card with a wording fills its page: one of another shape would come out stretched
+              const fills = (i: ImageAsset) => !doc.wordingId || Math.abs(i.width / i.height / (el.w_mm / el.h_mm) - 1) < 0.02;
+              const options = library.images.filter((i) => (!el.swapCategoryId || i.categoryId === el.swapCategoryId) && fills(i));
               return (
                 <div key={el.id} className={'field field-card' + (aiTouched.has(el.id) ? ' ai-touched' : '')} style={{ order: -1 }}>
                   <span className="field-label">{el.label || 'תמונה'}</span>
@@ -1103,7 +1160,7 @@ export default function Editor({ id }: { id: string }) {
                           className="pick"
                           title={img.name}
                           aria-pressed={!el.colorOverride && img.id === el.asset_id}
-                          onClick={() => patchElement(el.id, { asset_id: img.id, colorOverride: undefined } as Partial<CanvasElement>)}
+                          onClick={() => patchBackground(el.id, { asset_id: img.id, colorOverride: undefined } as Partial<CanvasElement>)}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={`/api/uploads/${img.file}`} alt={img.name} />
@@ -1122,7 +1179,7 @@ export default function Editor({ id }: { id: string }) {
                           style={{ background: c }}
                           aria-label={`צבע ${c}`}
                           aria-pressed={el.colorOverride?.toLowerCase() === c.toLowerCase()}
-                          onClick={() => patchElement(el.id, { colorOverride: c } as Partial<CanvasElement>)}
+                          onClick={() => patchBackground(el.id, { colorOverride: c } as Partial<CanvasElement>)}
                         />
                       ))}
                       <input
@@ -1130,7 +1187,7 @@ export default function Editor({ id }: { id: string }) {
                         className="swatch-picker"
                         aria-label="צבע אחיד חופשי"
                         value={el.colorOverride ?? '#faf8f3'}
-                        onChange={(e) => patchElement(el.id, { colorOverride: e.target.value } as Partial<CanvasElement>, 'bgcolor:' + el.id)}
+                        onChange={(e) => patchBackground(el.id, { colorOverride: e.target.value } as Partial<CanvasElement>, 'bgcolor:' + el.id)}
                       />
                     </div>
                   </div>
@@ -1159,6 +1216,14 @@ export default function Editor({ id }: { id: string }) {
         )}
         {full && (
         <aside className="left" aria-label="הוספת אלמנטים">
+          {isWording && (
+            <p className="hint" role="note" style={{ margin: 0 }}>
+              <span>
+                נוסח של &quot;{topic}&quot; בגודל הזה. רק הטקסטים נכנסים לנוסח, והרקע כאן הוא לתצוגה בלבד. סמנו בכל שדה של שם, תאריך או מקום &quot;פרט של הלקוח&quot;.
+              </span>
+            </p>
+          )}
+          {!isWording && audience === 'private' && topic && <WordingPicker doc={doc} topic={topic} manage drawable={drawable} onPick={pickWording} />}
           <div>
             <h2 className="panel-title">הוספה</h2>
             <div className="row">
@@ -1455,6 +1520,12 @@ export default function Editor({ id }: { id: string }) {
                           placeholder="למשל: שם החתן"
                           onChange={(e) => updateText({ label: e.target.value }, 'label:' + textEl.id)}
                         />
+                      </label>
+                    )}
+                    {isWording && (
+                      <label className="row" style={{ gap: 8 }}>
+                        <input type="checkbox" checked={!!textEl.detail} onChange={(e) => updateText({ detail: e.target.checked || undefined })} />
+                        <span>פרט של הלקוח: מה שכתב נשאר כשהוא מחליף נוסח (לפי שם השדה)</span>
                       </label>
                     )}
                     <label className="field">
