@@ -1,0 +1,155 @@
+Creative Editor & Brand Asset Management Platform
+Product Architecture & Engineering Blueprint
+Executive Overview
+This specification outlines the technical architecture, domain data structures, backoffice systems, and implementation sequence for a cloud-native, multi-tenant creative composition engine. The platform is engineered to serve two distinct operational models:
+
+Consumer / B2C Workflows: Frictionless, form-driven generation of personal stationary, event collateral, and invitations powered by a constrained 3-layer canvas and an automated layout engine.
+Enterprise / B2B Workflows: Workspace-isolated brand repositories, governance engines with fine-grained layer-locking capabilities, corporate typography enforcement, and automated multi-format ad set rendering.
+Core Modules & Functional Architecture
+Three-Layer Canvas Layout Engine
+To prevent z-index drift and ensure layout consistency across varying screen viewports, the canvas engine enforces an explicit three-layer stratification:
+
+Layer Level
+Layer Designation
+Responsibilities & Capabilities
+Locking & Constraints
+Layer 1
+Background Layer
+Solid fills, linear/radial gradients, repetitive pattern fills, textures, or full-bleed photography.
+Isolated from pointer events by default; z-index strictly fixed at lowest stack index.
+Layer 2
+Content & Typography Layer
+Pre-configured typography pairings (Display Header, Subtitle, Body), dynamic form variables, geometric vector dividers, and contextual text containers.
+Supports smart grouping, automatic vertical flow wrapping, and bounded text manipulation.
+Layer 3
+Assets & Dynamic Overlays
+Vector badges, contextual thematic stickers, dynamic photo frame masks, decorative ribbons, and custom user overlays.
+Free-floating or pinned relative to Layer 2 text bounding boxes with multi-touch transform handles.
+
+Thematic Generator Pipeline
+Structured Form Inputs: Captures core event parameters including categorical taxonomy (e.g., Wedding, Corporate Gala, Birthday), target emotional tone, color palette restrictions, and schedule metadata.
+Automated Batch Processing: Transposes tabular schedule and host metadata across complete collateral suites (invitations, schedules, directional signage, name tags) while maintaining unified typography and palette styles.
+Generative Expansion: Integrates multimodal AI pipelines (GPT-4o for contextual copy tailoring; Stability AI / DALL-E 3 for bespoke vector/raster sticker generations).
+Enterprise Governance & Multi-Tenancy
+Workspaces & Brand Kits: Isolated storage partitioning for client-approved vector marks, strict hex color ramps, web fonts, and composition guides.
+Administrative Governance Engine: Fine-grained locking rules allowing template authors to freeze coordinate positions, dimensions, rotation, or content values on a per-element basis.
+Automated Creative Sets: Parallel rasterization engine producing responsive aspect ratios (1:1, 9:16, 16:9, 4:5) from a single master layout configuration.
+Commercialization Architecture
+Segment
+Billing Mechanism
+Entitlements & Metering
+Personal Tier
+Transactional / Micro-credits
+Pay-per-download for high-DPI PDF print outputs; tokenized AI theme generations.
+Enterprise Tier
+Tiered Subscription + Usage
+Per-seat monthly subscription, centralized brand kit vaults, template locking controls, and batch ad exports.
+
+Recommended Technology Stack
+Domain
+Technology Selection
+Architectural Rationale
+Application Framework
+Next.js 14+ (App Router)
+Unified SSR for catalog/templates and dynamic client-side rendering for the canvas.
+Canvas Manipulation
+Konva.js (react-konva)
+Declarative scene-graph architecture, native node caching, hit testing, and high-performance transform handles.
+UI Components
+Tailwind CSS + shadcn/ui
+Accessible, low-overhead atomic UI system providing complete control over studio tooling panels.
+Backend & ORM
+Node.js (NestJS) + Prisma
+Modular dependency injection, strong TypeScript boundaries, and type-safe relational database management.
+Persistence Layer
+PostgreSQL
+Robust JSONB support for serialized canvas scene-graphs combined with relational integrity for permissions.
+Asset Storage & CDN
+AWS S3 + CloudFront
+High-throughput object delivery for client fonts, vector catalogs, and compiled print-ready artifacts.
+Raster Engine
+Node.js sharp + Puppeteer
+Headless GPU-accelerated server-side export for print-ready CMYK PDFs and web-optimized raster formats.
+
+Relational Data Schema
++--------------------+       +----------------------+       +-----------------------+
+|     companies      |       |        users         |       |      brand_kits       |
++--------------------+       +----------------------+       +-----------------------+
+| id (PK)            |<---1:N| id (PK)              |       | id (PK)               |
+| name               |       | company_id (FK)      |   +---| company_id (FK)       |
+| domain_whitelist   |       | role [ADMIN|USER]    |   |   | color_palette (JSONB) |
+| plan_type          |       | auth_credentials     |   |   | typography_rules (JSONB)|
++--------------------+       +----------------------+   |   +-----------------------+
+          |                             |               |
+          | 1:N                         | 1:N           |
+          v                             v               |
++--------------------+       +----------------------+   |
+|     templates      |       |      creatives       |   |
++--------------------+       +----------------------+   |
+| id (PK)            |       | id (PK)              |   |
+| company_id (FK)    |       | user_id (FK)         |   |
+| layer_rules (JSONB)|<--1:N-| template_id (FK)     |   |
+| canvas_state(JSONB)|       | layer_overrides(JSONB|   |
++--------------------+       +----------------------+   |
+          ^                             ^               |
+          | N:M                         | N:M           |
+          +--------------+   +----------+               |
+                         |   |                          |
+                    +----+---+----+                     |
+                    |   assets    |<--------------------+
+                    +-------------+
+                    | id (PK)     |
+                    | type [SVG..]|
+                    | storage_url |
+                    +-------------+
+Entity Specifications
+users: Manages entity credentials, session tokens, and contextual permission scopes (platform_admin, workspace_manager, creative_editor, consumer).
+companies: Top-level multi-tenant domain boundary encapsulating seat allocations, subscription tiers, and storage quotas.
+brand_kits: Defines scoped visual boundaries—custom typography stacks, primary/secondary palettes, and master vector assets.
+templates: Serialized Konva scene trees defining root canvas bounds, layer order, default asset placements, and individual node locking rules.
+creatives: Instance representations containing template diffs, text overrides, localized image frames, and output render history.
+assets: Catalog entries for raw system vectors, curated backgrounds, licensed typography (.woff2), and user-uploaded media.
+billing_subscriptions: Tracks Stripe customer references, active entitlements, prepaid rendering credits, and monthly creative batch allowances.
+Backoffice Administration Engine
+The internal operational dashboard provides systems administrators and content creators with foundational control over platform primitives:
+
+Global Asset Catalog: Bulk ingestion pipeline with automated vector sanitization, metadata tagging, and aspect-ratio normalization.
+Typography Engine: Licensing verification, automated WOFF/WOFF2 webfont conversion, unicode range subsetting, and line-height metric testing.
+Preset Grouping Builder: Interactive staging canvas allowing design teams to assemble, balance, and save multi-element typography and embellishment groups.
+Template & Lock Inspector: Administrative staging environment enabling granular state flags on all canvas nodes:
+allowContentEdit: Permit string or source image manipulation.
+allowTransform: Permit resizing, rotating, or repositioning.
+allowDelete: Permit node deletion from the visual stack.
+AI Smart Search & Asset Metadata Engine
+To power semantic, intent-based search for users (e.g., matching a prompt like "elegant vintage floral wedding invitation" to appropriate backgrounds, text groups, and stickers), all catalog items store rich structured metadata.
+1. Asset Metadata Schema Extensions
+Background Metadata: Visual taxonomy (color palette, gradient type, texture style), mood/tone (elegant, playful, formal, rustic), occasion tags (wedding, birthday, corporate), and orientation/aspect ratio support.
+Text Group Metadata: Layout archetype (centered stack, left-aligned minimal, split header), formality rating, typography style pairing (serif display + sans body), target occasion, and replaceable variable slots ({{event_name}}, {{date}}, {{host_name}}).
+Sticker & Overlay Metadata: Graphic style (flat vector, watercolor, 3D render, line art), theme taxonomy, primary/secondary colors, and bounding box snap constraints.
+2. Vector Embeddings & Hybrid Search Architecture
+Vector Store: PostgreSQL with pgvector extension (or dedicated vector databases like Qdrant/Pinecone).
+Embedding Model: Text and image embedding generation using OpenAI text-embedding-3-large or CLIP models for multi-modal matching (text prompt to image asset).
+Hybrid Search Strategy: Combines dense vector similarity (semantic meaning) with sparse metadata filtering (exact occasion/color/aspect ratio matches).
+3. AI Smart Composition Pipeline
+User inputs natural language request or selects occasion attributes.
+LLM extracts target style, color preferences, and required template variables.
+Hybrid search retrieves top-ranked candidate backgrounds, complementary text groups, and accent stickers.
+Layout engine automatically composes candidate 3-layer preview cards for user selection.
+Implementation Roadmap
+Phase 1: Core Canvas Engine & State Architecture
+Initialize Next.js project with Konva scene-graph implementation.
+Construct the 3-layer isolation pipeline with drag-and-drop, aspect-constrained transforms, and history management (undo/redo).
+Implement serialization/deserialization to export and import canvas layouts via standard JSON payloads.
+Phase 2: Administrative Tooling & Asset Repositories
+Develop backoffice UI for typography ingestion, vector categorization, and preset group creation.
+Configure AWS S3 media ingestion pipelines with automatic image optimization and CDN delivery.
+Deploy PostgreSQL schema using Prisma ORM with baseline multi-tenant permission isolation.
+Phase 3: Thematic Generator & Generative Integration
+Implement the dynamic event generation form capturing schedule, color, and motif constraints.
+Connect the generation pipeline to GPT-4o for dynamic copy-fitting and Stability AI for custom asset synthesis.
+Build automated batch-rendering routines for multi-asset collateral sets.
+Phase 4: Enterprise Workspace Isolation & Monetization
+Deploy granular node-locking enforcement inside the editor view for non-admin roles.
+Introduce multi-tenant workspace routing, brand kit validation, and team permission checks.
+Integrate Stripe Billing to support metered consumer micro-transactions and automated enterprise SaaS subscriptions.
+
