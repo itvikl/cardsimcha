@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
+import { itemTexts } from '@/lib/adText';
+import { parseAdTexts } from '@/lib/adTextsParse';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { parseColors } from '@/lib/brand';
@@ -34,11 +36,11 @@ export async function GET() {
 }
 
 /**
- * - { templateId, fill?, useBrand?, colors?, shabbatCity? }: create the caller's own design as a copy of a template
+ * - { templateId, useBrand?, colors?, shabbatCity? }: create the caller's own design as a copy of a template
  *   (customers: published templates only; admins may copy any template to test it).
- *   `fill` (element id -> text) sets the texts of editable fields, as the category page's story wrote them.
  *   `useBrand` writes the caller's brand kit into the copy; the kit is read here, never taken from the client.
  *   `shabbatCity` writes that city's coming Shabbat into a design with Shabbat fields; the times are worked out here too.
+ *   `itemId` puts an item of the caller's own catalog on the ad. `adTexts` (field label -> text) are the ad's words; without them the item's are used.
  * - { name, width_mm, height_mm, topic?, audience? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  */
@@ -53,15 +55,22 @@ export async function POST(req: Request) {
     if (!t || t.kind !== 'template' || (t.status !== 'published' && user.role !== 'admin')) {
       return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
     }
-    const [brand, noCredit] = await Promise.all([body.useBrand === true ? getRow('brands', user.id) : null, hasActiveSubscription(user.id)]);
+    const [brand, noCredit, found] = await Promise.all([
+      body.useBrand === true ? getRow('brands', user.id) : null,
+      hasActiveSubscription(user.id),
+      typeof body.itemId === 'string' ? getRow('catalog', body.itemId) : null,
+    ]);
+    const item = found?.ownerId === user.id ? found : null;
+    const adTexts = parseAdTexts(body.adTexts);
     const copy = await copyTemplate(t, user.id, {
       brand,
       noCredit,
+      adTexts: adTexts ?? (item ? itemTexts(item) : undefined),
+      photo: item?.photo,
+      noPoints: !!item && !adTexts,
       colors: parseColors(body.colors),
       // opened without choosing a city (a direct link, an admin's test): the first city, whose name shows on the design
       times: hasShabbatRoles(t.canvas) ? comingShabbat(cityById(body.shabbatCity)?.id ?? SHABBAT_CITIES[0].id) : null,
-      // the story told on a category page: element id -> text
-      fill: body.fill && typeof body.fill === 'object' ? (body.fill as Record<string, unknown>) : undefined,
     });
     await setRow('projects', copy);
     return NextResponse.json({ id: copy.id }, { status: 201 });

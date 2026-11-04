@@ -112,11 +112,110 @@
 
 .rise { animation: rise 0.9s var(--ease) both; }
 
-/* ---------------------------------------------------------- first screen: heading, ring, categories */
+/* ---------------------------------------------------------- legacy first screen (kept for editor pages) */
 .hero { padding-block: var(--sp-3) var(--sp-5); }
 .heroInner { display: flex; flex-direction: column; gap: var(--sp-2); }
 .heroHead { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
 .heroHead .doors { margin-bottom: var(--sp-1); }
+
+/* ---------------------------------------------------------- landing redesign: hero + category grid + card strips */
+.landingHero {
+  padding-block: var(--sp-5) var(--sp-4);
+  text-align: center;
+}
+.landingHero .title { margin: 0; }
+.landingHero .lead { margin: var(--sp-2) auto 0; }
+.bizLinks {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); margin-top: var(--sp-2);
+}
+
+.catGridSection { padding-block: var(--sp-4) var(--sp-3); }
+.sectionTitle {
+  font-family: var(--serif); font-size: clamp(22px, 3vw, 32px); font-weight: 700;
+  margin: 0 0 var(--sp-3); text-align: center;
+}
+.muted { color: var(--muted); text-align: center; margin: 0; }
+
+/* simchacard-style category grid: icon tiles */
+.catGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--sp-2);
+}
+.catTile {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: var(--sp-2) var(--sp-1) var(--sp-2);
+  border-radius: var(--r-md);
+  background: var(--surface-glass);
+  border: 1px solid var(--line);
+  text-decoration: none; color: var(--text);
+  transition: transform .15s var(--ease), box-shadow .15s;
+  cursor: pointer;
+}
+.catTile:hover { transform: translateY(-3px); box-shadow: var(--sh-2); }
+.catTileImg {
+  width: 60px; height: 60px; object-fit: cover; border-radius: var(--r-sm);
+}
+.catTileIcon {
+  font-size: 2rem; line-height: 1; width: 60px; height: 60px;
+  display: flex; align-items: center; justify-content: center;
+}
+.catTileName {
+  font-size: 13px; font-weight: 600; text-align: center; line-height: 1.3;
+}
+
+/* category sections with card strips */
+.catSection { padding-block: var(--sp-4) var(--sp-2); border-top: 1px solid var(--line); }
+.catSectionHead {
+  display: flex; align-items: center; gap: var(--sp-1); margin-bottom: var(--sp-2);
+}
+.catSectionIcon { font-size: 1.5rem; }
+.catSectionTitle { font-family: var(--serif); font-size: clamp(20px, 2.5vw, 28px); font-weight: 700; margin: 0; }
+.catSectionAll {
+  margin-inline-start: auto; font-size: 14px; font-weight: 600;
+  color: var(--accent); text-decoration: none; white-space: nowrap;
+  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line);
+}
+.catSectionAll:hover { background: var(--solid); color: var(--on-solid); border-color: var(--solid); }
+
+/* horizontal scrollable strip of cards */
+.cardStrip {
+  display: flex; gap: var(--sp-2); overflow-x: auto;
+  padding-bottom: var(--sp-2);
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.cardStrip::-webkit-scrollbar { display: none; }
+
+.cardTile {
+  flex: 0 0 auto; scroll-snap-align: start;
+  width: 180px;
+  border-radius: var(--r-md);
+  background: var(--surface-glass);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  text-decoration: none; color: var(--text);
+  transition: transform .15s var(--ease), box-shadow .15s;
+  display: flex; flex-direction: column;
+}
+.cardTile:hover { transform: translateY(-3px); box-shadow: var(--sh-2); }
+.cardTileImg { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; }
+.cardTilePlaceholder { width: 100%; aspect-ratio: 3/4; background: var(--surface-2); }
+.cardTileMeta {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px 10px;
+}
+.cardTileName { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.cardTilePrice {
+  font-size: 12px; font-weight: 700; color: var(--accent);
+}
+.cardTileMore {
+  align-items: center; justify-content: center; gap: var(--sp-1);
+  font-weight: 700; font-size: 15px;
+  aspect-ratio: unset;
+  min-height: 120px;
+}
 
 /* the chips that narrow a list: formats, professions, an event's colours */
 .filters { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); margin-block-end: var(--sp-3); }
@@ -126,7 +225,8 @@
   font: inherit; font-weight: 600; cursor: pointer;
 }
 .filter[aria-pressed='true'] { background: var(--solid); color: var(--on-solid); border-color: var(--solid); }
-.paletteDot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.5); }
+.filterGroup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
+.filterLabel { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
 
 /* ready advertising messages */
 .messages { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--sp-2); }
@@ -136,6 +236,79 @@
 /* the billing page */
 .plan { display: grid; gap: var(--sp-1); justify-items: start; max-width: 560px; margin-inline: auto; }
 .plan p { margin: 0; }
+
+/* a business's first try: its name on every ad of the page */
+.tryAdWrap { display: flex; gap: var(--sp-2); align-items: flex-start; max-width: 800px; margin: 0 auto var(--sp-3); flex-wrap: wrap; }
+.tryAd { flex: 1 1 320px; display: grid; gap: var(--sp-1); color: var(--text); min-width: 0; }
+.tryFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--sp-1); }
+.colorRow { display: flex; gap: var(--sp-1); }
+.colorField { flex: 1; }
+
+/* live preview card */
+.livePreview {
+  flex: 0 0 160px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.2);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 200px;
+  transition: background 0.3s ease;
+}
+.livePreviewBadge {
+  height: 6px;
+  width: 100%;
+  transition: background 0.3s ease;
+}
+.livePreviewInner {
+  flex: 1;
+  padding: 1.25rem 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.livePreviewName {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  word-break: break-word;
+  transition: opacity 0.15s;
+}
+.livePreviewTagline {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.livePreviewPhone {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: auto;
+  transition: color 0.3s ease;
+}
+.livePreviewFooter {
+  padding: 0.5rem 1rem;
+  border-top: 1px solid transparent;
+  transition: border-color 0.3s ease;
+}
+
+/* one sentence, three ads */
+.composeBar { display: flex; justify-content: center; margin-block-end: var(--sp-3); }
+.compose { display: grid; gap: var(--sp-2); width: min(900px, 100%); color: var(--text); }
+.composeForm { display: grid; gap: var(--sp-1); }
+.composeForm textarea { width: 100%; resize: vertical; }
+.composeCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 260px)); justify-content: center; gap: var(--sp-2); }
+.composePicture { display: block; width: 100%; height: auto; border-radius: 10px; }
+
+/* what a business tells about itself, and its catalog */
+.profile { display: grid; gap: 14px; margin: 0; padding: var(--sp-2); border: 1px solid var(--line); border-radius: 12px; }
+.profile legend { padding-inline: 6px; font-weight: 700; }
+.profile textarea { width: 100%; resize: vertical; }
+.catalogList { display: grid; gap: var(--sp-2); align-content: start; }
+.catalogItem { display: grid; grid-template-columns: 96px 1fr; gap: var(--sp-2); align-items: start; color: var(--text); }
+.catalogItem:not(:has(img)) { grid-template-columns: 1fr; }
+.catalogItem img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; }
+.catalogItem p { margin: 2px 0 0; color: var(--muted); }
+.catalogActions { display: flex; gap: 6px; margin-block-start: var(--sp-1); }
 
 /* the week's Shabbat, above its designs */
 .shabbatBar { display: grid; gap: var(--sp-1); max-width: 560px; margin: 0 auto var(--sp-3); }
@@ -161,57 +334,65 @@
 }
 .lead { margin: 0; max-width: 520px; font-size: 19px; line-height: 1.6; color: var(--text-2); text-wrap: balance; }
 
-/* ---------------------------------------------------------- a simcha's story (StoryTable): the invitation written in front of you */
-.story { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: calc(-1 * var(--sp-4)); }
-.storyStage {
-  display: grid; grid-template-columns: auto minmax(0, 400px); justify-content: center; align-items: center; gap: var(--sp-6);
-  perspective: 1200px;
+/* ---------------------------------------------------------- the shortcuts under the top bar: a strip of the ring's cream paper, edged in its gilt */
+/* the glass is on ::before: backdrop-filter on the nav itself would trap the list's `fixed` position */
+.quickNav { position: sticky; top: var(--header-h); z-index: 49; overflow: visible; isolation: isolate; }
+.quickNav::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, #b8904f 18%, #fff4d6 50%, #a37a3c 82%, transparent) bottom / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(251, 247, 240, 0.9), rgba(248, 243, 234, 0.74));
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 10px 24px rgba(var(--shade), 0.08);
 }
-/* the blank invitation: cream paper, a gold frame inside a gilded rim; as tall as the screen allows */
-.paper {
-  position: relative; height: clamp(380px, calc(100svh - 360px), 520px); aspect-ratio: 5 / 7; padding: 48px 32px; border-radius: var(--r-sm);
-  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; text-align: center;
-  background: radial-gradient(circle at 50% 30%, #fffaf0, #efe2c8 92%);
-  box-shadow: inset 0 0 0 14px rgba(255, 250, 240, 0.6), inset 0 0 0 15px var(--gold-line), 0 2px 0 rgba(176, 146, 98, 0.55), var(--sh-3);
-  transition: transform 0.9s var(--ease), opacity 0.9s var(--ease);
+.quickStrip {
+  /* `safe`: when it doesn't fit, it starts at the edge and scrolls instead of being cut off at both ends */
+  display: flex; align-items: center; justify-content: safe center;
+  margin: 0; padding: 0 clamp(8px, 2vw, 24px); list-style: none;
+  overflow-x: auto; scrollbar-width: none;
 }
-/* the story is told: the paper folds into the ring */
-.paper[data-folding='true'] { transform: translateY(60px) rotateX(24deg) scale(0.5); opacity: 0; }
-.paper p { margin: 0; max-width: 100%; font-family: var(--serif); color: #3b2e20; overflow-wrap: anywhere; transition: color 0.4s, text-shadow 0.4s; }
-.paper .paper_eyebrow { font-size: 15px; letter-spacing: 0.18em; color: #8a6a40; }
-.paper_title { font-size: clamp(28px, 3vw, 40px); font-weight: 700; line-height: 1.2; }
-.paper_line { font-size: 20px; }
-.paper .paper_small { font-size: 16px; color: #6b5a45; }
-/* the line being written glows in gold ink */
-.paper p[data-active='true'] { color: #8a6a40; text-shadow: 0 0 22px rgba(201, 168, 115, 0.5); }
-/* each letter flows from the pen */
-.inkLetter { display: inline-block; white-space: pre; animation: ink 0.55s var(--ease) both; }
-.quill {
-  display: inline-block; width: 2px; height: 0.95em; margin-inline-start: 3px; vertical-align: -0.1em;
-  background: #8a6a40; animation: quill 1s steps(2, start) infinite;
+.quickStrip::-webkit-scrollbar { display: none; }
+.quickItem { display: flex; align-items: center; flex: none; }
+/* a small gilt diamond between the shortcuts, as between the lines of an invitation */
+.quickItem + .quickItem::before { content: ''; flex: none; width: 4px; height: 4px; rotate: 45deg; background: var(--accent-2); opacity: 0.55; }
+.quickLink {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 clamp(12px, 1.6vw, 22px);
+  border: 0; background: none; color: var(--text); cursor: pointer; white-space: nowrap; text-decoration: none;
+  font-family: var(--serif); font-size: 17px; font-weight: 700;
+  transition: color 0.25s;
 }
-/* the Hebrew date is stamped on, not typed */
-.paper p[data-stamp='true'] { animation: stamp 0.6s var(--ease) both; }
-.ask { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
-.ask label { font-family: var(--serif); font-size: clamp(26px, 2.6vw, 34px); font-weight: 700; line-height: 1.2; color: var(--text); }
-/* .ask prefix: outranks the global input rules */
-.ask .askInput {
-  width: 100%; min-height: 0; padding: 8px 2px 12px; border: 0; border-bottom: 1.5px solid var(--text); border-radius: 0;
-  background: transparent; box-shadow: none; color: var(--text); font-family: var(--serif); font-size: 26px;
+/* the gilt line that draws out from the middle, under the shortcut in hand */
+.quickLink::after {
+  content: ''; position: absolute; inset-inline: 14px; bottom: 9px; height: 1.5px; border-radius: 1px;
+  background: linear-gradient(90deg, #b8904f, #e6cf9c 50%, #a37a3c);
+  scale: 0 1; transition: scale 0.35s var(--ease);
 }
-.ask .askInput:focus { outline: none; border-bottom-color: var(--gold-text); }
-.askRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: var(--sp-1); }
-.dots { display: flex; gap: 8px; margin-top: var(--sp-1); }
-.dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background-color 0.4s; }
-.dots span[data-on='true'] { background: var(--gold-text); }
-.storySkip {
-  align-self: center; padding: 6px; border: 0; background: none; color: var(--muted); cursor: pointer;
-  font: inherit; font-size: 15px; text-decoration: underline; text-underline-offset: 4px;
+.quickLink:hover, .quickLink[aria-expanded='true'], .quickLink[aria-current] { color: var(--gold-text); }
+.quickLink:hover::after, .quickLink[aria-expanded='true']::after, .quickLink[aria-current]::after { scale: 1 1; }
+.quickNav .quickLink:focus-visible, .quickNav .quickMenuLink:focus-visible { outline-offset: -3px; }
+.quickLink[data-soon='true'] { color: var(--muted); opacity: 0.6; font-weight: 400; cursor: default; }
+.quickLink[data-soon='true']::after { display: none; }
+.quickChevron { color: var(--accent-2); transition: rotate 0.3s var(--ease); }
+.quickChevron[data-open='true'] { rotate: 180deg; }
+/* the list opens as a card off the same paper, with its gilded rim */
+.quickMenu {
+  position: fixed; z-index: 2; width: 240px; margin: 0; padding: 8px; list-style: none; border-radius: var(--r-md);
+  background: radial-gradient(circle at 50% 20%, #fffaf0, #f4e9d4 92%);
+  box-shadow: 0 0 0 1px var(--gold-line), 0 2px 0 rgba(176, 146, 98, 0.55), var(--sh-2);
+  animation: quickDrop 0.28s var(--ease) both;
 }
-.storySkip:hover { color: var(--text); }
-.storyWait { margin: var(--sp-5) 0; text-align: center; font-family: var(--serif); font-size: 24px; color: var(--text-2); animation: breathe 1.6s ease-in-out infinite; }
-.storyActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-.storyActions .back { align-self: center; }
+.quickMenuLink {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 14px; border-radius: var(--r-sm);
+  color: var(--text); font-family: var(--serif); font-size: 16px; font-weight: 500; text-decoration: none;
+  transition: background-color 0.2s, color 0.2s;
+}
+a.quickMenuLink:hover { background: rgba(201, 168, 115, 0.2); color: var(--gold-text); }
+.quickMenuLink[aria-current] { color: var(--gold-text); font-weight: 700; }
+.quickMenuLink[data-soon='true'] { color: var(--muted); }
+.quickMenuLink small { font-family: 'Heebo', sans-serif; font-size: 12px; font-weight: 400; color: var(--muted); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* the strip takes height from the first screen: the ring gets some of it back */
+.quickNav ~ .root .landingHero { padding-top: var(--sp-3); }
 
 /* ---------------------------------------------------------- a category's page: all its designs */
 .catPage { padding-block: var(--sp-4) var(--section); display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -243,9 +424,10 @@
 .designs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 280px)); justify-content: center; gap: var(--sp-5) var(--sp-4); }
 .design {
   display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 0; border: 0; background: transparent;
-  color: var(--text); font: inherit; text-align: center; cursor: pointer;
+  color: var(--text); font: inherit; text-align: center; text-decoration: none; cursor: pointer;
 }
 .design:disabled { cursor: progress; }
+.design[data-soon='true'] { cursor: default; opacity: 0.6; pointer-events: none; }
 /* the printed card, like the ring's: paper edge, gilded rim, a sheen on hover */
 .designFace {
   position: relative; width: 100%; border-radius: var(--r-sm); overflow: hidden;
@@ -307,7 +489,7 @@
   box-shadow: 0 2px 0 rgba(176, 146, 98, 0.55), 0 18px 36px rgba(var(--shade), 0.26);
   transition: box-shadow 0.4s;
 }
-.rface::before, .designFace::before, .paper::before {
+.rface::before, .designFace::before {
   content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; padding: 1.5px; pointer-events: none;
   background: linear-gradient(135deg, #f6e7c1 0%, #b8904f 28%, #fff4d6 50%, #a37a3c 72%, #f1dcae 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -335,8 +517,6 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent 60%, #000 100%);
   mask-image: linear-gradient(to bottom, transparent 60%, #000 100%);
 }
-/* a whole design on paper (the story's reveal), not a cover cropped to the card */
-.rface[data-fit='contain'], .rmirror[data-fit='contain'] { background-size: contain; }
 /* no picture yet: a blank invitation, cream with a gold inner frame and the name in the middle */
 .rface[data-blank='true'] {
   background: radial-gradient(circle at 50% 35%, #fffaf0, #efe2c8 85%);
@@ -467,29 +647,19 @@
   .ribbon ul { font-size: 16px; gap: 8px 18px; }
   .ribbon li { gap: 18px; }
   .designs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-2); }
-  .storyStage { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); justify-items: center; }
-  /* on a phone the card stays small above the question, so both still show with the keyboard open */
-  .story { margin-top: 0; gap: var(--sp-2); }
-  .story .head .h2 { font-size: 28px; }
-  .story .head p { display: none; }
-  .paper { height: auto; width: min(180px, 100%); padding: 26px 14px; gap: 6px; }
-  .paper .paper_eyebrow { font-size: 11px; }
-  .paper_title { font-size: 19px; }
-  .paper_line { font-size: 13px; }
-  .paper .paper_small { font-size: 12px; }
-  .ask label { font-size: 22px; }
-  .ask .askInput { font-size: 22px; }
-  .ask { width: 100%; }
+  /* the strip scrolls sideways: its far end fades out, a hint that there is more */
+  .quickNav::after {
+    content: ''; position: absolute; inset-block: 0 1px; left: 0; z-index: 1; width: 36px; pointer-events: none;
+    background: linear-gradient(to right, rgba(248, 243, 234, 0.96), transparent);
+  }
+  .quickLink { font-size: 16px; }
   .designName { font-size: 17px; }
 }
 
 /* ---------------------------------------------------------- keyframes */
 @keyframes rise { from { opacity: 0; translate: 0 24px; } to { opacity: 1; translate: 0 0; } }
 @keyframes sheen { from { background-position: 160% 0; } to { background-position: -60% 0; } }
-@keyframes ink { from { opacity: 0; filter: blur(4px); transform: translateY(5px); } to { opacity: 1; filter: none; transform: none; } }
-@keyframes quill { to { visibility: hidden; } }
-@keyframes stamp { 0% { opacity: 0; transform: scale(1.7) rotate(-4deg); } 60% { opacity: 1; transform: scale(0.96); } 100% { transform: none; } }
-@keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes quickDrop { from { opacity: 0; translate: 0 -6px; } to { opacity: 1; translate: 0 0; } }
 @media (prefers-reduced-motion: reduce) {
   .root *, .root *::before, .root *::after { animation: none !important; transition: none !important; }
 }

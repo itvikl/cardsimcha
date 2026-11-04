@@ -1,3 +1,4 @@
+import { dropPoints, placePhoto, writeAd, type AdTexts } from './adText';
 import { applyBrand, applyColors, hasBrandRoles, type BrandColors } from './brand';
 import { copyThumbnail, newId } from './db';
 import { applyShabbat, hasShabbatRoles, type ShabbatTimes } from './shabbatDoc';
@@ -8,14 +9,18 @@ export type CopyOptions = {
   brand?: BrandKit | null;
   /** an event's own colours, for a simcha's set */
   colors?: BrandColors | null;
-  /** element id -> text, for the design's editable text fields only */
-  fill?: Record<string, unknown>;
   /** the week's times, for a design with Shabbat fields */
   times?: ShabbatTimes | null;
   /** a subscriber's copy doesn't carry the site's credit line */
   noCredit?: boolean;
   /** these copies were taken together from a series */
   seriesRun?: string;
+  /** the ad's words by field label, in place of the template's; a longer text takes a smaller size */
+  adTexts?: AdTexts;
+  /** a picture from the business's own catalog in place of the template's photograph */
+  photo?: { assetId: string; width: number; height: number };
+  /** the ad is about one product: the template's general list of points goes */
+  noPoints?: boolean;
 };
 
 /** A customer's own copy of a template, with what the server knows written in. The caller saves it. */
@@ -29,9 +34,12 @@ export async function copyTemplate(t: Project, ownerId: string, o: CopyOptions =
   if (o.colors && hasBrandRoles(t.canvas)) canvas = applyColors(canvas, o.colors);
   if (times) canvas = applyShabbat(canvas, times);
   if (o.noCredit) canvas = { ...canvas, elements: canvas.elements.filter((e) => !(e.type === 'text' && e.credit)) };
+  if (o.noPoints) canvas = dropPoints(canvas);
+  if (o.adTexts) canvas = writeAd(canvas, o.adTexts);
+  if (o.photo) canvas = placePhoto(canvas, o.photo);
 
   // the template's preview shows its sample details: a personal copy gets its own when it is first drawn
-  const personal = !!(brand || times || o.colors);
+  const personal = !!(brand || times || o.colors || o.adTexts || o.photo);
   const copy: Project = {
     id,
     kind: 'design',
@@ -48,12 +56,5 @@ export async function copyTemplate(t: Project, ownerId: string, o: CopyOptions =
     seriesRun: o.seriesRun,
     shabbatFor: times?.friday,
   };
-  for (const e of copy.canvas.elements) {
-    const text = o.fill?.[e.id];
-    if (e.type === 'text' && e.editable && typeof text === 'string') {
-      e.text = text.slice(0, 300);
-      copy.editedAt = now;
-    }
-  }
   return copy;
 }

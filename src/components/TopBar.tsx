@@ -77,9 +77,14 @@ export function TopBar() {
           )}
           <span className="spacer" />
           {!admin && pathname.startsWith('/business') && (
-            <Link className="btn small" href="/business/billing">
-              התוכנית שלי
-            </Link>
+            <>
+              <Link className="btn small" href="/business/catalog">
+                הקטלוג שלי
+              </Link>
+              <Link className="btn small" href="/business/billing">
+                התוכנית שלי
+              </Link>
+            </>
           )}
           {!admin && (
             <Link

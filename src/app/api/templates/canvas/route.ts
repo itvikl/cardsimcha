@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * The published designs of one category with their canvas, so the category page can draw each of them with the
- * visitor's details (the "story" reveal). Public like the gallery: a signed-in customer gets the same canvas
+ * business's details. Public like the gallery: a signed-in customer gets the same canvas
  * anyway when they open a copy. Image elements carry `src`, the URL of their picture, so no library access is needed.
  */
 export async function GET(req: Request) {

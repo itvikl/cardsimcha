@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getRow, readDb } from '@/lib/db';
+import { findRows, getRow, readDb } from '@/lib/db';
 import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { visibleImages } from '@/lib/brand';
 import { AGENT_ENABLED } from '@/lib/config';
 import { runAgent, type ChatTurn } from '@/lib/agent/run';
+import { businessBrief } from '@/lib/businessBrief';
 import { projectContext } from '@/lib/projectContext';
-import { professionOf } from '@/lib/professions';
 import type { AgentMode } from '@/lib/agent/tools';
 import type { CanvasDoc, Project } from '@/lib/types';
 
@@ -17,19 +17,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 150;
 
-/** What the assistant knows about a business's ad: the profession's worries and offers, and the business's own details. */
-async function businessBrief(project: Project, userId: string): Promise<string | undefined> {
+/** What the assistant knows about a business's ad; nothing for a private customer's card. */
+async function briefFor(project: Project, userId: string): Promise<string | undefined> {
   const { topic, audience } = await projectContext(project);
   if (audience !== 'business') return undefined;
-  const p = professionOf(topic);
-  const kit = await getRow('brands', userId);
-  return [
-    `Category: ${topic ?? 'general'}.`,
-    p && `The advertiser: ${p.who}.\nWhat their customers worry about: ${p.pains.join('; ')}.\nWhat they can offer: ${p.offers.join('; ')}.\nNever claim: ${p.avoid}`,
-    kit?.businessName && `The business: ${kit.businessName}${kit.slogan ? `, slogan: ${kit.slogan}` : ''}.`,
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const [kit, items] = await Promise.all([getRow('brands', userId), findRows('catalog', { ownerId: userId })]);
+  return businessBrief(topic, kit, items);
 }
 
 /**
@@ -65,7 +58,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const base = enforce(body?.canvas);
   if (!base) return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
 
-  const state = { doc: structuredClone(base), mode, images, categories: db.categories, changed: false, brief: await businessBrief(project, user.id) };
+  const state = { doc: structuredClone(base), mode, images, categories: db.categories, changed: false, brief: await briefFor(project, user.id) };
   try {
     const { reply } = await runAgent(state, message, history);
     const canvas = state.changed ? enforce(state.doc) : base;

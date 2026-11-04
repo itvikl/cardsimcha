@@ -12,8 +12,8 @@ import {
 } from 'react';
 import s from './festive.module.css';
 
-/** one card on the ring: its picture (cover-fitted), the name on its label, and a line under the ring for the front one */
-export type RingItem = { id: string; name: string; image: string | null; note?: string };
+/** one card on the ring: its picture (cover-fitted) and the name on its label */
+export type RingItem = { id: string; name: string; image: string | null };
 
 type Props = {
   items: RingItem[];
@@ -27,9 +27,6 @@ type Props = {
   openLabel: string;
   /** whenever another card comes to the front */
   onFront?: (item: RingItem) => void;
-  /** 'cover' fills the card with the picture and puts the name on a plaque (categories);
-   *  'contain' shows a whole design on paper, without a plaque (its name is under the ring) */
-  fit?: 'cover' | 'contain';
 };
 
 /** a ring looks empty below this, so fewer items are repeated (whole rounds of them) to fill it */
@@ -73,7 +70,7 @@ const sameIds = (a: RingItem[], b: RingItem[]) => a.length === b.length && a.eve
  * Drag (mouse or touch) with momentum, it settles on the nearest card; arrows and keys step it.
  * Everything per-frame is written to the DOM directly; React only re-renders when the front card or the set changes.
  */
-export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront, fit = 'cover' }: Props) {
+export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }: Props) {
   // the set on the ring lags behind `items` while the old cards turn over
   const [shown, setShown] = useState({ key: spinKey, items });
   const ring = useMemo(() => fill(shown.items), [shown]);
@@ -454,11 +451,11 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront, 
                     style={{ width: size.w, height: size.h, left: -size.w / 2 }}
                     aria-hidden="true"
                   >
-                    <div className={s.rface} style={bg} data-blank={!it.image} data-fit={fit}>
-                      {(fit === 'cover' || !it.image) && <span className={s.rlabel}>{it.name}</span>}
+                    <div className={s.rface} style={bg} data-blank={!it.image}>
+                      <span className={s.rlabel}>{it.name}</span>
                       <span className={s.rglare} />
                     </div>
-                    <div className={s.rmirror} style={bg} data-fit={fit} />
+                    <div className={s.rmirror} style={bg} />
                   </div>
                 );
               })}
@@ -485,7 +482,6 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront, 
         {current && (
           <span className={s.caption} aria-live="polite">
             <strong>{current.name}</strong>
-            {current.note && <span>{current.note}</span>}
           </span>
         )}
         {current && (

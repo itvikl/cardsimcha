@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Category, ImageAsset } from '@/lib/types';
 import { useMe } from '@/components/Auth';
-import { CATEGORIES, GENERAL_TOPIC, applyCarousel, audienceOf, defaultCards, type Audience, type CarouselSetting } from '@/lib/categories';
+import { CATEGORIES, GENERAL_TOPIC, applyCarousel, audienceOf, defaultCards, groupOf, type Audience, type CarouselSetting } from '@/lib/categories';
 import { DoorTurn, RevolvingDoor, useAdminDoor } from '@/components/RevolvingDoor';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null };
@@ -128,7 +128,7 @@ function CarouselManager() {
         body: JSON.stringify({ slides: rows }),
       });
       setDirty(false);
-      setNotice('נשמר. הקרוסלה בעמוד הבית מעודכנת.');
+      setNotice('נשמר. האתר מעודכן.');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -173,7 +173,11 @@ function CarouselManager() {
     <main className="page">
       <RevolvingDoor value={door} onChange={setDoor} />
       <h1>{door === 'business' ? 'קטגוריות בדלת "לעסק"' : 'קטגוריות בדלת "לשמחה"'}</h1>
-      <p className="sub">בחרו אילו קטגוריות יופיעו בעמוד הבית, באיזה סדר, איזו תמונה תוצג על כל אחת, ובאיזו דלת.</p>
+      <p className="sub">
+        {door === 'business'
+          ? 'בחרו אילו קטגוריות יופיעו בעמוד הבית, באיזה סדר, איזו תמונה תוצג על כל אחת, ובאיזו דלת.'
+          : 'בחרו אילו סוגי כרטיסים יופיעו במסכי הזמנות, איחולים ואירועים, באיזה סדר, ואיזו תמונה תוצג על כל אחד. שלושת הקלפים בקרוסלה עצמה קבועים.'}
+      </p>
 
       {error && <p className="error" role="alert">{error}</p>}
 
@@ -217,7 +221,7 @@ function CarouselManager() {
                   </strong>
                   <label className="row" style={{ gap: 6 }}>
                     <input type="checkbox" checked={!r.hidden} onChange={(e) => change(r.name, { hidden: !e.target.checked })} />
-                    מוצג בעמוד הבית
+                    {r.audience === 'private' ? `מוצג במסך ${groupOf(r.name).name}` : 'מוצג בעמוד הבית'}
                   </label>
                   <label className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
                     דלת:

@@ -5,11 +5,15 @@ import Link from 'next/link';
 import { Stage, Layer, Rect, Text, Image as KImage, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import type Konva from 'konva';
+import { checkAd, type AdIssue } from '@/lib/adCheck';
+import { AD_FORMATS, formatOfPage, MEDIUM_LABEL, type AdMedium } from '@/lib/adFormats';
 import { BRAND_COLOR_ROLES, BRAND_TEXT_ROLES, isBrandColorRole, isBrandTextRole } from '@/lib/brand';
 import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
 import { categoryHref, LOGO_TOPIC, type Audience } from '@/lib/categories';
 import { SHABBAT_TOPIC } from '@/lib/shabbatDoc';
+import { jpegToPdf } from '@/lib/pdf';
 import { formatPrice } from '@/lib/price';
+import { professionOf } from '@/lib/professions';
 import { VIDEO_WIDTH } from '@/lib/shabbatLoops';
 import { trimTransparent } from '@/lib/trimCanvas';
 import { newImage, newRect, newText } from '@/lib/elements';
@@ -56,9 +60,18 @@ const WORDS = {
     foot: 'שינויים נשמרים אוטומטית. כשמסיימים מורידים את המודעה כקובץ תמונה ושולחים אותה בעצמכם.',
     working: 'העוזר עובד על המודעה…',
     placeholder: 'למשל: מבצע לשבוע הקרוב, ניקוי מזגן לפני הקיץ',
-    suggestions: ['תציע לי שלושה כיוונים למודעה', 'חדד לי את הכותרת', 'קצר את הנוסח'],
+    suggestions: ['תציע לי שלושה כיוונים למודעה'],
   },
 } satisfies Record<Audience, unknown>;
+
+/** the business's buttons in the assistant: what they want from the ad, in their words */
+const AD_INTENTS = [
+  { label: 'כותרת חזקה יותר', prompt: 'כתוב כותרת קצרה וחזקה יותר למודעה, על בסיס מה שכבר כתוב בה. שנה רק את הכותרת.' },
+  { label: 'לקצר', prompt: 'קצר את הטקסטים במודעה ככל שאפשר, בלי לאבד את המסר ובלי לשנות את פרטי העסק.' },
+  { label: 'יותר יוקרתי', prompt: 'נסח מחדש את הטקסטים במודעה בטון יוקרתי ומכובד יותר. בלי להוסיף עובדות חדשות, ובלי לשנות את פרטי העסק.' },
+  { label: 'יותר חם ואישי', prompt: 'נסח מחדש את הטקסטים במודעה בטון חם ואישי יותר. בלי להוסיף עובדות חדשות, ובלי לשנות את פרטי העסק.' },
+  { label: 'קריאה לפעולה ברורה', prompt: 'כתוב קריאה לפעולה ברורה וקצרה יותר: מה בדיוק הקורא צריך לעשות. שנה רק את הקריאה לפעולה.' },
+];
 
 const normalize = (els: CanvasElement[]): CanvasElement[] => els.map((e, i) => ({ ...e, z: i }));
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
@@ -122,6 +135,14 @@ export default function Editor({ id }: { id: string }) {
   const [outOfDate, setOutOfDate] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
+  const [gifBusy, setGifBusy] = useState(false);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [sizes, setSizes] = useState<string[]>([]);
+  const [resizing, setResizing] = useState(false);
+  const [issues, setIssues] = useState<AdIssue[]>([]);
+  /** the download the business asked for, waiting while the ad check's findings are on the screen */
+  const [pending, setPending] = useState<(() => void) | null>(null);
   const [activeField, setActiveField] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -155,7 +176,8 @@ export default function Editor({ id }: { id: string }) {
       try {
         const [pRes, lRes] = await Promise.all([fetch(`/api/projects/${id}`), fetch('/api/library')]);
         if (!pRes.ok) throw new Error(pRes.status === 404 ? 'העיצוב לא נמצא' : 'טעינת העיצוב נכשלה');
-        const p: Project & { canManage: boolean; canAgent: boolean; topic: string | null; audience: Audience; billing: Billing; shabbatOutOfDate: boolean; hasVideo: boolean } = await pRes.json();
+        const p: Project & { canManage: boolean; canAgent: boolean; topic: string | null; audience: Audience; billing: Billing; shabbatOutOfDate: boolean; hasVideo: boolean; sizes: string[] } = await pRes.json();
+        setSizes(p.sizes);
         setBilling(p.billing);
         setOutOfDate(p.shabbatOutOfDate);
         setHasVideo(p.hasVideo);
@@ -201,6 +223,23 @@ export default function Editor({ id }: { id: string }) {
       alive = false;
     };
   }, []);
+
+  // ---- the ad check --------------------------------------------------------
+  const adDesign = audience === 'business' && !canManage && topic !== LOGO_TOPIC && topic !== SHABBAT_TOPIC;
+  useEffect(() => {
+    if (!adDesign || !doc) return;
+    // after the canvas drew the change: the check reads the real height of each text from it
+    const t = window.setTimeout(() => {
+      const stage = stageRef.current;
+      const measured: Record<string, number> = {};
+      for (const e of doc.elements) {
+        const node = e.type === 'text' ? stage?.findOne('#' + e.id) : null;
+        if (node) measured[e.id] = node.height() / PX;
+      }
+      setIssues(checkAd(doc, { risky: professionOf(topic)?.risky, measured }));
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [adDesign, doc, topic, fontsTick]);
 
   // ---- fit zoom ------------------------------------------------------------
   useEffect(() => {
@@ -511,7 +550,8 @@ export default function Editor({ id }: { id: string }) {
       pageRef.current?.visible(false);
       hidden.forEach((n) => n?.visible(false));
       stage.draw();
-      const overlay = stage.toCanvas({ pixelRatio: VIDEO_WIDTH / stage.width() });
+      // half a pixel over: the canvas truncates its size, and at most zooms the exact ratio comes out a pixel short of the video
+      const overlay = stage.toCanvas({ pixelRatio: (VIDEO_WIDTH + 0.5) / stage.width() });
       trRef.current?.visible(true);
       pageRef.current?.visible(true);
       hidden.forEach((n) => n?.visible(true));
@@ -537,6 +577,133 @@ export default function Editor({ id }: { id: string }) {
       push((e as Error).message || 'הכנת הסרטון נכשלה. נסו שוב.', 'error');
     } finally {
       setVideoBusy(false);
+    }
+  };
+
+  /** The design as an animated GIF: Shabbat designs get the moving background; business ads get a fade-in/out. */
+  const exportGif = async () => {
+    const stage = stageRef.current;
+    if (!stage || !doc || gifBusy) return;
+    setGifBusy(true);
+    const hidden = doc.elements.flatMap((e) => (e.type === 'image' && e.loopId ? [stage.findOne('#' + e.id)] : []));
+    try {
+      if (!(await mayDownload())) return;
+      trRef.current?.visible(false);
+      pageRef.current?.visible(false);
+      hidden.forEach((n) => n?.visible(false));
+      stage.draw();
+      const overlay = stage.toCanvas({ pixelRatio: (VIDEO_WIDTH + 0.5) / stage.width() });
+      trRef.current?.visible(true);
+      pageRef.current?.visible(true);
+      hidden.forEach((n) => n?.visible(true));
+      stage.draw();
+      const blob = await new Promise<Blob | null>((r) => overlay.toBlob(r, 'image/png'));
+      if (!blob) throw new Error();
+      const form = new FormData();
+      form.set('overlay', new File([blob], 'overlay.png', { type: 'image/png' }));
+      const res = await fetch(`/api/projects/${id}/gif`, { method: 'POST', body: form });
+      if (res.status === 402) {
+        setBilling(await res.json());
+        setPaywall(true);
+        return;
+      }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `${(name || 'עיצוב').replace(/[\\/:*?"<>|]/g, '_')}.gif`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      push('ה-GIF הורד למחשב. אפשר לשתף אותו ישירות.', 'success');
+    } catch (e) {
+      push((e as Error).message || 'הכנת ה-GIF נכשלה. נסו שוב.', 'error');
+    } finally {
+      setGifBusy(false);
+    }
+  };
+
+  /** All formats in one ZIP: PNG + WhatsApp JPEG + video (for digital designs). */
+  const exportZip = async () => {
+    const stage = stageRef.current;
+    if (!stage || !doc || zipBusy) return;
+    setZipBusy(true);
+    const hidden = doc.elements.flatMap((e) => (e.type === 'image' && e.loopId ? [stage.findOne('#' + e.id)] : []));
+    try {
+      if (!(await mayDownload())) return;
+      trRef.current?.visible(false);
+      pageRef.current?.visible(false);
+      hidden.forEach((n) => n?.visible(false));
+      stage.draw();
+      const overlay = stage.toCanvas({ pixelRatio: (VIDEO_WIDTH + 0.5) / stage.width() });
+      trRef.current?.visible(true);
+      pageRef.current?.visible(true);
+      hidden.forEach((n) => n?.visible(true));
+      stage.draw();
+      const blob = await new Promise<Blob | null>((r) => overlay.toBlob(r, 'image/png'));
+      if (!blob) throw new Error();
+      const form = new FormData();
+      form.set('overlay', new File([blob], 'overlay.png', { type: 'image/png' }));
+      const res = await fetch(`/api/projects/${id}/zip`, { method: 'POST', body: form });
+      if (res.status === 402) {
+        setBilling(await res.json());
+        setPaywall(true);
+        return;
+      }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = `${(name || 'עיצוב').replace(/[\\/:*?"<>|]/g, '_')}_קמפיין.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      push('הקמפיין המלא הורד — PNG, JPEG לוואטסאפ, וסרטון.', 'success');
+    } catch (e) {
+      push((e as Error).message || 'הכנת הקמפיין נכשלה. נסו שוב.', 'error');
+    } finally {
+      setZipBusy(false);
+    }
+  };
+
+  /** The ad as a PDF of its real size, at 300dpi, for a print shop. */
+  const exportPdf = async () => {
+    const stage = stageRef.current;
+    if (!stage || !doc || pdfBusy) return;
+    setPdfBusy(true);
+    await new Promise((r) => setTimeout(r, 40));
+    try {
+      if (!(await mayDownload())) return;
+      trRef.current?.visible(false);
+      stage.draw();
+      const drawn = stage.toCanvas({ pixelRatio: ((doc.page.width_mm / 25.4) * 300) / stage.width() });
+      trRef.current?.visible(true);
+      stage.draw();
+      const jpeg = await new Promise<Blob | null>((r) => drawn.toBlob(r, 'image/jpeg', 0.95));
+      if (!jpeg) throw new Error();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(jpegToPdf(new Uint8Array(await jpeg.arrayBuffer()), drawn.width, drawn.height, doc.page.width_mm, doc.page.height_mm));
+      a.download = `${(name || 'עיצוב').replace(/[\\/:*?"<>|]/g, '_')}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      push('הקובץ לדפוס הורד למחשב. אפשר לשלוח אותו לבית הדפוס.', 'success');
+    } catch {
+      push('לא הצלחנו להכין את הקובץ. נסו שוב.', 'error');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  /** The same ad in another size: a new design with the words as they stand now. */
+  const openSize = async (format: string) => {
+    const current = docRef.current;
+    if (!current || resizing) return;
+    setResizing(true);
+    try {
+      const texts = Object.fromEntries(current.elements.flatMap((e) => (e.type === 'text' && e.editable && e.label ? [[e.label, e.text]] : [])));
+      const res = await fetch(`/api/projects/${id}/resize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ format, texts }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error);
+      window.location.href = `/editor/${d.id}`;
+    } catch (e) {
+      push((e as Error).message || 'לא הצלחנו ליצור את המידה הזו. נסו שוב.', 'error');
+      setResizing(false);
     }
   };
 
@@ -644,6 +811,13 @@ export default function Editor({ id }: { id: string }) {
 
   const full = canManage;
   const words = WORDS[audience];
+  const pageFormat = formatOfPage(doc.page.width_mm, doc.page.height_mm);
+  const mustFix = issues.filter((i) => i.level === 'must');
+  /** a download goes through the ad check first: the business sees what it found, and decides */
+  const checked = (download: () => void) => () => {
+    if (adDesign && mustFix.length) setPending(() => download);
+    else download();
+  };
   const swappables = doc.elements.filter((e): e is Extract<CanvasElement, { type: 'image' }> => e.type === 'image' && !!e.swappable);
   const editableFields = doc.elements.filter((e): e is TextElement => e.type === 'text' && !!e.editable);
   const textEl = selected?.type === 'text' ? selected : null;
@@ -703,11 +877,26 @@ export default function Editor({ id }: { id: string }) {
           </>
         )}
         {hasVideo && !outOfDate && (
-          <button className="btn small" onClick={exportVideo} disabled={videoBusy}>
+          <button className="btn small" onClick={checked(exportVideo)} disabled={videoBusy}>
             {videoBusy ? 'מכין סרטון… (עד דקה)' : 'הורדת סרטון לסטטוס'}
           </button>
         )}
-        <button className="btn primary small shine" onClick={exportPng} disabled={exporting || outOfDate}>
+        {pageFormat?.medium === 'digital' && !outOfDate && (
+          <button className="btn small" onClick={checked(exportGif)} disabled={gifBusy}>
+            {gifBusy ? 'מכין GIF… (עד דקה)' : 'הורד GIF'}
+          </button>
+        )}
+        {!full && audience === 'business' && pageFormat?.medium === 'digital' && !outOfDate && (
+          <button className="btn small" onClick={checked(exportZip)} disabled={zipBusy}>
+            {zipBusy ? 'מכין קמפיין… (עד דקה)' : 'הורד קמפיין מלא (ZIP)'}
+          </button>
+        )}
+        {!full && audience === 'business' && pageFormat?.medium === 'print' && (
+          <button className="btn small" onClick={checked(exportPdf)} disabled={pdfBusy || outOfDate}>
+            {pdfBusy ? 'מכין קובץ…' : 'הורדה לדפוס (PDF)'}
+          </button>
+        )}
+        <button className="btn primary small shine" onClick={checked(exportPng)} disabled={exporting || outOfDate}>
           <DownloadIcon size={16} />
           {exporting ? 'מכין קובץ…' : full ? 'הורדת PNG (300dpi)' : words.download}
         </button>
@@ -722,6 +911,32 @@ export default function Editor({ id }: { id: string }) {
             </Link>
           </span>
         </p>
+      )}
+
+      {pending && (
+        <div className="paywall" role="dialog" aria-modal="true" aria-label="בדיקת המודעה">
+          <div className="paywall-card">
+            <h2>רגע לפני שמורידים</h2>
+            <p>מצאנו כמה דברים שכדאי לבדוק במודעה:</p>
+            <ul className="ad-issues">
+              {mustFix.map((i) => (
+                <li key={i.id}>{i.text}</li>
+              ))}
+            </ul>
+            <button className="btn primary" onClick={() => setPending(null)}>
+              חזרה לתיקון
+            </button>
+            <button
+              className="btn small"
+              onClick={() => {
+                pending();
+                setPending(null);
+              }}
+            >
+              להוריד בכל זאת
+            </button>
+          </div>
+        </div>
       )}
 
       {paywall && !billing.allowed && (
@@ -780,8 +995,53 @@ export default function Editor({ id }: { id: string }) {
                   onBusyChange={setAiBusy}
                   placeholder={words.placeholder}
                   suggestions={words.suggestions}
+                  intents={adDesign ? AD_INTENTS : []}
                   audience={audience}
                 />
+              </div>
+            )}
+            {adDesign && (
+              <div className="field-card ad-check" style={{ order: -1 }} aria-live="polite">
+                <span className="field-label">בדיקת המודעה</span>
+                {issues.length === 0 ? (
+                  <p className="status" style={{ margin: 0 }}>
+                    ✓ המודעה נראית מוכנה
+                  </p>
+                ) : (
+                  <ul className="ad-issues">
+                    {issues.map((i) => (
+                      <li key={i.id} className={i.level}>
+                        {i.text}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {!full && audience === 'business' && sizes.length > 1 && (
+              <div className="field-card size-picker" style={{ order: -1 }}>
+                <span className="field-label">אותה מודעה במידה אחרת</span>
+                {(['digital', 'print'] as AdMedium[]).map((m) => {
+                  const list = AD_FORMATS.filter((f) => f.medium === m && sizes.includes(f.id));
+                  return (
+                    list.length > 0 && (
+                      <div key={m} className="size-group" role="group" aria-label={MEDIUM_LABEL[m]}>
+                        <span className="status">{MEDIUM_LABEL[m]}:</span>
+                        {list.map((f) =>
+                          f.id === pageFormat?.id ? (
+                            <span key={f.id} className="btn small size-current" aria-current="true">
+                              {f.label}
+                            </span>
+                          ) : (
+                            <button key={f.id} type="button" className="btn small" disabled={resizing} onClick={() => openSize(f.id)}>
+                              {f.label}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    )
+                  );
+                })}
               </div>
             )}
             {editableFields.length === 0 && swappables.length === 0 ? (

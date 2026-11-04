@@ -1,3 +1,4 @@
+import { formatOfPage } from './adFormats';
 import type { Project } from './types';
 
 export const summarize = (p: Project) => ({
@@ -6,6 +7,7 @@ export const summarize = (p: Project) => ({
   status: p.status,
   name: p.name,
   topic: p.topic ?? null,
+  audience: formatOfPage(p.canvas.page.width_mm, p.canvas.page.height_mm) ? 'business' : 'private',
   price: p.price ?? null,
   series: p.series ?? null,
   updatedAt: p.updatedAt,

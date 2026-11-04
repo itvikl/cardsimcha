@@ -36,6 +36,7 @@ export function AgentPanel({
   onBusyChange,
   placeholder,
   suggestions = [],
+  intents = [],
   audience = 'private',
 }: {
   projectId: string;
@@ -45,6 +46,8 @@ export function AgentPanel({
   onBusyChange?: (busy: boolean) => void;
   placeholder: string;
   suggestions?: string[];
+  /** one-click requests that stay available through the conversation: the button's words, and what it asks of the assistant */
+  intents?: { label: string; prompt: string }[];
   audience?: Audience;
 }) {
   const words = WORDS[audience];
@@ -68,13 +71,13 @@ export function AgentPanel({
     return () => window.clearInterval(t);
   }, [busy, onBusyChange, STEPS.length]);
 
-  const send = async (text = input) => {
+  const send = async (text = input, shown = text) => {
     const message = text.trim();
     const canvas = getDoc();
     if (!message || busy || !canvas) return;
     setBusy(true);
     setInput('');
-    setTurns((t) => [...t, { role: 'user', text: message }]);
+    setTurns((t) => [...t, { role: 'user', text: shown.trim() }]);
     try {
       const res = await fetch(`/api/projects/${projectId}/agent`, {
         method: 'POST',
@@ -88,7 +91,7 @@ export function AgentPanel({
     } catch (e) {
       push((e as Error).message, 'error');
       setTurns((t) => t.slice(0, -1));
-      setInput(message);
+      if (shown === text) setInput(message);
     } finally {
       setBusy(false);
     }
@@ -140,6 +143,16 @@ export function AgentPanel({
             <button key={s} type="button" onClick={() => send(s)}>
               <SparkIcon />
               {s}
+            </button>
+          ))}
+        </div>
+      )}
+      {intents.length > 0 && (
+        <div className="agent-chips" role="group" aria-label="שינוי מהיר">
+          {intents.map((i) => (
+            <button key={i.label} type="button" disabled={busy} onClick={() => send(i.prompt, i.label)}>
+              <SparkIcon />
+              {i.label}
             </button>
           ))}
         </div>

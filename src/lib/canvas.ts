@@ -58,7 +58,8 @@ export function validateDoc(input: unknown): CanvasDoc | null {
       if (e.colorOverride !== undefined && !isColor(e.colorOverride)) return null;
       if (e.swapCategoryId !== undefined && (typeof e.swapCategoryId !== 'string' || e.swapCategoryId.length > 64)) return null;
       if (e.label !== undefined && (typeof e.label !== 'string' || e.label.length > 60)) return null;
-      if (e.role !== undefined && e.role !== 'logo') return null;
+      if (e.role !== undefined && e.role !== 'logo' && e.role !== 'photo') return null;
+      if (e.photoBox !== undefined && !(isNum(e.photoBox?.x_mm) && isNum(e.photoBox.y_mm) && isNum(e.photoBox.w_mm, 1, 2000) && isNum(e.photoBox.h_mm, 1, 2000))) return null;
       if (e.loopId !== undefined && !isLoopId(e.loopId)) return null;
       elements.push({ ...e });
     } else if (e.type === 'rect') {

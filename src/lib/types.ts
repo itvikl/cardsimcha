@@ -71,8 +71,10 @@ export type ImageElement = {
   colorOverride?: string;
   /** name shown to the customer, e.g. "רקע" */
   label?: string;
-  /** a business's copy shows its own logo here, fitted inside this box */
-  role?: 'logo';
+  /** `logo`: a business's copy shows its own logo here, fitted inside this box. `photo`: a picture from its catalog can go here */
+  role?: 'logo' | 'photo';
+  /** a `photo`'s visible place: a picture covers it, and whatever it overflows is hidden by what is drawn over it */
+  photoBox?: { x_mm: number; y_mm: number; w_mm: number; h_mm: number };
   /** in the design's video, this picture is replaced by that moving background (see shabbatLoops.ts) */
   loopId?: string;
 };
@@ -136,6 +138,8 @@ export type Project = {
   price?: number;
   /** templates sharing this name are one series: a customer can take them all at once (templates only) */
   series?: string;
+  /** templates sharing this are one ad in different sizes; only the one that also has a `series` shows in the plain gallery (templates only) */
+  sizeGroup?: string;
   /** designs only: the copies made together from a series share this, and are paid for together */
   seriesRun?: string;
   /** designs only: the Friday (YYYY-MM-DD) whose Shabbat times were written in; after it the design is out of date */
@@ -174,8 +178,34 @@ export type BrandKit = {
   primaryColor: string;
   secondaryColor: string;
   logo?: { assetId: string; file: string; width: number; height: number };
+  /** what the business tells about itself, so an ad can say true and specific things */
+  profile?: BusinessProfile;
   updatedAt: string;
 };
+
+export type BusinessProfile = {
+  services: string;
+  area: string;
+  experience: string;
+  promise: string;
+  reviews: string;
+};
+
+/** A product, project or service a business keeps ready for its ads. Only its owner sees it. */
+export type CatalogItem = {
+  id: string;
+  ownerId: string;
+  name: string;
+  details: string;
+  /** as the business writes it, e.g. "2,490 ₪ כולל התקנה" */
+  price: string;
+  photo?: { assetId: string; file: string; width: number; height: number };
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** How many ads a user asked the system to write on one day; its id is "<user id>:<YYYY-MM-DD>". */
+export type DailyUse = { id: string; count: number };
 
 /** A customer's monthly plan. Each user has at most one: its id is the user's id. */
 export type Subscription = {
@@ -206,6 +236,8 @@ export type Purchase = {
 };
 
 export type Db = {
+  catalog: CatalogItem[];
+  usage: DailyUse[];
   subscriptions: Subscription[];
   purchases: Purchase[];
   brands: BrandKit[];

@@ -47,36 +47,62 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!e.allowed) return NextResponse.json(e, { status: 402 });
 
   const loop = project.canvas.elements.flatMap((el) => (el.type === 'image' && isLoopId(el.loopId) ? [el.loopId] : []))[0];
-  if (!loop) return NextResponse.json({ error: 'לעיצוב הזה אין רקע מונפש' }, { status: 400 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get('overlay');
   if (!(file instanceof File) || file.size > MAX_OVERLAY) return NextResponse.json({ error: 'קובץ לא תקין' }, { status: 400 });
   const overlay = Buffer.from(await file.arrayBuffer());
   const size = pngSize(overlay);
-  if (size?.width !== VIDEO_WIDTH || size.height !== VIDEO_HEIGHT) return NextResponse.json({ error: 'קובץ לא תקין' }, { status: 400 });
+  if (!size) return NextResponse.json({ error: 'קובץ לא תקין' }, { status: 400 });
+  if (loop && (size.width !== VIDEO_WIDTH || size.height !== VIDEO_HEIGHT))
+    return NextResponse.json({ error: 'קובץ לא תקין' }, { status: 400 });
 
-  const dir = await mkdtemp(path.join(tmpdir(), 'shabbat-video-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'card-video-'));
   const run = queue.then(async () => {
     const overlayPath = path.join(dir, 'overlay.png');
     const out = path.join(dir, 'out.mp4');
     await writeFile(overlayPath, overlay);
-    await ffmpeg([
-      '-y',
-      '-stream_loop', '-1',
-      '-i', path.join(process.cwd(), 'public', 'shabbat', `${loop}.mp4`),
-      '-i', overlayPath,
-      '-filter_complex', `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},setsar=1[bg];[bg][1:v]overlay=0:0,format=yuv420p[v]`,
-      '-map', '[v]',
-      '-t', String(SECONDS),
-      '-r', '30',
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '23',
-      '-movflags', '+faststart',
-      '-an',
-      out,
-    ]);
+
+    if (loop) {
+      // Shabbat: animated loop under the design overlay
+      await ffmpeg([
+        '-y',
+        '-stream_loop', '-1',
+        '-i', path.join(process.cwd(), 'public', 'shabbat', `${loop}.mp4`),
+        '-i', overlayPath,
+        '-filter_complex', `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},setsar=1[bg];[bg][1:v]overlay=0:0,format=yuv420p[v]`,
+        '-map', '[v]',
+        '-t', String(SECONDS),
+        '-r', '30',
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '23',
+        '-movflags', '+faststart',
+        '-an',
+        out,
+      ]);
+    } else {
+      // Business ad: design centered on a blurred version of itself (9:16 portrait)
+      await ffmpeg([
+        '-y',
+        '-loop', '1',
+        '-t', String(SECONDS),
+        '-i', overlayPath,
+        '-filter_complex',
+        `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},boxblur=35:35,setsar=1[bg];` +
+        `[0:v]scale=${VIDEO_WIDTH}:-2:flags=lanczos[fg];` +
+        `[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]`,
+        '-map', '[v]',
+        '-t', String(SECONDS),
+        '-r', '30',
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '23',
+        '-movflags', '+faststart',
+        '-an',
+        out,
+      ]);
+    }
     return readFile(out);
   });
   queue = run.catch(() => undefined);

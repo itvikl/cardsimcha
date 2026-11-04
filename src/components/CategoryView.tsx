@@ -1,28 +1,34 @@
 'use client';
 
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMe } from './Auth';
 import { flyCard, landCard } from './CardFlight';
+import { ComposeAd } from './ComposeAd';
 import { SiteFooter } from './SiteFooter';
 import { setMood } from './SiteBackdrop';
-import { StoryTable } from './StoryTable';
+import { TryAd } from './TryAd';
 import s from './festive.module.css';
+import { AD_FORMATS, formatOfPage, MEDIUM_LABEL, type AdMedium } from '@/lib/adFormats';
+import { dropPoints, itemTexts, placePhoto, writeAd } from '@/lib/adText';
 import { brandPreview, hasBrandRoles } from '@/lib/brand';
-import { GENERAL_TOPIC, type Audience } from '@/lib/categories';
+import { clearBrandDraft, draftKit, readBrandDraft, saveBrandDraft, type BrandDraft } from '@/lib/brandDraft';
+import { GENERAL_TOPIC, groupHref, groupOf, LOGO_TOPIC, type Audience } from '@/lib/categories';
+import { moodOf } from '@/lib/mood';
 import { formatPrice } from '@/lib/price';
 import { professionOf } from '@/lib/professions';
 import { renderCard, type DrawableDoc } from '@/lib/renderCard';
 import { applyShabbat, hasShabbatRoles, SHABBAT_CITIES, SHABBAT_TOPIC, type ShabbatTimes } from '@/lib/shabbatDoc';
-import { INVITATION_WORDS, moodOf, storyOf } from '@/lib/story';
 import { takeSeries } from '@/lib/takeSeries';
-import type { BrandKit } from '@/lib/types';
+import type { BrandKit, CatalogItem } from '@/lib/types';
 
-type Published = { id: string; name: string; topic: string | null; price: number | null; series: string | null; width_mm: number; height_mm: number; thumbnail: string | null };
+type Published = { id: string; name: string; topic: string | null; price: number | null; series: string | null; sizeGroup: string | null; width_mm: number; height_mm: number; thumbnail: string | null };
 
 /** what a design's shape is for */
 function formatOf(t: Published) {
+  const known = formatOfPage(t.width_mm, t.height_mm);
+  if (known) return known.label;
   const ratio = t.width_mm / t.height_mm;
   if (ratio < 0.65) return 'סטטוס';
   if (ratio > 0.9 && ratio < 1.1) return 'פוסט';
@@ -30,6 +36,14 @@ function formatOf(t: Published) {
 }
 
 const CITY_KEY = 'shabbat-city';
+
+/** saves what was typed as the business's kit */
+async function saveKit(draft: BrandDraft): Promise<BrandKit> {
+  const res = await fetch('/api/brand', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || 'השמירה נכשלה');
+  return d;
+}
 
 /**
  * A category's page, reached from the home page's ring: all its designs as printed cards.
@@ -42,14 +56,18 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
   const [items, setItems] = useState<Published[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const home = audience === 'business' ? '/business' : '/';
-  // a simcha with a story opens on its writing table (StoryTable); the plain gallery is one click away
-  const story = audience === 'private' ? storyOf(topic) : null;
-  const [gallery, setGallery] = useState(!story);
+  // back goes where the customer came from: the business door, or this kind's group on the private side
+  const group = groupOf(topic);
+  const home = audience === 'business' ? '/business' : groupHref(group.id);
   // a business with a brand kit sees each design drawn with its own logo and details: template id -> picture
   const [brand, setBrand] = useState<BrandKit | null>(null);
   const [branded, setBranded] = useState<Record<string, string>>({});
   const [format, setFormat] = useState<string | null>(null);
+  const [canvases, setCanvases] = useState<{ id: string; canvas: DrawableDoc }[]>([]);
+  // the business's own catalog, and the item chosen to go on every ad of the page
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [itemId, setItemId] = useState('');
+  const item = catalog.find((i) => i.id === itemId) ?? null;
   // the Shabbat category: the chosen city and its coming Shabbat, written into every design of the page
   const isShabbat = topic === SHABBAT_TOPIC;
   const [city, setCity] = useState(SHABBAT_CITIES[0].id);
@@ -77,31 +95,49 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
     };
   }, [isShabbat, city]);
 
+  // the kit: the signed-in business's own, or what a visitor tried the page with. Details tried before signing up become the kit now.
   useEffect(() => {
-    if (audience !== 'business' || (isShabbat && !times)) return;
+    if (audience !== 'business') return;
     let alive = true;
     (async () => {
-      const found = me ? ((await fetch('/api/brand').then((r) => (r.ok ? r.json() : null))) as BrandKit | null) : null;
-      const kit = found?.businessName ? found : null;
-      if (!alive) return;
-      setBrand(kit);
-      if (!kit && !isShabbat) return;
-      const res = await fetch(`/api/templates/canvas?topic=${encodeURIComponent(topic)}`);
-      if (!res.ok) return;
-      for (const d of (await res.json()) as { id: string; canvas: DrawableDoc }[]) {
-        if (!alive) return;
-        const useKit = kit && hasBrandRoles(d.canvas);
-        const useTimes = times && hasShabbatRoles(d.canvas);
-        if (!useKit && !useTimes) continue;
-        const withKit = useKit ? brandPreview(d.canvas, kit) : d.canvas;
-        const image = await renderCard(useTimes ? applyShabbat(withKit, times) : withKit).catch(() => null);
-        if (alive && image) setBranded((b) => ({ ...b, [d.id]: image }));
+      const draft = readBrandDraft();
+      if (!me) {
+        setBrand(draft ? draftKit(draft) : null);
+        return;
       }
+      let found = (await fetch('/api/brand').then((r) => (r.ok ? r.json() : null))) as BrandKit | null;
+      if (!found?.businessName && draft) found = await saveKit(draft);
+      clearBrandDraft();
+      if (alive) setBrand(found?.businessName ? found : null);
+      const items = (await fetch('/api/catalog').then((r) => (r.ok ? r.json() : []))) as CatalogItem[];
+      if (alive) setCatalog(items);
     })().catch(() => {}); // the plain gallery still works
     return () => {
       alive = false;
     };
-  }, [audience, me, topic, isShabbat, times]);
+  }, [audience, me]);
+
+  const needsDrawing = audience === 'business' && (!!brand || (isShabbat && !!times));
+  useEffect(() => {
+    if (!needsDrawing) return;
+    let alive = true;
+    fetch(`/api/templates/canvas?topic=${encodeURIComponent(topic)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { id: string; canvas: DrawableDoc }[]) => alive && setCanvases(list))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [needsDrawing, topic]);
+
+  const shownIds = useRef<Set<string>>(new Set());
+  const drawn = useRef<Set<string>>(new Set());
+  const picture = JSON.stringify([brand?.businessName, brand?.phone, brand?.slogan, brand?.primaryColor, brand?.secondaryColor, brand?.logo?.file, times?.candles, times?.city, itemId]);
+  // a change of details redraws every design
+  useEffect(() => {
+    drawn.current = new Set();
+    setBranded({});
+  }, [picture]);
 
   // the site takes on this simcha's light while its page is open
   useEffect(() => {
@@ -122,8 +158,8 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
 
   async function open(t: Published, e: MouseEvent<HTMLButtonElement>) {
     if (!me) {
-      // the times depend on the city chosen here, so a Shabbat design comes back to this page after signing in
-      router.push(isShabbat ? `/login?next=${encodeURIComponent(window.location.pathname)}` : `/t/${t.id}`);
+      // the times depend on the city chosen here, and the details tried here wait to become the kit: both come back to this page after signing in
+      router.push(isShabbat || brand ? `/login?next=${encodeURIComponent(window.location.pathname)}` : `/t/${t.id}`);
       return;
     }
     setBusy(true);
@@ -135,7 +171,7 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: t.id, useBrand: !!brand, shabbatCity: isShabbat ? city : undefined }),
+        body: JSON.stringify({ templateId: t.id, useBrand: !!brand, shabbatCity: isShabbat ? city : undefined, itemId: item?.id }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'לא הצלחנו לפתוח את העיצוב');
@@ -165,7 +201,48 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
   }
 
   const formats = [...new Set((items ?? []).map(formatOf))];
-  const shown = (items ?? []).filter((t) => !format || formatOf(t) === format);
+  // one ad comes in several sizes: until a size is chosen, each ad shows once
+  const shown = useMemo(() => (items ?? []).filter((t) => (format ? formatOf(t) === format : !t.sizeGroup || t.series)), [items, format]);
+  const shownKey = shown.map((t) => t.id).join();
+  shownIds.current = new Set(shown.map((t) => t.id));
+  // draws what is on the screen, one at a time: a category can hold dozens of designs in all its sizes
+  useEffect(() => {
+    if (!canvases.length) return;
+    let alive = true;
+    (async () => {
+      for (const d of canvases) {
+        if (!alive) return;
+        if (!shownIds.current.has(d.id) || drawn.current.has(d.id)) continue;
+        const useKit = brand && hasBrandRoles(d.canvas);
+        const useTimes = times && hasShabbatRoles(d.canvas);
+        if (!useKit && !useTimes && !item) continue;
+        let doc = useKit ? brandPreview(d.canvas, brand) : d.canvas;
+        if (useTimes) doc = applyShabbat(doc, times);
+        if (item) {
+          doc = writeAd(dropPoints(doc), itemTexts(item));
+          if (item.photo) doc = placePhoto(doc, { ...item.photo, src: `/api/uploads/${item.photo.file}` });
+        }
+        const image = await renderCard(doc).catch(() => null);
+        if (!alive) return;
+        drawn.current.add(d.id);
+        if (image) setBranded((b) => ({ ...b, [d.id]: image }));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvases, picture, shownKey]);
+
+  /** what a visitor or a business without a kit typed: signed in it is saved, and otherwise it stays in this browser */
+  async function tryDetails(draft: BrandDraft) {
+    if (me) setBrand(await saveKit(draft));
+    else {
+      saveBrandDraft(draft);
+      setBrand(draftKit(draft));
+    }
+  }
+
   const allSeries = [...new Set((items ?? []).flatMap((t) => (t.series ? [t.series] : [])))];
   const profession = professionOf(topic);
 
@@ -175,15 +252,15 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
       <div className={`${s.head} ${s.rise}`}>
         <span className={s.eyebrow}>קטגוריה</span>
         <h1 className={s.h2}>{topic}</h1>
-        {items && items.length > 0 && <p>{items.length === 1 ? 'עיצוב אחד' : `${items.length} עיצובים`}. בחרו אחד, והוא נפתח בעורך.</p>}
-        {story && (
-          <button type="button" className={s.back} onClick={() => setGallery(false)}>
-            ✎ לכתוב את {(story.words ?? INVITATION_WORDS).one} שלכם
-          </button>
-        )}
+        {items && items.length > 0 && <p>{shown.length === 1 ? 'עיצוב אחד' : `${shown.length} עיצובים`}. בחרו אחד, והוא נפתח בעורך.</p>}
         {audience === 'business' && (
           <Link className={s.back} href="/business/brand">
             {brand ? `✎ המיתוג של ${brand.businessName}` : '✎ להוסיף לוגו ופרטי עסק לכל העיצובים'}
+          </Link>
+        )}
+        {profession && !!me && (
+          <Link className={s.back} href="/business/catalog">
+            ✎ {catalog.length ? 'הקטלוג שלי' : 'להוסיף מוצרים ותמונות משלכם'}
           </Link>
         )}
         {profession && (
@@ -191,16 +268,39 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
             ✉ הודעות פרסום מוכנות ל{profession.topic}
           </Link>
         )}
-        {audience === 'business' &&
-          allSeries.map((name) => {
-            const n = (items ?? []).filter((t) => t.series === name).length;
-            return (
-              <button key={name} type="button" className={`${s.btn} ${s.dark}`} disabled={busy} onClick={() => takeAll(name)}>
-                {busy ? 'מכין…' : `לקחת את כל הסדרה (${n} מודעות) ←`}
-              </button>
-            );
-          })}
+        {allSeries.map((name) => {
+          const n = (items ?? []).filter((t) => t.series === name).length;
+          return (
+            <button key={name} type="button" className={`${s.btn} ${s.dark}`} disabled={busy} onClick={() => takeAll(name)}>
+              {busy ? 'מכין…' : `לקחת את כל הסדרה (${n} ${audience === 'business' ? 'מודעות' : 'פריטים'}) ←`}
+            </button>
+          );
+        })}
       </div>
+
+      {audience === 'business' && !brand && topic !== LOGO_TOPIC && !isShabbat && <TryAd signedIn={!!me} onSubmit={tryDetails} />}
+
+      {profession && (
+        <div className={s.composeBar}>
+          <ComposeAd topic={topic} signedIn={!!me} kit={brand} items={catalog} />
+        </div>
+      )}
+
+      {profession && catalog.length > 0 && (
+        <div className={`card ${s.shabbatBar}`}>
+          <label className="field">
+            מוצר או שירות על המודעות
+            <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
+              <option value="">בלי, הנוסח המוכן של המודעה</option>
+              {catalog.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
 
       {isShabbat && (
         <div className={`card ${s.shabbatBar}`}>
@@ -227,16 +327,33 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
         </div>
       )}
 
-      {formats.length > 1 && (
-        <nav className={s.filters} aria-label="סינון לפי פורמט">
+      {formats.length > 1 && topic !== LOGO_TOPIC && (
+        <nav className={s.filters} aria-label="סינון לפי מידה">
           <button type="button" className={s.filter} aria-pressed={format === null} onClick={() => setFormat(null)}>
             הכול
           </button>
-          {formats.map((f) => (
-            <button key={f} type="button" className={s.filter} aria-pressed={format === f} onClick={() => setFormat(f)}>
-              {f}
-            </button>
-          ))}
+          {(['digital', 'print'] as AdMedium[]).map((m) => {
+            const list = AD_FORMATS.filter((f) => f.medium === m && formats.includes(f.label));
+            return (
+              list.length > 0 && (
+                <span key={m} className={s.filterGroup} role="group" aria-label={MEDIUM_LABEL[m]}>
+                  <span className={s.filterLabel}>{MEDIUM_LABEL[m]}</span>
+                  {list.map((f) => (
+                    <button key={f.id} type="button" className={s.filter} aria-pressed={format === f.label} onClick={() => setFormat(f.label)}>
+                      {f.label}
+                    </button>
+                  ))}
+                </span>
+              )
+            );
+          })}
+          {formats
+            .filter((f) => !AD_FORMATS.some((x) => x.label === f))
+            .map((f) => (
+              <button key={f} type="button" className={s.filter} aria-pressed={format === f} onClick={() => setFormat(f)}>
+                {f}
+              </button>
+            ))}
         </nav>
       )}
 
@@ -259,7 +376,7 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
           <strong>עוד אין כאן עיצובים</strong>
           <span>אנחנו מכינים עיצובים חדשים לקטגוריה הזו. בינתיים אפשר להציץ בקטגוריות האחרות.</span>
           <Link className={`${s.btn} ${s.dark}`} href={home}>
-            לכל הקטגוריות
+            {audience === 'business' ? 'לכל הקטגוריות' : `ל${group.name}`}
           </Link>
         </div>
       ) : (
@@ -285,9 +402,9 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
     <div className={audience === 'business' ? `${s.root} ${s.business}` : s.root}>
       <section className={`${s.wrap} ${s.catPage}`}>
         <Link className={s.back} href={home}>
-          → כל הקטגוריות
+          → {audience === 'business' ? 'כל הקטגוריות' : group.name}
         </Link>
-        {story && !gallery ? <StoryTable topic={topic} story={story} onSkip={() => setGallery(true)} /> : galleryView}
+        {galleryView}
       </section>
       <SiteFooter />
     </div>

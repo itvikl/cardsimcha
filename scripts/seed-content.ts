@@ -4,6 +4,7 @@
  *
  *   npm run seed:content                 published right away
  *   npm run seed:content -- --draft      as drafts, for the client to review first
+ *   npm run seed:content -- --force=ad:  writes again only the designs whose key starts with that
  *
  * New templates have no preview picture: the editor makes one the first time an admin opens them.
  * The wording comes from src/lib/professions.ts and needs the client's approval before going live.
@@ -12,6 +13,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { AD_FORMATS } from '../src/lib/adFormats';
+import { heightOf, linesOf } from '../src/lib/adText';
 import { brandColor } from '../src/lib/brand';
 import { validateDoc } from '../src/lib/canvas';
 import { audienceOf, CATEGORIES, LOGO_TOPIC } from '../src/lib/categories';
@@ -21,6 +24,7 @@ import { SHABBAT_TOPIC } from '../src/lib/shabbatDoc';
 import type { BrandColorRole, BrandTextRole, CanvasDoc, CanvasElement, Category, ImageAsset, Project, ShabbatTextRole, TextElement } from '../src/lib/types';
 
 const FORCE = process.argv.includes('--force');
+const FORCE_PREFIX = process.argv.find((a) => a.startsWith('--force='))?.slice('--force='.length);
 const STATUS: Project['status'] = process.argv.includes('--draft') ? 'draft' : 'published';
 const ASSETS = path.join(process.cwd(), 'scripts', 'seed-assets');
 
@@ -152,6 +156,13 @@ function cover(asset: ImageAsset, x: number, y: number, w: number, h: number, ex
   return { id: nextId(), type: 'image', x_mm: x + (w - iw) / 2, y_mm: y + (h - ih) / 2, w_mm: iw, h_mm: ih, rotation: 0, z: 0, asset_id: asset.id, ...extra };
 }
 
+/** an ad's photograph: the same, marked so a picture from the business's catalog can take its place */
+const adCover = (asset: ImageAsset, x: number, y: number, w: number, h: number): CanvasElement => ({
+  ...cover(asset, x, y, w, h),
+  role: 'photo',
+  photoBox: { x_mm: x, y_mm: y, w_mm: w, h_mm: h },
+} as CanvasElement);
+
 type Logos = ImageAsset[];
 
 /** the place of the business's logo, showing the sample whose shape is closest to the box */
@@ -160,21 +171,6 @@ const logoBox = (logos: Logos, x: number, y: number, w: number, h: number): Canv
   const asset = logos.reduce((best, a) => (distance(a) < distance(best) ? a : best));
   return { id: nextId(), type: 'image', x_mm: x, y_mm: y, w_mm: w, h_mm: h, rotation: 0, z: 0, asset_id: asset.id, role: 'logo' };
 };
-
-/** how many lines a text takes (a measure good enough to lay out what follows it) */
-function linesOf(t: string, sizePt: number, widthMm: number) {
-  const perLine = Math.max(1, Math.floor(widthMm / (sizePt * PT_TO_MM * 0.56)));
-  let lines = 1;
-  let used = 0;
-  for (const word of t.split(/\s+/)) {
-    if (used && used + 1 + word.length > perLine) {
-      lines++;
-      used = word.length;
-    } else used += (used ? 1 : 0) + word.length;
-  }
-  return lines;
-}
-const heightOf = (t: string, sizePt: number, widthMm: number) => linesOf(t, sizePt, widthMm) * sizePt * PT_TO_MM * 1.25;
 
 /** the largest headline size, from `base` down to two thirds of it, that takes no more than `room` mm; null when none does */
 function fitHeadline(t: string, base: number, widthMm: number, room: number) {
@@ -191,7 +187,9 @@ function doc(width_mm: number, height_mm: number, background: string, elements: 
 type Format = { w: number; h: number; u: number; fs: number; photo: number };
 const STORY: Format = { w: 108, h: 192, u: 1, fs: 1, photo: 0.44 };
 const SQUARE: Format = { w: 200, h: 200, u: 1.85, fs: 1.42, photo: 0.34 };
-const A4: Format = { w: 210, h: 297, u: 1.94, fs: 1.85, photo: 0.4 };
+const A4: Format = { w: 210, h: 297, u: 1.94, fs: 1.85, photo: 0.33 };
+const A5: Format = { w: 148, h: 210, u: 1.37, fs: 1.305, photo: 0.33 };
+const A6: Format = { w: 105, h: 148, u: 0.97, fs: 0.925, photo: 0.33 };
 
 /** the business's details at the foot of an ad */
 function contactBar(f: Format, y: number, on: BrandColorRole): CanvasElement[] {
@@ -248,7 +246,7 @@ function adPhoto(f: Format, ad: AdCopy, photo: ImageAsset, logo: Logos): CanvasD
   const withList = fitHeadline(ad.headline, 25 * fs, width, room - listH);
   const headSize = withList ?? fitHeadline(ad.headline, 25 * fs, width, room) ?? 16 * fs;
   const els: CanvasElement[] = [
-    cover(photo, 0, 0, w, top + 4),
+    adCover(photo, 0, 0, w, top + 4),
     rect(0, top, w, h - top, '#14336B', { colorRole: 'primaryColor' }),
     rect(0, top - 1.6 * fs, w, 3.2 * fs, '#E8A33D', { colorRole: 'secondaryColor' }),
     rect(w - margin - chipW, margin, chipW, chipH, '#FFFFFF', { radius: 3.5 * u, logoPlate: true }),
@@ -320,7 +318,7 @@ function adList(f: Format, ad: AdCopy, photo: ImageAsset, logo: Logos): CanvasDo
   const bottom = h - barH;
   // the photo goes first, under everything: the white above it and the bar below it hide whatever it overflows
   const photoRoom = bottom - y;
-  const under = photoRoom > 24 * fs ? [cover(photo, 0, y, w, photoRoom)] : [];
+  const under = photoRoom > 24 * fs ? [adCover(photo, 0, y, w, photoRoom)] : [];
   const els = [...under, rect(0, 0, w, y, '#FFFFFF'), ...top, ...pill(f, bottom - 15.5 * fs, ad.cta), rect(0, bottom, w, barH, '#14336B', { colorRole: 'primaryColor' }), ...contactBar(f, bottom + 4 * fs, 'onPrimary')];
   return doc(w, h, '#FFFFFF', els);
 }
@@ -528,10 +526,12 @@ const SIMCHA_SET: { key: string; name: string; build: () => CanvasDoc }[] = [
 
 /* ------------------------------------------------------------------ saving */
 
-async function save(key: string, name: string, topic: string, canvas: CanvasDoc, o: { price?: number; series?: string } = {}) {
+async function save(key: string, name: string, topic: string, canvas: CanvasDoc, o: { price?: number; series?: string; sizeGroup?: string } = {}) {
   const id = stableId('template:' + key);
   const old = await getRow('projects', id);
-  if (old && !FORCE) return false;
+  if (old && !FORCE && !(FORCE_PREFIX && key.startsWith(FORCE_PREFIX))) return false;
+  // nothing changed: the row and its preview stay as they are
+  if (old && old.sizeGroup === o.sizeGroup && JSON.stringify(old.canvas) === JSON.stringify(canvas)) return false;
   const row: Project = {
     id,
     kind: 'template',
@@ -541,6 +541,7 @@ async function save(key: string, name: string, topic: string, canvas: CanvasDoc,
     topic,
     price: o.price,
     series: o.series,
+    sizeGroup: o.sizeGroup,
     canvas,
     createdAt: old?.createdAt ?? now,
     updatedAt: new Date().toISOString(),
@@ -577,6 +578,8 @@ const LAYOUTS: { format: Format; label: string; kind: 'photo' | 'type' | 'list' 
   { format: A4, label: 'A4', kind: 'list' },
 ];
 
+const SIZES: Record<string, Format> = { status: STORY, post: SQUARE, a4: A4, a5: A5, a6: A6 };
+
 async function main() {
   await arrangeRings();
   const brandCat = await ensureCategory('דוגמאות מיתוג', 'סימנים לדוגמה שמחזיקים את המקום של הלוגו של העסק');
@@ -599,9 +602,18 @@ async function main() {
     for (const [i, ad] of p.ads.entries()) {
       const l = LAYOUTS[i % LAYOUTS.length];
       const photo = photos[i % 2];
-      counter = 0;
-      const canvas = l.kind === 'photo' ? adPhoto(l.format, ad, photo, logo) : l.kind === 'type' ? adType(l.format, ad, logo) : adList(l.format, ad, photo, logo);
-      count(await save(`ad:${p.topic}:${ad.key}`, `${ad.name} · ${l.label}`, p.topic, canvas, { price: 49, series }));
+      const build = (format: Format) => {
+        counter = 0;
+        return l.kind === 'photo' ? adPhoto(format, ad, photo, logo) : l.kind === 'type' ? adType(format, ad, logo) : adList(format, ad, photo, logo);
+      };
+      const sizeGroup = `${p.topic}:${ad.key}`;
+      count(await save(`ad:${p.topic}:${ad.key}`, `${ad.name} · ${l.label}`, p.topic, build(l.format), { price: 49, series, sizeGroup }));
+      // the same ad in the other sizes: they stay out of the series, and show when a size is chosen
+      for (const f of AD_FORMATS) {
+        const format = SIZES[f.id];
+        if (format === l.format) continue;
+        count(await save(`ad:${p.topic}:${ad.key}:${f.id}`, `${ad.name} · ${f.label}`, p.topic, build(format), { price: 49, sizeGroup }));
+      }
     }
   }
 

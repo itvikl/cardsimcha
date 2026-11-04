@@ -1,4 +1,4 @@
-import type { BrandColorRole, BrandDetail, BrandKit, BrandTextRole, CanvasDoc, CanvasElement, ImageAsset } from './types';
+import type { BrandColorRole, BrandDetail, BrandKit, BrandTextRole, BusinessProfile, CanvasDoc, CanvasElement, ImageAsset } from './types';
 
 /**
  * A business's brand kit, and how it reaches a design: an admin tags a template's elements with a role
@@ -38,7 +38,22 @@ export const emptyBrand = (id: string): BrandKit => ({
   updatedAt: new Date().toISOString(),
 });
 
-export type BrandFields = Pick<BrandKit, BrandDetail | 'primaryColor' | 'secondaryColor'>;
+export type BrandFields = Pick<BrandKit, BrandDetail | 'primaryColor' | 'secondaryColor' | 'profile'>;
+
+/** what a business tells about itself; the system writes ads from these and invents nothing beyond them */
+export const PROFILE_FIELDS: { key: keyof BusinessProfile; label: string; placeholder: string }[] = [
+  { key: 'services', label: 'מה העסק עושה', placeholder: 'למשל: התקנה, ניקוי ותיקון מזגנים לבתים ולמשרדים' },
+  { key: 'area', label: 'אזורי שירות', placeholder: 'למשל: ירושלים והסביבה, בני ברק' },
+  { key: 'experience', label: 'ותק וניסיון', placeholder: 'למשל: 12 שנה בתחום' },
+  { key: 'promise', label: 'למה לבחור בכם', placeholder: 'למשל: מגיעים באותו יום, עובדים נקי' },
+  { key: 'reviews', label: 'המלצות אמיתיות של לקוחות', placeholder: 'כותבים רק המלצות שקיבלתם בפועל' },
+];
+
+const parseProfile = (v: unknown): BusinessProfile => {
+  const p = (v ?? {}) as Record<string, unknown>;
+  const text = (k: keyof BusinessProfile) => (typeof p[k] === 'string' ? p[k].trim().slice(0, 400) : '');
+  return { services: text('services'), area: text('area'), experience: text('experience'), promise: text('promise'), reviews: text('reviews') };
+};
 
 const LIMITS: Record<BrandDetail, number> = { businessName: 80, phone: 30, slogan: 120, address: 120, website: 120 };
 
@@ -57,6 +72,7 @@ export function parseBrand(body: unknown): BrandFields | string {
     website: text('website'),
     primaryColor: b.primaryColor,
     secondaryColor: b.secondaryColor,
+    profile: parseProfile(b.profile),
   };
 }
 
@@ -99,7 +115,7 @@ export function brandColor(brand: BrandColors, role: BrandColorRole): string {
 
 /** whether a brand kit would change anything on this design */
 export const hasBrandRoles = (doc: CanvasDoc) =>
-  doc.elements.some((e) => (e.type === 'text' ? e.role || e.colorRole : e.type === 'image' ? e.role : e.colorRole || e.role));
+  doc.elements.some((e) => (e.type === 'text' ? e.role || e.colorRole : e.type === 'image' ? e.role === 'logo' : e.colorRole || e.role));
 
 /** the logo inside the element's box, whole and centred (a box's rotation turns around its top-left corner) */
 function fitLogo(e: Extract<CanvasElement, { type: 'image' }>, logo: NonNullable<BrandKit['logo']>) {

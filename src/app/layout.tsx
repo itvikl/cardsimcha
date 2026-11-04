@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { QuickNav } from '@/components/QuickNav';
 import { TopBar } from '@/components/TopBar';
 import { AuthProvider } from '@/components/Auth';
 import { ToastProvider } from '@/components/Toast';
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <AuthProvider>
             <TopBar />
+            <QuickNav />
             {children}
             <CardFlight />
           </AuthProvider>

@@ -21,6 +21,8 @@ export const CATEGORIES: { name: string; image: string | null; audience: Audienc
   { name: 'וואך נאכט', image: null, audience: 'private' },
   { name: 'פדיון הבן', image: null, audience: 'private' },
   { name: 'חלאקה', image: null, audience: 'private' },
+  { name: 'לידת בן', image: null, audience: 'private' },
+  { name: 'לידת בת', image: null, audience: 'private' },
   { name: 'בר מצווה', image: '/categories/bar-mitzvah.webp', audience: 'private' },
   { name: 'חנוכת הבית', image: null, audience: 'private' },
   { name: 'בית כנסת', image: '/categories/synagogue.webp', audience: 'private' },
@@ -40,6 +42,69 @@ export const CATEGORIES: { name: string; image: string | null; audience: Audienc
   // not advertising, so they step back from the door; the admin can bring them back in /carousel
   { name: 'כרטיסי ביקור', image: '/categories/business-cards.webp', audience: 'business', hidden: true },
   { name: 'תפריטים', image: '/categories/menus.webp', audience: 'business', hidden: true },
+];
+
+/**
+ * The private door's ring: three cards, each opening a screen of its kinds of cards.
+ * Big occasions are events; small notices are invitations.
+ */
+export const PRIVATE_GROUPS: { id: string; name: string; image: string; lead: string; topics: string[] }[] = [
+  {
+    id: 'invitations',
+    name: 'הזמנות',
+    image: '/categories/shalom-zachar.webp',
+    lead: 'הזמנות ומודעות לשמחות הקטנות של המשפחה.',
+    topics: ['חלאקה', 'לידת בן', 'לידת בת', 'שלום זכר', 'וואך נאכט', 'קידוש'],
+  },
+  {
+    id: 'wishes',
+    name: 'איחולים',
+    image: '/categories/wishes.webp',
+    lead: 'ברכות, איחולים ותעודות לאנשים שלכם.',
+    topics: ['ברכות', 'איחולים', 'תעודות'],
+  },
+  {
+    id: 'events',
+    name: 'אירועים',
+    image: '/categories/wedding.webp',
+    lead: 'כל מה שצריך לאירועים הגדולים.',
+    topics: ['חתונה', 'אירוסין', 'ברית', 'פדיון הבן', 'בר מצווה', 'חנוכת הבית', 'שמחת בית השואבה', 'בית כנסת', 'מיתוג שמחה'],
+  },
+];
+
+/** a private topic's group; topics no group names (free ones, "כללי") go in the first, so nothing becomes invisible */
+export const groupOf = (topic: string) => PRIVATE_GROUPS.find((g) => g.topics.includes(topic)) ?? PRIVATE_GROUPS[0];
+
+export const groupHref = (id: string) => `/group/${id}`;
+
+/** one shortcut to a kind of cards */
+export type QuickLink = { name: string; topic: string };
+
+/** The shortcuts along the top of the private side, for what people most often come for; one with `items` opens a list. */
+export const QUICK_LINKS: (QuickLink | { name: string; items: QuickLink[] })[] = [
+  {
+    name: 'לידת בן',
+    items: [
+      { name: 'הודעה על לידה', topic: 'לידת בן' },
+      { name: 'שלום זכר', topic: 'שלום זכר' },
+      { name: 'וואך נאכט', topic: 'וואך נאכט' },
+      { name: 'ברית', topic: 'ברית' },
+      { name: 'פדיון הבן', topic: 'פדיון הבן' },
+    ],
+  },
+  {
+    name: 'לידת בת',
+    items: [
+      { name: 'הודעה על לידה', topic: 'לידת בת' },
+      { name: 'קידוש', topic: 'קידוש' },
+    ],
+  },
+  { name: 'קידוש', topic: 'קידוש' },
+  { name: 'חלאקה', topic: 'חלאקה' },
+  { name: 'בר מצווה', topic: 'בר מצווה' },
+  { name: 'אירוסין', topic: 'אירוסין' },
+  { name: 'חתונה', topic: 'חתונה' },
+  { name: 'ברכות', topic: 'ברכות' },
 ];
 
 /** the built-in default: topics an admin typed freely (not in CATEGORIES) belong to the private side */

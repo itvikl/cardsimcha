@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import type { Audience } from '@/lib/categories';
-import type { Mood } from '@/lib/story';
+import type { Mood } from '@/lib/mood';
 
 const MOODS: Mood[] = ['candle', 'dawn', 'gold', 'evening'];
 const bus = new EventTarget();

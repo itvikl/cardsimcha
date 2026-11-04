@@ -22,3 +22,6 @@ export const BILLING_PROVIDER = process.env.BILLING_PROVIDER ?? '';
 export const BILLING_ENABLED = !!BILLING_PROVIDER && (BILLING_PROVIDER !== 'sandbox' || !PRODUCTION || process.env.BILLING_ALLOW_SANDBOX === 'true');
 /** the monthly plan, in shekels; a starting guess to test with the first businesses */
 export const SUBSCRIPTION_PRICE = Number(process.env.SUBSCRIPTION_PRICE) || 149;
+
+/** "Make me an ad" is free for now and each request costs a model call: how many one user may ask for in a day. */
+export const COMPOSE_DAILY_LIMIT = Number(process.env.COMPOSE_DAILY_LIMIT) || 20;

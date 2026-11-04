@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { deleteRow, getRow, getRows, removeThumbnail, thumbnailFile, updateDb, updateRow } from '@/lib/db';
+import { deleteRow, findRows, getRow, getRows, removeThumbnail, thumbnailFile, updateDb, updateRow } from '@/lib/db';
+import { formatOfPage } from '@/lib/adFormats';
 import { applyCustomerEdits, sentAssetIds, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
@@ -33,8 +34,14 @@ export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
   const project = await getRow('projects', id);
   if (!project || !canRead(user, project)) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
+  // the other sizes this ad comes in
+  const source = project.kind === 'design' && project.templateId ? await getRow('projects', project.templateId) : project;
+  const sizes = source?.sizeGroup
+    ? (await findRows('projects', { kind: 'template', status: 'published', sizeGroup: source.sizeGroup })).flatMap((t) => formatOfPage(t.canvas.page.width_mm, t.canvas.page.height_mm)?.id ?? [])
+    : [];
   // `canEdit` tells the editor which mode to open in; the server enforces it again on save.
   return NextResponse.json({
+    sizes,
     ...project,
     canManage: canWrite(user, project) && project.kind === 'template',
     canAgent: AGENT_ENABLED && canWrite(user, project),
@@ -42,7 +49,9 @@ export async function GET(_req: Request, { params }: Ctx) {
     billing: BILLING_ENABLED ? await entitlement(user, project) : { allowed: true },
     // the times written in a Shabbat design are for that Friday only
     shabbatOutOfDate: !!project.shabbatFor && project.shabbatFor < new Date().toISOString().slice(0, 10),
-    hasVideo: project.canvas.elements.some((e) => e.type === 'image' && isLoopId(e.loopId)),
+    hasVideo:
+      project.canvas.elements.some((e) => e.type === 'image' && isLoopId(e.loopId)) ||
+      formatOfPage(project.canvas.page.width_mm, project.canvas.page.height_mm)?.medium === 'digital',
   });
 }
 

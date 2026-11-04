@@ -4,11 +4,11 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { SiteFooter } from './SiteFooter';
 import s from './festive.module.css';
-import { emptyBrand, type BrandFields } from '@/lib/brand';
+import { emptyBrand, PROFILE_FIELDS, type BrandFields } from '@/lib/brand';
 import { categoryHref, LOGO_TOPIC } from '@/lib/categories';
 import type { BrandKit } from '@/lib/types';
 
-const TEXT_FIELDS: { key: keyof BrandFields; label: string; placeholder: string; maxLength: number; dir?: 'ltr'; required?: boolean }[] = [
+const TEXT_FIELDS: { key: Exclude<keyof BrandFields, 'profile'>; label: string; placeholder: string; maxLength: number; dir?: 'ltr'; required?: boolean }[] = [
   { key: 'businessName', label: 'שם העסק', placeholder: 'למשל: כהן מיזוג אוויר', maxLength: 80, required: true },
   { key: 'slogan', label: 'סלוגן', placeholder: 'למשל: קר בקיץ, חם בחורף', maxLength: 120 },
   { key: 'phone', label: 'טלפון', placeholder: '050-0000000', maxLength: 30, dir: 'ltr' },
@@ -186,6 +186,25 @@ export function BrandKitForm() {
                 </label>
               </div>
 
+              <fieldset className={s.profile}>
+                <legend>על העסק (לא חובה)</legend>
+                <p className="status" style={{ margin: 0 }}>
+                  המערכת והעוזר כותבים מודעות רק מהעובדות שמופיעות כאן, ולא ממציאים מעבר להן.
+                </p>
+                {PROFILE_FIELDS.map((f) => (
+                  <label key={f.key} className="field">
+                    {f.label}
+                    <textarea
+                      rows={2}
+                      maxLength={400}
+                      value={kit.profile?.[f.key] ?? ''}
+                      placeholder={f.placeholder}
+                      onChange={(e) => set({ profile: { services: '', area: '', experience: '', promise: '', reviews: '', ...kit.profile, [f.key]: e.target.value } })}
+                    />
+                  </label>
+                ))}
+              </fieldset>
+
               <button className="btn primary" type="submit" disabled={busy}>
                 {busy ? 'שומר…' : 'שמירה'}
               </button>
@@ -194,6 +213,9 @@ export function BrandKitForm() {
                   נשמר. <Link href="/business">לעיצובים עם המיתוג שלכם ←</Link>
                 </p>
               )}
+              <Link className={s.back} href="/business/catalog">
+                ✎ הקטלוג: מוצרים ושירותים שנכנסים למודעות
+              </Link>
             </form>
 
             <aside className={s.brandSample} aria-label="כך הפרטים ייראו">
