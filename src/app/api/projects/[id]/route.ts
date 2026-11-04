@@ -45,7 +45,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     sizes,
     ...project,
     canManage: canWrite(user, project) && project.kind !== 'design',
-    canAgent: AGENT_ENABLED && canWrite(user, project),
+    // every request costs a model call, so the assistant is for those with an account
+    canAgent: AGENT_ENABLED && !user.guest && canWrite(user, project),
     ...(await projectContext(project)),
     billing: BILLING_ENABLED ? await entitlement(user, project) : { allowed: true },
     // the times written in a Shabbat design are for that Friday only

@@ -8,9 +8,17 @@ import { AD_FORMATS, MEDIUM_LABEL, type AdMedium } from '@/lib/adFormats';
 import { placePhoto, writeAd, type AdTexts } from '@/lib/adText';
 import { brandPreview } from '@/lib/brand';
 import { renderCard, type DrawableDoc } from '@/lib/renderCard';
+import { placeSticker } from '@/lib/sticker';
 import type { BrandKit, CatalogItem } from '@/lib/types';
 
-type Option = { templateId: string; direction: string; itemId: string | null; texts: AdTexts; picture?: string | null };
+type Option = {
+  templateId: string;
+  direction: string;
+  itemId: string | null;
+  sticker: { id: string; file: string; width: number; height: number } | null;
+  texts: AdTexts;
+  picture?: string | null;
+};
 
 /**
  * The add-on beside the gallery: one sentence, three ads to pick from. What the business picks opens in the editor like
@@ -42,6 +50,7 @@ export function ComposeAd({ topic, signedIn, kit, items }: { topic: string; sign
     let doc = writeAd(kit ? brandPreview(base, kit) : base, o.texts);
     const photo = items.find((i) => i.id === o.itemId)?.photo;
     if (photo) doc = placePhoto(doc, { ...photo, src: `/api/uploads/${photo.file}` });
+    if (o.sticker) doc = placeSticker(doc, { assetId: o.sticker.id, width: o.sticker.width, height: o.sticker.height, src: `/api/uploads/${o.sticker.file}` });
     return { ...o, picture: await renderCard(doc).catch(() => null) };
   }
 
@@ -71,7 +80,7 @@ export function ComposeAd({ topic, signedIn, kit, items }: { topic: string; sign
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: o.templateId, useBrand: !!kit, adTexts: o.texts, itemId: o.itemId }),
+        body: JSON.stringify({ templateId: o.templateId, useBrand: !!kit, adTexts: o.texts, itemId: o.itemId, stickerId: o.sticker?.id }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'לא הצלחנו לפתוח את המודעה');

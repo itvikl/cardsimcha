@@ -61,7 +61,7 @@ export function setSessionCookie(res: NextResponse, token: string) {
   });
 }
 
-export const publicUser = (u: User) => ({ id: u.id, email: u.email, name: u.name, role: u.role });
+export const publicUser = (u: User) => ({ id: u.id, email: u.email, name: u.name, role: u.role, ...(u.guest ? { guest: true } : {}) });
 
 export const GUEST_COOKIE = 'guest';
 export const MODE_COOKIE = 'mode';
@@ -114,9 +114,9 @@ const attempts = new Map<string, { n: number; first: number }>();
 const WINDOW = 15 * 60 * 1000;
 const MAX = 8;
 
-export function throttled(key: string): boolean {
+export function throttled(key: string, max = MAX): boolean {
   const a = attempts.get(key);
-  return !!a && Date.now() - a.first <= WINDOW && a.n >= MAX;
+  return !!a && Date.now() - a.first <= WINDOW && a.n >= max;
 }
 export function noteFailure(key: string) {
   const a = attempts.get(key);

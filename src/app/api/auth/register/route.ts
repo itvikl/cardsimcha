@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { newId, updateDb } from '@/lib/db';
-import { createSession, hashPassword, publicUser, setSessionCookie } from '@/lib/auth';
+import { createSession, getUser, hashPassword, publicUser, setSessionCookie } from '@/lib/auth';
 import type { User } from '@/lib/types';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -18,10 +18,18 @@ export async function POST(req: Request) {
 
   const { salt, hash } = await hashPassword(password);
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const current = await getUser();
   const result = await updateDb((db) => {
     if (db.users.some((u) => u.email === email)) return null;
     // only ADMIN_EMAIL is admin: being the first to register must not hand a stranger the site
     const role = email === adminEmail ? 'admin' : 'user';
+    // a guest becomes the account: the same user, so everything they made is already theirs
+    const guest = current?.guest ? db.users.find((u) => u.id === current.id) : undefined;
+    if (guest) {
+      Object.assign(guest, { email, name, role, passwordHash: hash, salt });
+      delete guest.guest;
+      return guest;
+    }
     const user: User = { id: newId(), email, name, role, passwordHash: hash, salt, createdAt: new Date().toISOString() };
     db.users.push(user);
     return user;

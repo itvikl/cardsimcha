@@ -19,8 +19,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
       cat.name = name;
     }
     if (typeof body?.description === 'string') cat.description = body.description.trim().slice(0, 300);
+    if (typeof body?.stickers === 'boolean') {
+      cat.stickers = body.stickers || undefined;
+      for (const i of db.images) if (i.categoryId === id) i.sticker = body.stickers || undefined;
+    }
     return cat;
-  }, ['categories']);
+  }, ['categories', 'images']);
   if (result === 'missing') return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   if (result === 'invalid') return NextResponse.json({ error: 'שם לא תקין' }, { status: 400 });
   if (result === 'duplicate') return NextResponse.json({ error: 'קטגוריה בשם הזה כבר קיימת' }, { status: 409 });

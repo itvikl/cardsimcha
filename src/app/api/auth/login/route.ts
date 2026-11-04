@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { findRows } from '@/lib/db';
-import { clearFailures, createSession, noteFailure, publicUser, setSessionCookie, throttled, verifyPassword } from '@/lib/auth';
+import { clearFailures, createSession, getUser, noteFailure, publicUser, setSessionCookie, throttled, verifyPassword } from '@/lib/auth';
+import { adoptGuest } from '@/lib/guest';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -19,6 +20,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'אימייל או סיסמה שגויים' }, { status: 401 });
   }
   clearFailures(key);
+  const current = await getUser();
+  if (current?.guest && current.id !== user.id) await adoptGuest(current.id, user.id).catch((e) => console.error('could not move a guest to their account', e));
   const res = NextResponse.json(publicUser(user));
   setSessionCookie(res, await createSession(user.id));
   return res;

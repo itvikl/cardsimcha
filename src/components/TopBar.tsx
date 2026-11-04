@@ -98,8 +98,12 @@ export function TopBar() {
               {inBasket > 0 && <span className="basket-count">{inBasket}</span>}
             </Link>
           )}
-          <span className="status">{me.authDisabled ? me.name : me.name + (me.role === 'admin' ? ' · מנהל' : '')}</span>
-          {me.authDisabled ? (
+          {!me.guest && <span className="status">{me.authDisabled ? me.name : me.name + (me.role === 'admin' ? ' · מנהל' : '')}</span>}
+          {me.guest ? (
+            <Link className="btn small primary" href="/login">
+              כניסה / הרשמה
+            </Link>
+          ) : me.authDisabled ? (
             <button className="btn small" onClick={switchMode}>
               {me.role === 'admin' ? 'מעבר לתצוגת לקוח' : 'מעבר למצב ניהול'}
             </button>

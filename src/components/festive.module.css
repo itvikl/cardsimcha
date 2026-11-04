@@ -663,3 +663,13 @@ a.quickMenuLink:hover { background: rgba(201, 168, 115, 0.2); color: var(--gold-
 @media (prefers-reduced-motion: reduce) {
   .root *, .root *::before, .root *::after { animation: none !important; transition: none !important; }
 }
+
+/* a whole event's set, written once */
+.eventSet { display: grid; gap: 18px; margin: 0 0 28px; padding: 22px; }
+.eventTitle { margin: 0; font-family: var(--serif); font-size: 26px; font-weight: 700; line-height: 1.2; }
+.eventFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+.eventPieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; align-items: end; }
+.eventPiece { display: grid; gap: 6px; min-width: 0; cursor: pointer; }
+.eventPiece[data-left] .eventFace { opacity: 0.35; }
+.eventFace { display: block; width: 100%; max-height: 220px; border-radius: 8px; background: var(--surface-2) center / contain no-repeat; box-shadow: 0 6px 16px rgba(var(--shade), 0.16); transition: opacity 0.15s; }
+.eventCheck { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.25; }

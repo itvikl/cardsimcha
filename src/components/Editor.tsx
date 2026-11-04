@@ -8,7 +8,7 @@ import type Konva from 'konva';
 import { checkAd, type AdIssue } from '@/lib/adCheck';
 import { AD_FORMATS, formatOfPage, MEDIUM_LABEL, type AdMedium } from '@/lib/adFormats';
 import { BRAND_COLOR_ROLES, BRAND_TEXT_ROLES, isBrandColorRole, isBrandTextRole } from '@/lib/brand';
-import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
+import { FONTS, MAX_STICKERS, PAGE_PRESETS } from '@/lib/canvas';
 import { categoryHref, LOGO_TOPIC, type Audience } from '@/lib/categories';
 import { SHABBAT_TOPIC } from '@/lib/shabbatDoc';
 import { jpegToPdf } from '@/lib/pdf';
@@ -19,7 +19,9 @@ import { trimTransparent } from '@/lib/trimCanvas';
 import { newImage, newRect, newText } from '@/lib/elements';
 import { fitDocColors } from '@/lib/fitColor';
 import { cardPixels, type DrawableDoc } from '@/lib/renderCard';
+import { placeSticker } from '@/lib/sticker';
 import { applyWording, type Wording } from '@/lib/wording';
+import { StickerPicker } from './StickerPicker';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
 import { WordingPicker } from './WordingPicker';
@@ -799,7 +801,8 @@ export default function Editor({ id }: { id: string }) {
     const tr = trRef.current;
     const stage = stageRef.current;
     if (!tr || !stage) return;
-    const target = canManage ? selectedId : activeField;
+    // a customer selects only stickers; otherwise the frame marks the text field they are on
+    const target = canManage ? selectedId : selectedId ?? activeField;
     const node = target ? stage.findOne('#' + target) : null;
     tr.nodes(node ? [node] : []);
     tr.getLayer()?.batchDraw();
@@ -810,7 +813,8 @@ export default function Editor({ id }: { id: string }) {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (!canManage && !(mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y'))) return;
+      const onSticker = selected?.type === 'image' && selected.role === 'sticker';
+      if (!canManage && !onSticker && !(mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y'))) return;
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
@@ -874,6 +878,8 @@ export default function Editor({ id }: { id: string }) {
   };
   const swappables = doc.elements.filter((e): e is Extract<CanvasElement, { type: 'image' }> => e.type === 'image' && !!e.swappable);
   const editableFields = doc.elements.filter((e): e is TextElement => e.type === 'text' && !!e.editable);
+  const stickerSelected = selected?.type === 'image' && selected.role === 'sticker';
+  const stickerLibrary = library.images.filter((i) => i.sticker);
   const textEl = selected?.type === 'text' ? selected : null;
   const updateText = (patch: Partial<TextElement>, key?: string) => selected && patchElement(selected.id, patch, key);
   const num = (v: string) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -1142,6 +1148,23 @@ export default function Editor({ id }: { id: string }) {
               ))
             )}
             {doc.wordingId && topic && <WordingPicker doc={doc} topic={topic} manage={false} drawable={drawable} onPick={pickWording} />}
+            {topic !== LOGO_TOPIC && topic !== SHABBAT_TOPIC && (
+              <StickerPicker
+                stickers={stickerLibrary}
+                topic={topic}
+                selected={stickerSelected}
+                onPick={(s) => {
+                  const d = docRef.current;
+                  if (!d) return;
+                  if (d.elements.filter((e) => e.type === 'image' && e.role === 'sticker').length >= MAX_STICKERS) {
+                    push(`אפשר עד ${MAX_STICKERS} מדבקות בעיצוב אחד.`, 'error');
+                    return;
+                  }
+                  addElement(placeSticker(d, { assetId: s.id, width: s.width, height: s.height }).elements.at(-1)!);
+                }}
+                onRemove={removeSelected}
+              />
+            )}
             {swappables.map((el) => {
               // a background of a card with a wording fills its page: one of another shape would come out stretched
               const fills = (i: ImageAsset) => !doc.wordingId || Math.abs(i.width / i.height / (el.w_mm / el.h_mm) - 1) < 0.02;
@@ -1297,6 +1320,10 @@ export default function Editor({ id }: { id: string }) {
                 if (e.target === e.target.getStage()) {
                   setSelectedId(null);
                   setActiveField(null);
+                } else if (!full && !e.target.findAncestor('Transformer')) {
+                  // a customer's background doesn't take clicks, so this is how a click beside a sticker lets go of it
+                  const hit = doc.elements.find((x) => x.id === e.target.id());
+                  if (hit?.type !== 'image' || hit.role !== 'sticker') setSelectedId(null);
                 }
               }}
             >
@@ -1311,7 +1338,7 @@ export default function Editor({ id }: { id: string }) {
                   };
                   const onChange = (patch: Partial<CanvasElement>) => patchElement(el.id, patch);
                   if (el.type === 'image') {
-                    return <ImageNode key={el.id} el={el} asset={assetById.get(el.asset_id)} interactive={full} onSelect={onSelect} onChange={onChange} />;
+                    return <ImageNode key={el.id} el={el} asset={assetById.get(el.asset_id)} interactive={full || el.role === 'sticker'} onSelect={onSelect} onChange={onChange} />;
                   }
                   if (el.type === 'rect') {
                     return (
@@ -1391,12 +1418,12 @@ export default function Editor({ id }: { id: string }) {
                 })}
                 <Transformer
                   ref={trRef}
-                  resizeEnabled={canManage}
-                  rotateEnabled={canManage}
+                  resizeEnabled={canManage || stickerSelected}
+                  rotateEnabled={canManage || stickerSelected}
                   borderStroke="#1fb37c"
                   borderStrokeWidth={2}
-                  borderDash={canManage ? undefined : [6, 4]}
-                  padding={canManage ? 0 : 4}
+                  borderDash={canManage || stickerSelected ? undefined : [6, 4]}
+                  padding={canManage || stickerSelected ? 0 : 4}
                   keepRatio={selected?.type === 'image'}
                   enabledAnchors={
                     selected?.type === 'text'
@@ -1522,10 +1549,10 @@ export default function Editor({ id }: { id: string }) {
                         />
                       </label>
                     )}
-                    {isWording && (
+                    {(isWording || audience === 'private') && (
                       <label className="row" style={{ gap: 8 }}>
                         <input type="checkbox" checked={!!textEl.detail} onChange={(e) => updateText({ detail: e.target.checked || undefined })} />
-                        <span>פרט של הלקוח: מה שכתב נשאר כשהוא מחליף נוסח (לפי שם השדה)</span>
+                        <span>פרט של הלקוח: נכתב פעם אחת לכל הסט, ונשאר כשמחליפים נוסח (לפי שם השדה)</span>
                       </label>
                     )}
                     <label className="field">

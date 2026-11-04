@@ -9,11 +9,13 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (auth instanceof Response) return auth;
   const { id } = await params;
   const body = await req.json().catch(() => null);
-  const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
-  if (!name) return NextResponse.json({ error: 'שם חובה' }, { status: 400 });
+  const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : undefined;
+  if (name === '') return NextResponse.json({ error: 'שם חובה' }, { status: 400 });
+  const tags = Array.isArray(body?.tags) ? body.tags.flatMap((t: unknown) => (typeof t === 'string' && t.trim() ? [t.trim().slice(0, 40)] : [])).slice(0, 30) as string[] : undefined;
   const img = await updateDb((db) => {
     const i = db.images.find((x) => x.id === id);
-    if (i) i.name = name;
+    if (i && name) i.name = name;
+    if (i && tags) i.tags = tags;
     return i ?? null;
   }, ['images']);
   if (!img) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });

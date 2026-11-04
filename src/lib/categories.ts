@@ -45,30 +45,30 @@ export const CATEGORIES: { name: string; image: string | null; audience: Audienc
 ];
 
 /**
- * The private door's ring: three cards, each opening a screen of its kinds of cards.
- * Big occasions are events; small notices are invitations.
+ * The private door's ring: three cards, each opening a screen of its kinds of cards; with the business door, the site's
+ * four parts. An invitation is anything that invites, big or small. Branding an event is the rest of what it needs around it.
  */
 export const PRIVATE_GROUPS: { id: string; name: string; image: string; lead: string; topics: string[] }[] = [
   {
     id: 'invitations',
     name: 'הזמנות',
-    image: '/categories/shalom-zachar.webp',
-    lead: 'הזמנות ומודעות לשמחות הקטנות של המשפחה.',
-    topics: ['חלאקה', 'לידת בן', 'לידת בת', 'שלום זכר', 'וואך נאכט', 'קידוש'],
+    image: '/categories/wedding.webp',
+    lead: 'הזמנה לכל שמחה, מהחתונה ועד שלום זכר.',
+    topics: ['חתונה', 'אירוסין', 'בר מצווה', 'ברית', 'פדיון הבן', 'חנוכת הבית', 'שלום זכר', 'וואך נאכט', 'קידוש', 'חלאקה', 'לידת בן', 'לידת בת'],
   },
   {
     id: 'wishes',
-    name: 'איחולים',
+    name: 'ברכות ואיחולים',
     image: '/categories/wishes.webp',
     lead: 'ברכות, איחולים ותעודות לאנשים שלכם.',
     topics: ['ברכות', 'איחולים', 'תעודות'],
   },
   {
     id: 'events',
-    name: 'אירועים',
-    image: '/categories/wedding.webp',
-    lead: 'כל מה שצריך לאירועים הגדולים.',
-    topics: ['חתונה', 'אירוסין', 'ברית', 'פדיון הבן', 'בר מצווה', 'חנוכת הבית', 'שמחת בית השואבה', 'בית כנסת', 'מיתוג שמחה'],
+    name: 'מיתוג אירועים',
+    image: '/categories/simcha-set.webp',
+    lead: 'כותבים את הפרטים פעם אחת, ומקבלים את כל מה שצריך לאירוע באותו עיצוב.',
+    topics: ['מיתוג שמחה', 'שמחת בית השואבה', 'בית כנסת'],
   },
 ];
 

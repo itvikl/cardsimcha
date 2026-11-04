@@ -60,7 +60,7 @@ export function validateDoc(input: unknown): CanvasDoc | null {
       if (e.colorOverride !== undefined && !isColor(e.colorOverride)) return null;
       if (e.swapCategoryId !== undefined && (typeof e.swapCategoryId !== 'string' || e.swapCategoryId.length > 64)) return null;
       if (e.label !== undefined && (typeof e.label !== 'string' || e.label.length > 60)) return null;
-      if (e.role !== undefined && e.role !== 'logo' && e.role !== 'photo') return null;
+      if (e.role !== undefined && e.role !== 'logo' && e.role !== 'photo' && e.role !== 'sticker') return null;
       if (e.photoBox !== undefined && !(isNum(e.photoBox?.x_mm) && isNum(e.photoBox.y_mm) && isNum(e.photoBox.w_mm, 1, 2000) && isNum(e.photoBox.h_mm, 1, 2000))) return null;
       if (e.loopId !== undefined && !isLoopId(e.loopId)) return null;
       elements.push({ ...e });
@@ -79,14 +79,44 @@ export function validateDoc(input: unknown): CanvasDoc | null {
   return { schema_version: 1, page: { width_mm, height_mm, background }, elements, ...(d.wordingId ? { wordingId: d.wordingId } : {}) };
 }
 
+export const MAX_STICKERS = 12;
+
+/** The stickers a client sent, as far as they are real: pictures of the sticker library, and inside the page's reach. */
+function sentStickers(page: CanvasDoc['page'], sent: CanvasElement[], assets: { id: string; sticker?: boolean }[], taken: Set<string>): CanvasElement[] {
+  const seen = new Set(taken);
+  const out: CanvasElement[] = [];
+  for (const e of sent) {
+    if (out.length === MAX_STICKERS) break;
+    if (!e || e.type !== 'image' || e.role !== 'sticker' || typeof e.id !== 'string' || e.id.length > 64 || seen.has(e.id)) continue;
+    if (!assets.some((a) => a.id === e.asset_id && a.sticker)) continue;
+    if (!isNum(e.x_mm) || !isNum(e.y_mm) || !isNum(e.w_mm, 1, 2000) || !isNum(e.h_mm, 1, 2000) || !isNum(e.rotation, -360, 360)) continue;
+    seen.add(e.id);
+    const w = clampTo(e.w_mm, 3, page.width_mm * 2);
+    const h = clampTo(e.h_mm, 3, page.height_mm * 2);
+    out.push({
+      id: e.id,
+      type: 'image',
+      x_mm: clampTo(e.x_mm, -w / 2, page.width_mm - w / 2),
+      y_mm: clampTo(e.y_mm, -h / 2, page.height_mm - h / 2),
+      w_mm: w,
+      h_mm: h,
+      rotation: e.rotation,
+      z: 0,
+      asset_id: e.asset_id,
+      role: 'sticker',
+    });
+  }
+  return out;
+}
+
 /**
- * What a customer may change in their copy: only the text of elements the admin
- * marked editable. Everything else is taken from the stored doc, never from the client.
+ * What a customer may change in their copy: the text of elements the admin marked editable, and their own stickers.
+ * Everything else is taken from the stored doc, never from the client.
  */
 export function applyCustomerEdits(
   stored: CanvasDoc,
   incoming: unknown,
-  assets: { id: string; categoryId: string }[] = [],
+  assets: { id: string; categoryId: string; sticker?: boolean }[] = [],
 ): CanvasDoc | null {
   const inc = incoming as CanvasDoc | null;
   if (!inc || !Array.isArray(inc.elements)) return null;
@@ -104,9 +134,11 @@ export function applyCustomerEdits(
       if (typeof e.x_mm === 'number' && typeof e.y_mm === 'number') pos.set(e.id, { x: e.x_mm, y: e.y_mm });
     }
   }
+  const kept = stored.elements.filter((e) => !(e.type === 'image' && e.role === 'sticker'));
+  const stickers = sentStickers(stored.page, inc.elements, assets, new Set(kept.map((e) => e.id))).map((e, i) => ({ ...e, z: kept.length + i }));
   return {
     ...stored,
-    elements: stored.elements.map((e) => {
+    elements: [...kept.map((e) => {
       if (e.type === 'image' && e.swappable) {
         // only an image from the category the admin chose (or any category when none was chosen)
         const sent = swaps.get(e.id);
@@ -131,7 +163,7 @@ export function applyCustomerEdits(
         text: text === undefined ? e.text : text.slice(0, 500),
         font: color ? { ...e.font, color } : e.font, // only the colour of the font; size/family stay as designed
       };
-    }),
+    }), ...stickers],
   };
 }
 

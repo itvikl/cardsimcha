@@ -368,6 +368,7 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .stage-frame { position: relative; }
 .ad-issues { display: grid; gap: 6px; margin: 0; padding-inline-start: 18px; font-size: 14px; color: var(--text); }
 .ad-issues .tip { color: var(--muted); }
+.sticker-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-height: 216px; overflow-y: auto; padding: 2px; }
 .wording-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .wording-pick { display: grid; gap: 4px; align-content: start; min-width: 0; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font: inherit; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
 .wording-pick:hover { border-color: var(--brand-2); transform: translateY(-1px); }

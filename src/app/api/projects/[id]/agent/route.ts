@@ -35,6 +35,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!AGENT_ENABLED) return NextResponse.json({ error: 'העוזר כבוי' }, { status: 503 });
   const user = await requireUser();
   if (user instanceof Response) return user;
+  if (user.guest) return NextResponse.json({ error: 'כדי להשתמש בעוזר נרשמים בחינם' }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const message = typeof body?.message === 'string' ? body.message.trim().slice(0, 1000) : '';

@@ -3,6 +3,8 @@ export type Category = {
   name: string;
   description: string;
   createdAt: string;
+  /** its pictures are stickers: customers can put them on their designs */
+  stickers?: boolean;
 };
 
 export type ImageAsset = {
@@ -13,6 +15,10 @@ export type ImageAsset = {
   width: number;
   height: number;
   createdAt: string;
+  /** a transparent picture a customer can place on a design, as its category says */
+  sticker?: boolean;
+  /** what the picture shows, and the category names it suits: how a customer or the system finds a sticker */
+  tags?: string[];
 };
 
 export type PageSpec = {
@@ -75,8 +81,11 @@ export type ImageElement = {
   colorOverride?: string;
   /** name shown to the customer, e.g. "רקע" */
   label?: string;
-  /** `logo`: a business's copy shows its own logo here, fitted inside this box. `photo`: a picture from its catalog can go here */
-  role?: 'logo' | 'photo';
+  /**
+   * `logo`: a business's copy shows its own logo here, fitted inside this box. `photo`: a picture from its catalog can go here.
+   * `sticker`: placed by the customer or the system; the customer can move, resize or remove it.
+   */
+  role?: 'logo' | 'photo' | 'sticker';
   /** a `photo`'s visible place: a picture covers it, and whatever it overflows is hidden by what is drawn over it */
   photoBox?: { x_mm: number; y_mm: number; w_mm: number; h_mm: number };
   /** in the design's video, this picture is replaced by that moving background (see shabbatLoops.ts) */
@@ -122,6 +131,8 @@ export type User = {
   passwordHash: string;
   salt: string;
   createdAt: string;
+  /** a visitor working without an account: signing up or in keeps what they made (see guest.ts) */
+  guest?: boolean;
 };
 
 export type Session = {

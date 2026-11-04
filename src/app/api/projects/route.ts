@@ -42,6 +42,7 @@ export async function GET() {
  *   `useBrand` writes the caller's brand kit into the copy; the kit is read here, never taken from the client.
  *   `shabbatCity` writes that city's coming Shabbat into a design with Shabbat fields; the times are worked out here too.
  *   `itemId` puts an item of the caller's own catalog on the ad. `adTexts` (field label -> text) are the ad's words; without them the item's are used.
+ *   `stickerId` puts a sticker of the library on it.
  * - { name, width_mm, height_mm, topic?, audience?, wording? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  *   `wording` makes it a wording instead, which needs a topic: the cards that can take it are found by that.
@@ -57,10 +58,11 @@ export async function POST(req: Request) {
     if (!t || t.kind !== 'template' || (t.status !== 'published' && user.role !== 'admin')) {
       return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
     }
-    const [brand, noCredit, found] = await Promise.all([
+    const [brand, noCredit, found, sticker] = await Promise.all([
       body.useBrand === true ? getRow('brands', user.id) : null,
       hasActiveSubscription(user.id),
       typeof body.itemId === 'string' ? getRow('catalog', body.itemId) : null,
+      typeof body.stickerId === 'string' ? getRow('images', body.stickerId) : null,
     ]);
     const item = found?.ownerId === user.id ? found : null;
     const adTexts = parseAdTexts(body.adTexts);
@@ -69,6 +71,7 @@ export async function POST(req: Request) {
       noCredit,
       adTexts: adTexts ?? (item ? itemTexts(item) : undefined),
       photo: item?.photo,
+      sticker: sticker?.sticker ? { assetId: sticker.id, width: sticker.width, height: sticker.height } : undefined,
       noPoints: !!item && !adTexts,
       colors: parseColors(body.colors),
       // opened without choosing a city (a direct link, an admin's test): the first city, whose name shows on the design

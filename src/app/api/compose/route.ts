@@ -6,6 +6,7 @@ import { businessBrief } from '@/lib/businessBrief';
 import { AGENT_ENABLED, COMPOSE_DAILY_LIMIT } from '@/lib/config';
 import { findRows, getRow, setRow } from '@/lib/db';
 import { professionOf } from '@/lib/professions';
+import { stickersFor } from '@/lib/sticker';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
   if (!AGENT_ENABLED) return NextResponse.json({ error: 'הכתיבה האוטומטית לא זמינה כרגע' }, { status: 503 });
   const user = await requireUser();
   if (user instanceof Response) return user;
+  if (user.guest) return NextResponse.json({ error: 'כדי שהמערכת תכתוב לכם מודעות, נרשמים בחינם' }, { status: 401 });
   const body = await req.json().catch(() => null);
   const request = typeof body?.request === 'string' ? body.request.trim().slice(0, 500) : '';
   if (request.length < 3) return NextResponse.json({ error: 'כתבו מה תרצו לפרסם' }, { status: 400 });
@@ -40,10 +42,11 @@ export async function POST(req: Request) {
   if (used >= COMPOSE_DAILY_LIMIT) return NextResponse.json({ error: 'הגעתם למספר הבקשות להיום. אפשר לבחור מודעה מהגלריה, או לחזור מחר.' }, { status: 429 });
   await setRow('usage', { id: useId, count: used + 1 });
 
-  const [kit, items] = await Promise.all([getRow('brands', user.id), findRows('catalog', { ownerId: user.id })]);
+  const [kit, items, library] = await Promise.all([getRow('brands', user.id), findRows('catalog', { ownerId: user.id }), findRows('images', { sticker: true })]);
   const brief = businessBrief(profession.topic, kit, items);
+  const stickers = stickersFor(library, profession.topic);
   try {
-    const result = await composeAds(request, brief);
+    const result = await composeAds(request, brief, stickers.map((s) => ({ id: s.id, name: s.name, tags: s.tags ?? [] })));
     if ('question' in result) return NextResponse.json({ question: result.question });
     const facts = `${request}\n${brief}\n${kit?.phone ?? ''}`;
     const ads = result.ads.filter((ad) => backedByFacts(ad, facts));
@@ -53,6 +56,7 @@ export async function POST(req: Request) {
         templateId: templates[i].id,
         direction: ad.direction,
         itemId: items.some((x) => x.id === ad.itemId) ? ad.itemId : null,
+        sticker: stickers.flatMap((s) => (s.id === ad.stickerId ? [{ id: s.id, file: s.file, width: s.width, height: s.height }] : []))[0] ?? null,
         texts: { כותרת: ad.headline, 'משפט משנה': ad.sub, 'נקודה 1': ad.points[0], 'נקודה 2': ad.points[1], 'נקודה 3': ad.points[2], 'קריאה לפעולה': ad.cta },
       })),
     });

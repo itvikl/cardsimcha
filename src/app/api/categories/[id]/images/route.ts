@@ -18,7 +18,8 @@ export async function POST(req: Request, { params }: Ctx) {
   if (auth instanceof Response) return auth;
   const { id } = await params;
   const db = await readDb(['categories']);
-  if (!db.categories.some((c) => c.id === id)) {
+  const category = db.categories.find((c) => c.id === id);
+  if (!category) {
     return NextResponse.json({ error: 'הקטגוריה לא נמצאה' }, { status: 404 });
   }
 
@@ -48,6 +49,7 @@ export async function POST(req: Request, { params }: Ctx) {
     width,
     height,
     createdAt: new Date().toISOString(),
+    ...(category.stickers ? { sticker: true } : {}),
   };
   const ok = await updateDb((d) => {
     // the category may have been deleted while the file was uploading

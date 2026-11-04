@@ -2,6 +2,7 @@ import { dropPoints, placePhoto, writeAd, type AdTexts } from './adText';
 import { applyBrand, applyColors, hasBrandRoles, type BrandColors } from './brand';
 import { copyThumbnail, newId } from './db';
 import { applyShabbat, hasShabbatRoles, type ShabbatTimes } from './shabbatDoc';
+import { placeSticker } from './sticker';
 import type { BrandKit, Project } from './types';
 
 export type CopyOptions = {
@@ -21,6 +22,8 @@ export type CopyOptions = {
   photo?: { assetId: string; width: number; height: number };
   /** the ad is about one product: the template's general list of points goes */
   noPoints?: boolean;
+  /** a sticker from the library, placed where it leaves the words clear */
+  sticker?: { assetId: string; width: number; height: number };
 };
 
 /** A customer's own copy of a template, with what the server knows written in. The caller saves it. */
@@ -37,9 +40,10 @@ export async function copyTemplate(t: Project, ownerId: string, o: CopyOptions =
   if (o.noPoints) canvas = dropPoints(canvas);
   if (o.adTexts) canvas = writeAd(canvas, o.adTexts);
   if (o.photo) canvas = placePhoto(canvas, o.photo);
+  if (o.sticker) canvas = placeSticker(canvas, o.sticker);
 
   // the template's preview shows its sample details: a personal copy gets its own when it is first drawn
-  const personal = !!(brand || times || o.colors || o.adTexts || o.photo);
+  const personal = !!(brand || times || o.colors || o.adTexts || o.photo || o.sticker);
   const copy: Project = {
     id,
     kind: 'design',

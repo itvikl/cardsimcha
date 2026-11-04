@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMe } from './Auth';
 import { flyCard, landCard } from './CardFlight';
 import { ComposeAd } from './ComposeAd';
+import { EventSet } from './EventSet';
 import { SiteFooter } from './SiteFooter';
 import { setMood } from './SiteBackdrop';
 import { TryAd } from './TryAd';
@@ -48,10 +49,10 @@ async function saveKit(draft: BrandDraft): Promise<BrandKit> {
 /**
  * A category's page, reached from the home page's ring: all its designs as printed cards.
  * Opening one creates the customer's copy and flies the card into the editor (CardFlight);
- * a visitor who is not signed in gets the design's page first, which asks them to sign up.
+ * a visitor with no account just starts as a guest.
  */
 export function CategoryView({ topic, audience }: { topic: string; audience: Audience }) {
-  const { me } = useMe();
+  const { me, ensureSession } = useMe();
   const router = useRouter();
   const [items, setItems] = useState<Published[] | null>(null);
   const [error, setError] = useState('');
@@ -156,18 +157,21 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
       .catch((e) => setError(e.message));
   }, [topic]);
 
+  /** a visitor starts working as a guest; the details they tried on this page become their kit first, so the design comes out with them */
+  async function startWorking() {
+    await ensureSession();
+    const draft = readBrandDraft();
+    if (draft) await saveKit(draft);
+  }
+
   async function open(t: Published, e: MouseEvent<HTMLButtonElement>) {
-    if (!me) {
-      // the times depend on the city chosen here, and the details tried here wait to become the kit: both come back to this page after signing in
-      router.push(isShabbat || brand ? `/login?next=${encodeURIComponent(window.location.pathname)}` : `/t/${t.id}`);
-      return;
-    }
     setBusy(true);
     setError('');
     // the card lifts off the page right away and lands on the editor's canvas once it is ready
     const face = e.currentTarget.firstElementChild as HTMLElement | null;
     if (face) flyCard(face.getBoundingClientRect(), branded[t.id] ?? t.thumbnail);
     try {
+      await startWorking();
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,13 +189,10 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
 
   /** the whole series as the customer's own designs, in the basket */
   async function takeAll(series: string) {
-    if (!me) {
-      router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
-      return;
-    }
     setBusy(true);
     setError('');
     try {
+      await startWorking();
       await takeSeries({ series, useBrand: !!brand }, branded);
       router.push('/my-cards');
     } catch (err) {
@@ -268,7 +269,7 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
             ✉ הודעות פרסום מוכנות ל{profession.topic}
           </Link>
         )}
-        {allSeries.map((name) => {
+        {audience === 'business' && allSeries.map((name) => {
           const n = (items ?? []).filter((t) => t.series === name).length;
           return (
             <button key={name} type="button" className={`${s.btn} ${s.dark}`} disabled={busy} onClick={() => takeAll(name)}>
@@ -278,11 +279,13 @@ export function CategoryView({ topic, audience }: { topic: string; audience: Aud
         })}
       </div>
 
+      {audience === 'private' && allSeries.map((name) => <EventSet key={name} topic={topic} series={name} />)}
+
       {audience === 'business' && !brand && topic !== LOGO_TOPIC && !isShabbat && <TryAd signedIn={!!me} onSubmit={tryDetails} />}
 
       {profession && (
         <div className={s.composeBar}>
-          <ComposeAd topic={topic} signedIn={!!me} kit={brand} items={catalog} />
+          <ComposeAd topic={topic} signedIn={!!me && !me.guest} kit={brand} items={catalog} />
         </div>
       )}
 

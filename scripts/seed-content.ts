@@ -5,6 +5,7 @@
  *   npm run seed:content                 published right away
  *   npm run seed:content -- --draft      as drafts, for the client to review first
  *   npm run seed:content -- --force=ad:  writes again only the designs whose key starts with that
+ *   npm run seed:content -- --only=simcha --force=simcha:  only the simcha set, leaving the rest alone
  *
  * New templates have no preview picture: the editor makes one the first time an admin opens them.
  * The wording comes from src/lib/professions.ts and needs the client's approval before going live.
@@ -25,6 +26,7 @@ import type { BrandColorRole, BrandTextRole, CanvasDoc, CanvasElement, Category,
 
 const FORCE = process.argv.includes('--force');
 const FORCE_PREFIX = process.argv.find((a) => a.startsWith('--force='))?.slice('--force='.length);
+const ONLY = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length);
 const STATUS: Project['status'] = process.argv.includes('--draft') ? 'draft' : 'published';
 const ASSETS = path.join(process.cwd(), 'scripts', 'seed-assets');
 
@@ -103,6 +105,7 @@ type TextOpts = {
   role?: BrandTextRole;
   shabbatRole?: ShabbatTextRole;
   credit?: boolean;
+  detail?: boolean;
 };
 
 function text(o: TextOpts): CanvasElement {
@@ -126,6 +129,7 @@ function text(o: TextOpts): CanvasElement {
   if (o.colorRole) e.colorRole = o.colorRole;
   if (o.shabbatRole) e.shabbatRole = o.shabbatRole;
   if (o.credit) e.credit = true;
+  if (o.detail) e.detail = true;
   return e;
 }
 
@@ -505,13 +509,13 @@ function simchaPiece(w: number, h: number, fs: number, title: string, line: stri
     rect(m, m, w - m * 2, h - m * 2, '#FFFFFF', { radius: 2 * fs }),
     rect(m + 2 * fs, m + 2 * fs, w - (m + 2 * fs) * 2, h - (m + 2 * fs) * 2, '#E8A33D', { colorRole: 'secondaryColor', radius: 1.5 * fs, opacity: 0.14 }),
     text({ x: m + 4 * fs, y: top, w: w - (m + 4 * fs) * 2, text: title, size: 24 * fs, family: 'Frank Ruhl Libre', bold: true, colorRole: 'secondaryColor', label: 'כותרת' }),
-    text({ x: m + 4 * fs, y: top + 16 * fs, w: w - (m + 4 * fs) * 2, text: 'שמות בעלי השמחה', size: 32 * fs, family: 'Frank Ruhl Libre', bold: true, colorRole: 'primaryColor', label: 'שמות' }),
+    text({ x: m + 4 * fs, y: top + 16 * fs, w: w - (m + 4 * fs) * 2, text: 'שמות בעלי השמחה', size: 32 * fs, family: 'Frank Ruhl Libre', bold: true, colorRole: 'primaryColor', label: 'שמות', detail: true }),
     rect((w - 30 * fs) / 2, top + 48 * fs, 30 * fs, 0.8 * fs, '#E8A33D', { colorRole: 'secondaryColor' }),
     text({ x: m + 6 * fs, y: top + 53 * fs, w: w - (m + 6 * fs) * 2, text: line, size: 15 * fs, family: 'Frank Ruhl Libre', colorRole: 'primaryColor', label: 'נוסח' }),
     ...(withWhen
       ? [
-          text({ x: m + 4 * fs, y: top + 77 * fs, w: w - (m + 4 * fs) * 2, text: 'יום ותאריך', size: 16 * fs, bold: true, colorRole: 'primaryColor', label: 'תאריך' }),
-          text({ x: m + 4 * fs, y: top + 88 * fs, w: w - (m + 4 * fs) * 2, text: 'מקום האירוע', size: 15 * fs, colorRole: 'primaryColor', label: 'מקום' }),
+          text({ x: m + 4 * fs, y: top + 77 * fs, w: w - (m + 4 * fs) * 2, text: 'יום ותאריך', size: 16 * fs, bold: true, colorRole: 'primaryColor', label: 'תאריך', detail: true }),
+          text({ x: m + 4 * fs, y: top + 88 * fs, w: w - (m + 4 * fs) * 2, text: 'מקום האירוע', size: 15 * fs, colorRole: 'primaryColor', label: 'מקום', detail: true }),
         ]
       : []),
   ]);
@@ -522,6 +526,11 @@ const SIMCHA_SET: { key: string; name: string; build: () => CanvasDoc }[] = [
   { key: 'sign', name: 'שלט כניסה', build: () => simchaPiece(210, 297, 1.75, 'ברוכים הבאים', 'לשמחת', true) },
   { key: 'status', name: 'הזמנה לסטטוס', build: () => simchaPiece(108, 192, 0.88, 'נשמח לראותכם', 'בשמחתנו', true) },
   { key: 'thanks', name: 'כרטיס תודה', build: () => simchaPiece(148, 105, 0.95, 'תודה רבה', 'על שבאתם לשמוח איתנו', false) },
+  // a roll-up is 85×200 cm: drawn at a quarter of that, the size a browser can still draw at 300dpi, and enlarged at the printer
+  { key: 'rollup', name: 'רול-אפ (להגדלה ל-85×200 ס״מ)', build: () => simchaPiece(212.5, 500, 1.75, 'ברוכים הבאים', 'לשמחת', true) },
+  { key: 'placemat', name: 'פלייסמט לשולחן', build: () => simchaPiece(420, 297, 1.75, 'ברוכים הבאים', 'בשמחה ובטוב לבב', true) },
+  { key: 'birkon', name: 'ברכת המזון', build: () => simchaPiece(105, 148, 0.85, 'ברכת המזון', 'לזכר השמחה', true) },
+  { key: 'sticker', name: 'מדבקה עגולה', build: () => simchaPiece(100, 100, 0.72, 'תודה', 'ששמחתם איתנו', false) },
 ];
 
 /* ------------------------------------------------------------------ saving */
@@ -532,6 +541,8 @@ async function save(key: string, name: string, topic: string, canvas: CanvasDoc,
   if (old && !FORCE && !(FORCE_PREFIX && key.startsWith(FORCE_PREFIX))) return false;
   // nothing changed: the row and its preview stay as they are
   if (old && old.sizeGroup === o.sizeGroup && JSON.stringify(old.canvas) === JSON.stringify(canvas)) return false;
+  // a change that shows nowhere (which fields are the customer's details) leaves its preview right
+  const look = (c: CanvasDoc) => JSON.stringify(c, (k, v) => (k === 'detail' ? undefined : v));
   const row: Project = {
     id,
     kind: 'template',
@@ -543,6 +554,7 @@ async function save(key: string, name: string, topic: string, canvas: CanvasDoc,
     series: o.series,
     sizeGroup: o.sizeGroup,
     canvas,
+    thumbnail: old && look(old.canvas) === look(canvas) ? old.thumbnail : undefined,
     createdAt: old?.createdAt ?? now,
     updatedAt: new Date().toISOString(),
   };
@@ -580,7 +592,20 @@ const LAYOUTS: { format: Format; label: string; kind: 'photo' | 'type' | 'list' 
 
 const SIZES: Record<string, Format> = { status: STORY, post: SQUARE, a4: A4, a5: A5, a6: A6 };
 
+async function seedSimchaSet() {
+  let written = 0;
+  for (const piece of SIMCHA_SET) {
+    counter = 0;
+    if (await save(`simcha:${piece.key}`, piece.name, SIMCHA_TOPIC, piece.build(), { price: 29, series: SIMCHA_SERIES })) written++;
+  }
+  return written;
+}
+
 async function main() {
+  if (ONLY === 'simcha') {
+    console.log(`${await seedSimchaSet()} pieces of the simcha set written (${STATUS}).`);
+    return;
+  }
   await arrangeRings();
   const brandCat = await ensureCategory('דוגמאות מיתוג', 'סימנים לדוגמה שמחזיקים את המקום של הלוגו של העסק');
   const photosCat = await ensureCategory('תמונות למודעות', 'תמונות למודעות לפי מקצוע');
@@ -637,10 +662,7 @@ async function main() {
     count(await save(`greeting:${g.key}`, g.name, g.topic, greeting(g.title, g.line, g.palette), { price: 0 }));
   }
 
-  for (const piece of SIMCHA_SET) {
-    counter = 0;
-    count(await save(`simcha:${piece.key}`, piece.name, SIMCHA_TOPIC, piece.build(), { price: 29, series: SIMCHA_SERIES }));
-  }
+  written += await seedSimchaSet();
 
   console.log(`${written} templates written (${STATUS}${FORCE ? ', forced' : ''}). Open each in the editor as an admin to make its preview.`);
 }
