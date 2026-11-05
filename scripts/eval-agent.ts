@@ -6,7 +6,8 @@
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import { runAgent } from '../src/lib/agent/run';
 import type { AgentMode, AgentState } from '../src/lib/agent/tools';
-import { applyCustomerEdits, validateDoc } from '../src/lib/canvas';
+import { allElements, applyEdits, findElement } from '../src/lib/canvas';
+import { migrateV1, type CanvasDocV1 } from '../src/lib/canvas-v1';
 import type { CanvasDoc, Category, ImageAsset, TextElement } from '../src/lib/types';
 
 type Config = { name: string; model: string; effort?: EffortLevel };
@@ -18,7 +19,7 @@ const CONFIGS: Config[] = [
   { name: 'opus-5.5 medium', model: 'claude-opus-5-5', effort: 'medium' },
 ];
 
-// ---- fixtures ---------------------------------------------------------------------
+// ---- fixtures (written in card format v1 and converted, so they also exercise migrateV1) --
 const categories: Category[] = [{ id: 'cat-bg', name: 'רקעים', description: '', createdAt: '' }];
 const images: ImageAsset[] = [
   { id: 'img-flowers', categoryId: 'cat-bg', name: 'פרחים ורודים', file: 'a.png', width: 1480, height: 2100, createdAt: '' },
@@ -26,12 +27,18 @@ const images: ImageAsset[] = [
   { id: 'img-olive', categoryId: 'cat-bg', name: 'ענפי זית ירוקים', file: 'c.png', width: 1480, height: 2100, createdAt: '' },
 ];
 
-const field = (id: string, label: string, text: string, y: number, editable = true): TextElement => ({
-  id, type: 'text', x_mm: 14, y_mm: y, w_mm: 120, rotation: 0, z: 0, text, align: 'center', editable, label,
+const field = (id: string, label: string, text: string, y: number, editable = true) => ({
+  id, type: 'text' as const, x_mm: 14, y_mm: y, w_mm: 120, rotation: 0, z: 0, text, align: 'center' as const, editable, label,
   font: { family: 'Heebo', weight: 700, size_pt: 20, color: '#1F3A2E' },
 });
 
-const weddingTemplate = (): CanvasDoc => ({
+const v2 = (d: CanvasDocV1): CanvasDoc => {
+  const doc = migrateV1(d);
+  if (!doc) throw new Error('fixture does not convert');
+  return doc;
+};
+
+const weddingTemplate = (): CanvasDoc => v2({
   schema_version: 1,
   page: { width_mm: 148, height_mm: 210, background: '#FAF8F3' },
   elements: [
@@ -45,18 +52,18 @@ const weddingTemplate = (): CanvasDoc => ({
   ].map((e, i) => ({ ...e, z: i })),
 });
 
-const emptyA5 = (): CanvasDoc => ({ schema_version: 1, page: { width_mm: 148, height_mm: 210, background: '#FAF8F3' }, elements: [] });
+const emptyA5 = (): CanvasDoc => v2({ schema_version: 1, page: { width_mm: 148, height_mm: 210, background: '#FAF8F3' }, elements: [] });
 
 // ---- scenarios -----------------------------------------------------------------------
 type Check = [string, (d: CanvasDoc, reply: string) => boolean];
 type Scenario = { name: string; mode: AgentMode; doc: () => CanvasDoc; message: string; checks: Check[] };
 
-const text = (d: CanvasDoc, id: string) => (d.elements.find((e) => e.id === id) as TextElement | undefined)?.text ?? '';
-const texts = (d: CanvasDoc) => d.elements.filter((e): e is TextElement => e.type === 'text');
+const text = (d: CanvasDoc, id: string) => (findElement(d, id)?.el as TextElement | undefined)?.text ?? '';
+const texts = (d: CanvasDoc) => allElements(d).filter((e): e is TextElement => e.type === 'text');
 const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
 const isHebrewReply = (r: string) => /[֐-׿]/.test(r) && !/\b(User|the user|Reply|I should|Let me)\b/i.test(r);
 const inPage = (d: CanvasDoc) =>
-  d.elements.every((e) => e.x_mm >= -1 && e.y_mm >= -1 && e.x_mm + e.w_mm <= d.page.width_mm + 1 && e.y_mm <= d.page.height_mm - 3);
+  allElements(d).every((e) => e.x_mm >= -1 && e.y_mm >= -1 && e.x_mm + e.w_mm <= d.page.width_mm + 1 && e.y_mm <= d.page.height_mm - 3);
 
 const SCENARIOS: Scenario[] = [
   {
@@ -80,7 +87,7 @@ const SCENARIOS: Scenario[] = [
     mode: 'customer',
     doc: () => {
       const d = weddingTemplate();
-      (d.elements.find((e) => e.id === 'bride') as TextElement).text = 'נועה לוי';
+      (findElement(d, 'bride')!.el as TextElement).text = 'נועה לוי';
       return d;
     },
     message: 'השם של החתן הוא אבי',
@@ -97,7 +104,7 @@ const SCENARIOS: Scenario[] = [
     doc: weddingTemplate,
     message: "תחליף את הכותרת ל'מזל טוב', ותשים רקע עם ענפי זית",
     checks: [
-      ['olive bg', (d) => d.elements.some((e) => e.type === 'image' && e.asset_id === 'img-olive' && !e.colorOverride)],
+      ['olive bg', (d) => d.layers.background.image?.asset_id === 'img-olive' && !d.layers.background.image.colorOverride],
       ['title kept', (d) => text(d, 'title') === 'חתונה'],
       ['explains limit', (_, r) => /לא (ניתן|אפשר|יכול|הצלחתי)|נעול|אין אפשרות|אינה ניתנת|לא ניתנת/.test(r)],
       ['reply clean', (_, r) => isHebrewReply(r)],
@@ -111,9 +118,9 @@ const SCENARIOS: Scenario[] = [
       "בנה הזמנה לבר מצווה: כותרת 'בר מצווה' בגופן Frank Ruhl Libre בגודל 40, ומתחתיה שדות לעריכה: שם הילד, תאריך, מקום. רקע תכלת בהיר.",
     checks: [
       ['title', (d) => texts(d).some((t) => t.text.includes('בר מצווה') && t.font.family === 'Frank Ruhl Libre' && t.font.size_pt === 40)],
-      ['title not editable', (d) => texts(d).filter((t) => t.text.includes('בר מצווה')).every((t) => !t.editable)],
-      ['3 labelled fields', (d) => texts(d).filter((t) => t.editable && t.label && t.label !== 'טקסט').length >= 3],
-      ['light blue bg', (d) => { const [r, g, b] = hex(d.page.background); return b > r && b >= g && r + g + b > 450; }],
+      ['title not editable', (d) => texts(d).filter((t) => t.text.includes('בר מצווה')).every((t) => !t.locks.content)],
+      ['3 labelled fields', (d) => texts(d).filter((t) => t.locks.content && t.field?.label && t.field.label !== 'טקסט').length >= 3],
+      ['light blue bg', (d) => { const [r, g, b] = hex(d.layers.background.fill.color); return b > r && b >= g && r + g + b > 450; }],
       ['inside page', (d) => inPage(d)],
       ['no overlaps', (d) => { const ys = texts(d).map((t) => t.y_mm).sort((a, b) => a - b); return ys.every((y, i) => i === 0 || y - ys[i - 1] >= 8); }],
       ['reply clean', (_, r) => isHebrewReply(r)],
@@ -127,8 +134,8 @@ const SCENARIOS: Scenario[] = [
     checks: [
       ['title 48', (d) => texts(d).find((t) => t.id === 'title')?.font.size_pt === 48],
       ['title gold', (d) => { const c = texts(d).find((t) => t.id === 'title')?.font.color ?? '#000000'; const [r, g, b] = hex(c); return r > 150 && g > 100 && b < 120 && r > b; }],
-      ['time deleted', (d) => !d.elements.some((e) => e.id === 'time')],
-      ['rest kept', (d) => ['groom', 'bride', 'date', 'venue', 'bg'].every((id) => d.elements.some((e) => e.id === id))],
+      ['time deleted', (d) => !findElement(d, 'time')],
+      ['rest kept', (d) => ['groom', 'bride', 'date', 'venue'].every((id) => findElement(d, id)) && d.layers.background.image?.asset_id === 'img-flowers'],
       ['reply clean', (_, r) => isHebrewReply(r)],
     ],
   },
@@ -150,7 +157,7 @@ async function one(c: Config, s: Scenario): Promise<Row> {
   const base = { config: c.name, scenario: s.name, total: s.checks.length };
   try {
     const run = await runAgent(state, s.message, [], { model: c.model, effort: c.effort });
-    const doc = s.mode === 'full' ? validateDoc(state.doc) : applyCustomerEdits(original, state.doc, images);
+    const doc = applyEdits(original, state.doc, s.mode === 'full' ? 'author' : 'customer', images);
     if (!doc) return { ...base, passed: 0, failed: ['invalid doc'], cost: run.costUsd, ms: run.ms, turns: run.turns };
     const failed = s.checks.filter(([, f]) => !f(doc, run.reply)).map(([n]) => n);
     return { ...base, passed: s.checks.length - failed.length, failed, cost: run.costUsd, ms: run.ms, turns: run.turns };

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProject } from '@/lib/data/projects';
 import { listCategories, listImages } from '@/lib/data/library';
-import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
+import { applyEdits } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
@@ -41,7 +41,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const mode: AgentMode = project.kind === 'template' ? 'full' : 'customer';
   // the same rules as saving: a customer's copy only takes the changes a customer may make
   const enforce = (d: unknown): CanvasDoc | null =>
-    mode === 'full' ? validateDoc(d) : applyCustomerEdits(project.canvas, d, images);
+    applyEdits(project.canvas, d, mode === 'full' ? 'author' : 'customer', images);
   const base = enforce(body?.canvas);
   if (!base) return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
 

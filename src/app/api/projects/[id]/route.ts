@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
+import { applyEdits } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
@@ -53,8 +53,8 @@ export async function PUT(req: Request, { params }: Ctx) {
   if (body?.canvas !== undefined) {
     // a customer's design takes only the changes a customer may make; that needs the image library
     const images = await listImages();
-    // admin editing a template: full control. A customer's design: text of editable fields only.
-    patch.canvas = (p) => (p.kind === 'template' ? validateDoc(body.canvas) : applyCustomerEdits(p.canvas, body.canvas, images));
+    // admin editing a template: full control. A customer's design: what each element's locks allow.
+    patch.canvas = (p) => applyEdits(p.canvas, body.canvas, p.kind === 'template' ? 'author' : 'customer', images);
   }
 
   const result = await updateProject(user, id, patch);

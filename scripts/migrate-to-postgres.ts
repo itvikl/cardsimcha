@@ -11,14 +11,14 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { audienceOf } from '../src/lib/categories';
-import { validateDoc } from '../src/lib/canvas';
+import { toV2 } from '../src/lib/canvas-v1';
 import { files } from '../src/lib/files';
 import { stableId } from '../src/lib/data/ids';
 import { assetFileKey } from '../src/lib/data/library';
 import { prisma } from '../src/lib/data/prisma';
 import { personalWorkspaceId } from '../src/lib/data/users';
 import type { Prisma } from '../src/generated/prisma/client';
-import type { Db, Project } from '../src/lib/types';
+import type { Db } from '../src/lib/types';
 
 const from = process.argv.includes('--from') ? process.argv[process.argv.indexOf('--from') + 1] : 'firestore';
 if (from !== 'firestore' && from !== 'local') throw new Error('--from firestore | local');
@@ -116,7 +116,7 @@ async function main() {
 
   // --- templates, then designs (a design may point at a template) ---
   /** a thumbnail is a data URL or an "/api/uploads/<file>" link; either becomes thumbnails/<id>.<ext> */
-  async function thumbnail(p: Project): Promise<string | null> {
+  async function thumbnail(p: { id: string; thumbnail?: string }): Promise<string | null> {
     const t = p.thumbnail ?? '';
     const m = THUMB.exec(t);
     if (m) {
@@ -139,13 +139,18 @@ async function main() {
   }
   const templates = db.projects.filter((p) => p.kind === 'template');
   const designs = db.projects.filter((p) => p.kind === 'design');
-  for (const p of db.projects) if (!validateDoc(p.canvas)) note('canvases that fail validateDoc (kept as they are)');
+  /** cards are stored as format v2; one that cannot be converted is kept as it is and reported */
+  const card = (p: { canvas: unknown }) => {
+    const v2 = toV2(p.canvas);
+    if (!v2) note('canvases not converted to v2 (kept as they are)');
+    return json(v2 ?? p.canvas);
+  };
   // a kind this branch does not know (e.g. 'wording' from an unpushed branch) is listed, not copied
   for (const p of db.projects) if (p.kind !== 'template' && p.kind !== 'design') note(`projects skipped (kind '${p.kind}')`);
 
   await pool(templates, 8, async (p) => {
     const data = {
-      name: p.name, status: p.status, topicId: p.topic ? (topicId.get(p.topic) ?? null) : null, canvas: json(p.canvas),
+      name: p.name, status: p.status, topicId: p.topic ? (topicId.get(p.topic) ?? null) : null, canvas: card(p),
       thumbnailKey: await thumbnail(p), publishedAt: p.status === 'published' ? date(p.updatedAt) : null,
       createdAt: date(p.createdAt), updatedAt: date(p.updatedAt),
     };
@@ -158,7 +163,7 @@ async function main() {
     const data = {
       workspaceId: await workspaceOf(p.ownerId, 'אורח'), userId: p.ownerId,
       templateId: p.templateId && templateIds.has(p.templateId) ? p.templateId : null,
-      name: p.name, canvas: json(p.canvas), thumbnailKey: await thumbnail(p),
+      name: p.name, canvas: card(p), thumbnailKey: await thumbnail(p),
       createdAt: date(p.createdAt), updatedAt: date(p.updatedAt),
     };
     await prisma.creative.upsert({ where: { id: p.id }, update: data, create: { id: p.id, ...data } });

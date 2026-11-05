@@ -1,5 +1,6 @@
 import type { Creative, Prisma, Template, Topic } from '@/generated/prisma/client';
 import type { Audience } from '../categories';
+import { toV2 } from '../canvas-v1';
 import { canRead, canWrite } from '../access';
 import { files } from '../files';
 import { topicConflict } from '../topics';
@@ -15,7 +16,12 @@ import { ensurePersonalWorkspace } from './users';
 
 type Tx = Prisma.TransactionClient;
 const json = (doc: CanvasDoc) => doc as unknown as Prisma.InputJsonValue;
-const doc = (v: Prisma.JsonValue) => v as unknown as CanvasDoc;
+/** stored cards may still be format v1 until scripts/cards-to-v2.ts ran; they are converted on read */
+function doc(v: Prisma.JsonValue, id: string): CanvasDoc {
+  const d = toV2(v);
+  if (!d) throw new Error(`card ${id} has an invalid canvas`);
+  return d;
+}
 
 /** thumbnails are served by /api/thumbnails/<id>; `v` changes the URL when the card is saved */
 const thumbUrl = (id: string, key: string | null, updatedAt: Date) =>
@@ -28,7 +34,7 @@ const fromTemplate = (t: Template & { topic: Topic | null }): Project => ({
   status: t.status,
   name: t.name,
   topic: t.topic?.name,
-  canvas: doc(t.canvas),
+  canvas: doc(t.canvas, t.id),
   thumbnail: thumbUrl(t.id, t.thumbnailKey, t.updatedAt),
   createdAt: t.createdAt.toISOString(),
   updatedAt: t.updatedAt.toISOString(),
@@ -41,7 +47,7 @@ const fromCreative = (c: Creative): Project => ({
   templateId: c.templateId ?? undefined,
   status: 'draft',
   name: c.name,
-  canvas: doc(c.canvas),
+  canvas: doc(c.canvas, c.id),
   thumbnail: thumbUrl(c.id, c.thumbnailKey, c.updatedAt),
   createdAt: c.createdAt.toISOString(),
   updatedAt: c.updatedAt.toISOString(),
@@ -93,7 +99,7 @@ export async function createDesignFromTemplate(user: User, templateId: string, e
   const t = await prisma.template.findUnique({ where: { id: templateId } });
   if (!t || (t.status !== 'published' && user.role !== 'admin')) return null;
   const workspaceId = await ensurePersonalWorkspace(user);
-  const canvas = structuredClone(doc(t.canvas));
+  const canvas = doc(t.canvas, t.id);
   edit(canvas);
   const id = newId();
   // the copy starts with the template's thumbnail until its first save
