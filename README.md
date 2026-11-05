@@ -25,7 +25,7 @@ npm run db:down      # עצירה (הנתונים נשמרים ב-volume)
 docker compose --profile app up --build   # האפליקציה כ-image של production ב-localhost:3200
 ```
 
-הסכמה ב-[prisma/schema.prisma](prisma/schema.prisma). כתובת ברירת המחדל של מסד הנתונים מוגדרת בקוד, ואפשר להחליף אותה עם `DATABASE_URL` ב-`.env.local`. האפליקציה עצמה עדיין קוראת מ-Firestore, עד שהשכבה החדשה תחליף את `db.ts`.
+הסכמה ב-[prisma/schema.prisma](prisma/schema.prisma). כתובת ברירת המחדל של מסד הנתונים מוגדרת בקוד, ואפשר להחליף אותה עם `DATABASE_URL` ב-`.env.local`. בענף הזה האפליקציה קוראת וכותבת ל-Postgres דרך `src/lib/data/`, וקבצים (תמונות ותמונות מקדימות) נשמרים ב-`data/files/`. הקוד של Firestore (`db.ts`, `firebase.ts`) נשאר לסקריפט ההעברה, וענפים אחרים ממשיכים לעבוד עם Firebase.
 
 ## משתמשים והרשאות
 
