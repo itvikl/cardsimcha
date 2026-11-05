@@ -188,23 +188,25 @@ export async function deleteProject(user: User, id: string): Promise<boolean> {
 // --- thumbnails ---
 
 const thumbKey = (id: string, ext: string) => `thumbnails/${id}.${ext}`;
+const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
 
 async function copyThumbnail(fromKey: string, toId: string): Promise<string | null> {
   const data = await files.get(fromKey);
   if (!data) return null;
   const key = thumbKey(toId, fromKey.slice(fromKey.lastIndexOf('.') + 1));
-  await files.put(key, data, key.endsWith('.png') ? 'image/png' : 'image/jpeg');
+  await files.put(key, data, IMAGE_TYPES[key.slice(key.lastIndexOf('.'))] ?? 'image/jpeg');
   return key;
 }
 
 async function saveThumbnail(id: string, t: { data: Buffer; ext: 'png' | 'jpg' }): Promise<string | null> {
   const key = thumbKey(id, t.ext);
   await files.put(key, t.data, t.ext === 'png' ? 'image/png' : 'image/jpeg');
-  const old = thumbKey(id, t.ext === 'png' ? 'jpg' : 'png');
-  const where = { id };
-  const tpl = await prisma.template.updateMany({ where, data: { thumbnailKey: key } });
-  if (!tpl.count) await prisma.creative.updateMany({ where, data: { thumbnailKey: key } });
-  await files.remove([old]);
+  const select = { thumbnailKey: true } as const;
+  const before = (await prisma.template.findUnique({ where: { id }, select })) ?? (await prisma.creative.findUnique({ where: { id }, select }));
+  const tpl = await prisma.template.updateMany({ where: { id }, data: { thumbnailKey: key } });
+  if (!tpl.count) await prisma.creative.updateMany({ where: { id }, data: { thumbnailKey: key } });
+  // the previous file, when it had another extension (a migrated card may have .webp)
+  if (before?.thumbnailKey && before.thumbnailKey !== key) await files.remove([before.thumbnailKey]);
   const p = await getProject(id);
   return p?.updatedAt ?? null;
 }
@@ -221,5 +223,5 @@ export async function readThumbnail(user: User | null, id: string): Promise<{ da
       : await prisma.creative.findUnique({ where: { id }, select: { thumbnailKey: true } });
   if (!row?.thumbnailKey) return null;
   const data = await files.get(row.thumbnailKey);
-  return data && { data, contentType: row.thumbnailKey.endsWith('.png') ? 'image/png' : 'image/jpeg' };
+  return data && { data, contentType: IMAGE_TYPES[row.thumbnailKey.slice(row.thumbnailKey.lastIndexOf('.'))] ?? 'image/jpeg' };
 }
