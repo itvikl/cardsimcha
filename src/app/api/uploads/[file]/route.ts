@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { readUpload } from '@/lib/db';
+import { fileKeyOfImage } from '@/lib/data/library';
+import { files } from '@/lib/files';
 
 type Ctx = { params: Promise<{ file: string }> };
 
@@ -14,7 +15,8 @@ export async function GET(_req: Request, { params }: Ctx) {
   const { file } = await params;
   // only plain "<uuid>.<ext>" names are ever stored; reject anything else (path traversal)
   if (!/^[0-9a-f-]{36}\.(png|jpg|webp|gif)$/.test(file)) return new Response('Not found', { status: 404 });
-  const data = await readUpload(file);
+  const key = await fileKeyOfImage(file);
+  const data = key && (await files.get(key));
   if (!data) return new Response('Not found', { status: 404 });
   return new Response(new Uint8Array(data), {
     headers: {

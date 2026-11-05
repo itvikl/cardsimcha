@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
-import { readDb, updateDb } from './db';
+import { createSession as storeSession, deleteSession, userBySession } from './data/users';
 import { AUTH_DISABLED } from './config';
 import type { User } from './types';
 
@@ -27,21 +27,15 @@ export async function verifyPassword(password: string, salt: string, hash: strin
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Sessions are stored hashed, so a leaked db.json does not leak usable cookies. */
+/** Sessions are stored hashed, so a leaked database does not leak usable cookies. */
 export async function createSession(userId: string): Promise<string> {
   const token = randomBytes(32).toString('hex');
-  await updateDb((db) => {
-    const now = Date.now();
-    db.sessions = db.sessions.filter((s) => s.expiresAt > now);
-    db.sessions.push({ tokenHash: sha(token), userId, expiresAt: now + SESSION_MS });
-  });
+  await storeSession(sha(token), userId, new Date(Date.now() + SESSION_MS));
   return token;
 }
 
 export async function destroySession(token: string) {
-  await updateDb((db) => {
-    db.sessions = db.sessions.filter((s) => s.tokenHash !== sha(token));
-  });
+  await deleteSession(sha(token));
 }
 
 export function setSessionCookie(res: NextResponse, token: string) {
@@ -83,10 +77,7 @@ export async function getUser(): Promise<User | null> {
   if (AUTH_DISABLED) return guestUser();
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
-  const db = await readDb();
-  const s = db.sessions.find((x) => x.tokenHash === sha(token));
-  if (!s || s.expiresAt < Date.now()) return null;
-  return db.users.find((u) => u.id === s.userId) ?? null;
+  return userBySession(sha(token));
 }
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
