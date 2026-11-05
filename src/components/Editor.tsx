@@ -5,12 +5,36 @@ import Link from 'next/link';
 import { Stage, Layer, Rect, Text, Image as KImage, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import type Konva from 'konva';
-import { FONTS, PAGE_PRESETS } from '@/lib/canvas';
+import {
+  addElement as addTo,
+  allElements,
+  findElement,
+  moveInLayer,
+  moveToLayer,
+  PAGE_PRESETS,
+  removeElement,
+  replaceElement,
+  setBackground,
+  updateElement,
+} from '@/lib/canvas';
 import { newImage, newRect, newText } from '@/lib/elements';
+import { fontFamilies, nearestWeight, WEIGHT_NAMES, type FontFamily } from '@/lib/fonts';
+import { loadFont, registerUploadedFonts } from '@/lib/fonts-client';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
 import { DownloadIcon, FitIcon, RedoIcon, UndoIcon } from './Icons';
-import type { CanvasDoc, CanvasElement, Category, ImageAsset, Project, TextElement } from '@/lib/types';
+import type {
+  BackgroundLayer,
+  CanvasDoc,
+  CanvasElement,
+  Category,
+  ImageAsset,
+  ImageElement,
+  LayerName,
+  Locks,
+  Project,
+  TextElement,
+} from '@/lib/types';
 
 const PX = 3; // canvas pixels per mm at zoom 1
 const PT_TO_MM = 25.4 / 72;
@@ -18,26 +42,34 @@ const HISTORY_LIMIT = 100;
 /** Quick colour choices for customers (the site palette plus black and white). */
 const BG_SWATCHES = ['#FAF8F3', '#FFFFFF', '#E4ECE3', '#DCE7DA', '#2F5D46', '#1F3A2E', '#C9A24B', '#1B1F1C'];
 const SWATCHES = ['#1F3A2E', '#2F5D46', '#C9A24B', '#FAF8F3', '#1B1F1C'];
+const LAYER_LABEL: Record<LayerName, string> = { content: 'תוכן', overlay: 'שכבה עליונה' };
+const LOCK_LABELS: [keyof Locks, string][] = [
+  ['content', 'לשנות את התוכן (טקסט / החלפת תמונה)'],
+  ['style', 'לשנות צבע'],
+  ['transform', 'להזיז, לשנות גודל ולסובב'],
+  ['delete', 'למחוק'],
+];
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error';
 
-const normalize = (els: CanvasElement[]): CanvasElement[] => els.map((e, i) => ({ ...e, z: i }));
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
+const fontStyle = (w: number) => (w === 400 ? 'normal' : String(w));
+const uploadUrl = (a: ImageAsset | undefined) => (a ? `/api/uploads/${a.file}` : '');
 
 function ImageNode({
   el,
   asset,
-  interactive,
+  draggable,
   onSelect,
   onChange,
 }: {
-  el: Extract<CanvasElement, { type: 'image' }>;
+  el: ImageElement;
   asset: ImageAsset | undefined;
-  interactive: boolean;
-  onSelect: () => void;
+  draggable: boolean;
+  onSelect?: () => void;
   onChange: (patch: Partial<CanvasElement>) => void;
 }) {
-  const [img, status] = useImage(asset ? `/api/uploads/${asset.file}` : '');
+  const [img, status] = useImage(uploadUrl(asset));
   const common = {
     id: el.id,
     x: el.x_mm * PX,
@@ -45,9 +77,9 @@ function ImageNode({
     width: el.w_mm * PX,
     height: el.h_mm * PX,
     rotation: el.rotation,
-    draggable: interactive,
-    onMouseDown: interactive ? onSelect : undefined,
-    onTap: interactive ? onSelect : undefined,
+    draggable,
+    onMouseDown: onSelect,
+    onTap: onSelect,
     onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX }),
     onTransformEnd: (e: Konva.KonvaEventObject<Event>) => {
       const n = e.target;
@@ -64,6 +96,98 @@ function ImageNode({
   }
   if (!img) return <Rect {...common} fill="rgba(0,0,0,0)" listening={false} />;
   return <KImage {...common} image={img} />;
+}
+
+/** The background layer: its fill, and its image filling the page (cover or contain). Never takes clicks. */
+function BackgroundNode({ bg, asset, w, h }: { bg: BackgroundLayer; asset: ImageAsset | undefined; w: number; h: number }) {
+  const [img] = useImage(bg.image && !bg.image.colorOverride ? uploadUrl(asset) : '');
+  const fill = <Rect x={0} y={0} width={w} height={h} fill={bg.fill.color} />;
+  if (!bg.image) return fill;
+  if (bg.image.colorOverride) return <Rect x={0} y={0} width={w} height={h} fill={bg.image.colorOverride} />;
+  if (!img) return fill;
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  if (bg.image.fit === 'cover') {
+    // crop the image to the page's proportions, centred
+    const s = Math.max(w / iw, h / ih);
+    const cw = w / s;
+    const ch = h / s;
+    return <KImage x={0} y={0} width={w} height={h} image={img} crop={{ x: (iw - cw) / 2, y: (ih - ch) / 2, width: cw, height: ch }} />;
+  }
+  const s = Math.min(w / iw, h / ih);
+  return (
+    <>
+      {fill}
+      <KImage x={(w - iw * s) / 2} y={(h - ih * s) / 2} width={iw * s} height={ih * s} image={img} />
+    </>
+  );
+}
+
+/** The author's lock inspector: what customers may do with this element, and the field they see. */
+function LockInspector({
+  locks,
+  field,
+  allowed,
+  onChange,
+  children,
+}: {
+  locks: Locks;
+  field?: { label: string; variable?: string };
+  allowed: (keyof Locks)[];
+  onChange: (patch: { locks?: Locks; field?: { label: string; variable?: string } | undefined }, key?: string) => void;
+  children?: React.ReactNode;
+}) {
+  const customer = locks.content || locks.style || locks.transform || locks.delete;
+  return (
+    <div className="card" style={{ display: 'grid', gap: 8, padding: 12 }}>
+      <h3 className="panel-title" style={{ margin: 0 }}>הלקוח יכול</h3>
+      {LOCK_LABELS.filter(([k]) => allowed.includes(k)).map(([k, label]) => (
+        <label key={k} className="row" style={{ gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={locks[k]}
+            onChange={(e) => {
+              const next = { ...locks, [k]: e.target.checked };
+              const open = next.content || next.style || next.transform || next.delete;
+              onChange({ locks: next, field: open ? (field ?? { label: '' }) : undefined });
+            }}
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+      {customer && (
+        <>
+          <label className="field">
+            שם השדה שהלקוח רואה
+            <input
+              type="text"
+              maxLength={60}
+              value={field?.label ?? ''}
+              placeholder="למשל: שם החתן"
+              onChange={(e) => onChange({ field: { ...field, label: e.target.value } }, 'label')}
+            />
+          </label>
+          <label className="field">
+            משתנה (לא חובה)
+            <input
+              type="text"
+              dir="ltr"
+              maxLength={41}
+              value={field?.variable ?? ''}
+              placeholder="event_name"
+              onChange={(e) => {
+                const v = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                const { variable: _old, ...rest } = field ?? { label: '' };
+                void _old;
+                onChange({ field: v && /^[a-z_]/.test(v) ? { ...rest, variable: v } : rest }, 'variable');
+              }}
+            />
+          </label>
+        </>
+      )}
+      {children}
+    </div>
+  );
 }
 
 export default function Editor({ id }: { id: string }) {
@@ -90,6 +214,7 @@ export default function Editor({ id }: { id: string }) {
   const [save, setSave] = useState<SaveState>('saved');
   const [loadError, setLoadError] = useState('');
   const [fontsTick, setFontsTick] = useState(0);
+  const [families, setFamilies] = useState<FontFamily[]>(() => fontFamilies([]));
 
   const stageRef = useRef<Konva.Stage>(null);
   const trRef = useRef<Konva.Transformer>(null);
@@ -130,14 +255,28 @@ export default function Editor({ id }: { id: string }) {
     }
   }, []);
 
+  // uploaded fonts join the font list; each family and weight the card uses is loaded before the
+  // texts are measured, and again whenever a text switches to one not loaded yet
   useEffect(() => {
+    registerUploadedFonts().then((fonts) => setFamilies(fontFamilies(fonts)));
+  }, []);
+  const usedFonts = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of doc ? allElements(doc) : []) if (e.type === 'text') set.add(JSON.stringify([e.font.family, e.font.weight]));
+    // a string, so the effect below runs only when the set changes, not on every edit
+    return JSON.stringify([...set].sort());
+  }, [doc]);
+  useEffect(() => {
+    const used = (JSON.parse(usedFonts) as string[]).map((k) => JSON.parse(k) as [string, number]);
+    if (!used.length) return;
     let alive = true;
-    const loads = FONTS.flatMap((f) => [`400 16px "${f}"`, `700 16px "${f}"`].map((s) => document.fonts.load(s, 'אבגabc')));
-    Promise.allSettled(loads).then(() => alive && setFontsTick((n) => n + 1));
+    registerUploadedFonts()
+      .then(() => Promise.all(used.map(([family, weight]) => loadFont(family, weight))))
+      .then(() => alive && setFontsTick((n) => n + 1));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [usedFonts]);
 
   // ---- fit zoom ------------------------------------------------------------
   useEffect(() => {
@@ -180,11 +319,22 @@ export default function Editor({ id }: { id: string }) {
     bump((n) => n + 1);
   }, []);
 
+  /** a change to the current doc, recorded in the history */
+  const change = useCallback(
+    (fn: (d: CanvasDoc) => CanvasDoc, mergeKey?: string) => {
+      const cur = docRef.current;
+      if (cur) commit(fn(cur), mergeKey);
+    },
+    [commit],
+  );
+
   /** Applies the assistant's card and briefly marks every element it touched. */
   const applyAgent = useCallback(
     (next: CanvasDoc) => {
-      const before = new Map(docRef.current?.elements.map((e) => [e.id, JSON.stringify(e)]));
-      const changed = new Set(next.elements.filter((e) => before.get(e.id) !== JSON.stringify(e)).map((e) => e.id));
+      const cur = docRef.current;
+      const before = new Map(cur ? allElements(cur).map((e) => [e.id, JSON.stringify(e)]) : []);
+      const changed = new Set<string>(allElements(next).filter((e) => before.get(e.id) !== JSON.stringify(e)).map((e) => e.id));
+      if (cur && JSON.stringify(cur.layers.background) !== JSON.stringify(next.layers.background)) changed.add('background');
       commit(next);
       setAiTouched(changed);
       window.clearTimeout(aiTimer.current);
@@ -195,12 +345,12 @@ export default function Editor({ id }: { id: string }) {
   );
 
   const patchElement = useCallback(
-    (elId: string, patch: Partial<CanvasElement>, mergeKey?: string) => {
-      const cur = docRef.current;
-      if (!cur) return;
-      commit({ ...cur, elements: cur.elements.map((e) => (e.id === elId ? ({ ...e, ...patch } as CanvasElement) : e)) }, mergeKey);
-    },
-    [commit],
+    (elId: string, patch: Partial<CanvasElement>, mergeKey?: string) => change((d) => updateElement(d, elId, patch), mergeKey),
+    [change],
+  );
+  const patchBackground = useCallback(
+    (patch: Partial<BackgroundLayer>, mergeKey?: string) => change((d) => setBackground(d, patch), mergeKey),
+    [change],
   );
 
   const undo = useCallback(() => {
@@ -251,7 +401,7 @@ export default function Editor({ id }: { id: string }) {
       }
     }, 1200);
     return () => clearTimeout(t);
-  }, [doc, name, save, id]);
+  }, [doc, name, save, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => {
@@ -262,61 +412,31 @@ export default function Editor({ id }: { id: string }) {
   }, [save]);
 
   // ---- actions -----------------------------------------------------------------
-  const selected = doc?.elements.find((e) => e.id === selectedId) ?? null;
+  const found = doc && selectedId ? findElement(doc, selectedId) : null;
+  const selected = found?.el ?? null;
   const assetById = useMemo(() => new Map(library.images.map((i) => [i.id, i])), [library.images]);
 
-  const addElement = (el: CanvasElement) => {
-    const doc = docRef.current;
-    if (!doc) return;
-    commit({ ...doc, elements: normalize([...doc.elements, el]) });
+  const addElement = (el: CanvasElement, layer: LayerName = 'content') => {
+    change((d) => addTo(d, el, layer));
     setSelectedId(el.id);
   };
 
-  const addText = () => {
-    const doc = docRef.current;
-    if (doc) addElement(newText(doc));
-  };
-
-  const addRect = () => {
-    const doc = docRef.current;
-    if (doc) addElement(newRect(doc));
-  };
-
-  const addImage = (asset: ImageAsset) => {
-    const doc = docRef.current;
-    if (doc) addElement(newImage(doc, asset));
-  };
+  const addText = () => doc && addElement(newText(doc));
+  const addRect = () => doc && addElement(newRect(doc));
+  const addImage = (asset: ImageAsset) => doc && addElement(newImage(doc, asset));
 
   const removeSelected = useCallback(() => {
-    const doc = docRef.current;
-    if (!doc || !selectedId) return;
-    commit({ ...doc, elements: normalize(doc.elements.filter((e) => e.id !== selectedId)) });
+    if (!selectedId) return;
+    change((d) => removeElement(d, selectedId));
     setSelectedId(null);
-  }, [doc, selectedId, commit]);
+  }, [selectedId, change]);
 
   const duplicateSelected = useCallback(() => {
-    const doc = docRef.current;
-    if (!doc || !selected) return;
-    addElement({ ...selected, id: crypto.randomUUID(), x_mm: selected.x_mm + 5, y_mm: selected.y_mm + 5, z: doc.elements.length });
-  }, [doc, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!found) return;
+    addElement({ ...found.el, id: crypto.randomUUID(), x_mm: found.el.x_mm + 5, y_mm: found.el.y_mm + 5 }, found.layer);
+  }, [found]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const moveZ = (dir: 'front' | 'back' | 'up' | 'down') => {
-    const doc = docRef.current;
-    if (!doc || !selectedId) return;
-    const els = [...doc.elements];
-    const i = els.findIndex((e) => e.id === selectedId);
-    if (i < 0) return;
-    const [it] = els.splice(i, 1);
-    const target = dir === 'front' ? els.length : dir === 'back' ? 0 : dir === 'up' ? Math.min(els.length, i + 1) : Math.max(0, i - 1);
-    els.splice(target, 0, it);
-    commit({ ...doc, elements: normalize(els) });
-  };
-
-  const setPage = (patch: Partial<CanvasDoc['page']>, mergeKey?: string) => {
-    const doc = docRef.current;
-    if (!doc) return;
-    commit({ ...doc, page: { ...doc.page, ...patch } }, mergeKey);
-  };
+  const moveZ = (dir: 'front' | 'back' | 'up' | 'down') => selectedId && change((d) => moveInLayer(d, selectedId, dir));
 
   const makeThumb = (): string | undefined => {
     const stage = stageRef.current;
@@ -334,7 +454,7 @@ export default function Editor({ id }: { id: string }) {
     const d = docRef.current;
     if (!d) return;
     if (status === 'published') {
-      const fields = d.elements.filter((e) => e.type === 'text' && e.editable).length;
+      const fields = allElements(d).filter((e) => e.type === 'text' && e.locks.content).length;
       if (fields === 0 && !confirm('בתבנית אין אף שדה טקסט שהלקוח יכול לערוך. לפרסם בכל זאת?')) return;
     }
     setPubBusy(true);
@@ -451,11 +571,137 @@ export default function Editor({ id }: { id: string }) {
   const saveLabel = { saved: 'נשמר', saving: 'שומר…', dirty: 'שינויים לא שמורים', error: 'השמירה נכשלה, מנסה שוב בעריכה הבאה' }[save];
 
   const full = canManage;
-  const swappables = doc.elements.filter((e): e is Extract<CanvasElement, { type: 'image' }> => e.type === 'image' && !!e.swappable);
-  const editableFields = doc.elements.filter((e): e is TextElement => e.type === 'text' && !!e.editable);
+  const bg = doc.layers.background;
+  const elements = allElements(doc);
+  const swappables = elements.filter((e): e is ImageElement => e.type === 'image' && e.locks.content);
+  const textFields = elements.filter((e): e is TextElement => e.type === 'text' && (e.locks.content || e.locks.style));
+  const bgChoice = bg.locks.content || bg.locks.style;
   const textEl = selected?.type === 'text' ? selected : null;
+  const textFamily = textEl ? families.find((f) => f.family === textEl.font.family) : undefined;
+  const textWeights = textEl ? [...new Set([...(textFamily?.weights ?? []), textEl.font.weight])].sort((a, b) => a - b) : [];
   const updateText = (patch: Partial<TextElement>, key?: string) => selected && patchElement(selected.id, patch, key);
   const num = (v: string) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  /** a lock-inspector change; a field only exists while customers may do something with the element */
+  const setLocks = (el: CanvasElement, p: { locks?: Locks; field?: CanvasElement['field'] }, key?: string) => {
+    const next = { ...el, ...p } as CanvasElement;
+    if (!next.field) delete next.field;
+    change((d) => replaceElement(d, el.id, next), key && `${key}:${el.id}`);
+  };
+
+  /** one card element on its Konva layer */
+  const renderElement = (el: CanvasElement) => {
+    const onSelect = full ? () => setSelectedId(el.id) : undefined;
+    // customers may drag what its transform lock allows; the server checks it again on save
+    const draggable = full || el.locks.transform;
+    const onChange = (patch: Partial<CanvasElement>) => patchElement(el.id, patch);
+    const transformEnd = (e: Konva.KonvaEventObject<Event>, withHeight: boolean) => {
+      const n = e.target;
+      const w = n.width() * n.scaleX();
+      const h = n.height() * n.scaleY();
+      n.scaleX(1);
+      n.scaleY(1);
+      onChange({ x_mm: n.x() / PX, y_mm: n.y() / PX, w_mm: w / PX, ...(withHeight && { h_mm: h / PX }), rotation: n.rotation() });
+    };
+    if (el.type === 'image') {
+      return <ImageNode key={el.id} el={el} asset={assetById.get(el.asset_id)} draggable={draggable} onSelect={onSelect} onChange={onChange} />;
+    }
+    if (el.type === 'shape') {
+      return (
+        <Rect
+          key={el.id}
+          id={el.id}
+          x={el.x_mm * PX}
+          y={el.y_mm * PX}
+          width={el.w_mm * PX}
+          height={el.h_mm * PX}
+          rotation={el.rotation}
+          fill={el.fill.color}
+          draggable={draggable}
+          onMouseDown={onSelect}
+          onTap={onSelect}
+          onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
+          onTransformEnd={(e) => transformEnd(e, true)}
+        />
+      );
+    }
+    const focusField = () => {
+      if (!el.locks.content && !el.locks.style) return;
+      setActiveField(el.id);
+      fieldRefs.current[el.id]?.focus({ preventScroll: false });
+    };
+    return (
+      <Text
+        key={`${el.id}-${fontsTick}`}
+        id={el.id}
+        x={el.x_mm * PX}
+        y={el.y_mm * PX}
+        width={el.w_mm * PX}
+        rotation={el.rotation}
+        text={el.text}
+        align={el.align}
+        fontFamily={el.font.family}
+        fontStyle={fontStyle(el.font.weight)}
+        fontSize={el.font.size_pt * PT_TO_MM * PX}
+        fill={el.font.color}
+        lineHeight={el.font.line_height ?? 1.25}
+        letterSpacing={(el.font.letter_spacing ?? 0) * PT_TO_MM * PX}
+        wrap="word"
+        draggable={draggable}
+        dragBoundFunc={function (this: Konva.Node, pos) {
+          // keep the text box inside the page while dragging (pos is in screen pixels)
+          const w = this.width() * zoom;
+          const h = this.height() * zoom;
+          return {
+            x: clamp(pos.x, 0, Math.max(0, pageW * zoom - w)),
+            y: clamp(pos.y, 0, Math.max(0, pageH * zoom - h)),
+          };
+        }}
+        onMouseDown={onSelect ?? focusField}
+        onTap={onSelect ?? focusField}
+        onMouseEnter={(e) => {
+          if (draggable) e.target.getStage()!.container().style.cursor = 'move';
+        }}
+        onMouseLeave={(e) => {
+          e.target.getStage()!.container().style.cursor = '';
+        }}
+        onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
+        onTransformEnd={(e) => transformEnd(e, false)}
+      />
+    );
+  };
+
+  const colorSwatches = (palette: string[], current: string | undefined, label: string, pick: (c: string) => void, key: string) => (
+    <div className="swatches" role="group" aria-label={label}>
+      {palette.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className="swatch"
+          style={{ background: c }}
+          aria-label={`צבע ${c}`}
+          aria-pressed={current?.toLowerCase() === c.toLowerCase()}
+          onClick={() => pick(c)}
+        />
+      ))}
+      <input type="color" className="swatch-picker" aria-label="צבע אחר" value={current ?? '#faf8f3'} onChange={(e) => pick(e.target.value)} data-key={key} />
+    </div>
+  );
+
+  /** the image options a customer may pick for a swappable image */
+  const imagePicker = (collection: string | undefined, current: string | undefined, pick: (asset: ImageAsset) => void) => {
+    const options = library.images.filter((i) => !collection || i.categoryId === collection);
+    if (options.length === 0) return <span className="status">אין תמונות להחלפה.</span>;
+    return (
+      <div className="pick-grid">
+        {options.map((img) => (
+          <button key={img.id} type="button" className="pick" title={img.name} aria-pressed={img.id === current} onClick={() => pick(img)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={uploadUrl(img)} alt={img.name} />
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="editor-wrap">
@@ -539,7 +785,7 @@ export default function Editor({ id }: { id: string }) {
                 </button>
               </div>
             )}
-            {canAgent && (editableFields.length > 0 || swappables.length > 0) && (
+            {canAgent && (textFields.length > 0 || swappables.length > 0 || bgChoice) && (
               <div style={{ order: -2 }}>
                 <AgentPanel
                   projectId={id}
@@ -551,166 +797,136 @@ export default function Editor({ id }: { id: string }) {
                 />
               </div>
             )}
-            {editableFields.length === 0 && swappables.length === 0 ? (
+            {textFields.length === 0 && swappables.length === 0 && !bgChoice ? (
               <p className="status">בתבנית הזו אין שדות לעריכה.</p>
             ) : (
-              editableFields.map((f) => (
+              textFields.map((f) => (
                 <div key={f.id} className={'field field-card' + (aiTouched.has(f.id) ? ' ai-touched' : '')}>
                   <div className="field-head">
-                    <label htmlFor={`f-${f.id}`}>{f.label || 'טקסט'}</label>
-                    <div className="swatches" role="group" aria-label={`צבע הטקסט: ${f.label || 'טקסט'}`}>
-                      {SWATCHES.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          className="swatch"
-                          style={{ background: c }}
-                          aria-label={`צבע ${c}`}
-                          aria-pressed={f.font.color.toLowerCase() === c.toLowerCase()}
-                          onClick={() => patchElement(f.id, { font: { ...f.font, color: c } } as Partial<CanvasElement>)}
-                        />
-                      ))}
-                      <input
-                        type="color"
-                        className="swatch-picker"
-                        aria-label="צבע אחר"
-                        value={f.font.color}
-                        onChange={(e) => patchElement(f.id, { font: { ...f.font, color: e.target.value } } as Partial<CanvasElement>, 'color:' + f.id)}
-                      />
-                    </div>
+                    <label htmlFor={`f-${f.id}`}>{f.field?.label || 'טקסט'}</label>
+                    {f.locks.style &&
+                      colorSwatches(SWATCHES, f.font.color, `צבע הטקסט: ${f.field?.label || 'טקסט'}`, (c) => patchElement(f.id, { font: { ...f.font, color: c } }, 'color:' + f.id), f.id)}
                   </div>
-                  <textarea
-                    id={`f-${f.id}`}
-                    onFocus={() => setActiveField(f.id)}
-                    ref={(n) => {
-                      fieldRefs.current[f.id] = n;
-                    }}
-                    rows={Math.min(5, Math.max(2, f.text.split('\n').length))}
-                    dir="auto"
-                    maxLength={500}
-                    value={f.text}
-                    onChange={(e) => patchElement(f.id, { text: e.target.value }, 'text:' + f.id)}
-                  />
+                  {f.locks.content && (
+                    <textarea
+                      id={`f-${f.id}`}
+                      onFocus={() => setActiveField(f.id)}
+                      ref={(n) => {
+                        fieldRefs.current[f.id] = n;
+                      }}
+                      rows={Math.min(5, Math.max(2, f.text.split('\n').length))}
+                      dir="auto"
+                      maxLength={500}
+                      value={f.text}
+                      onChange={(e) => patchElement(f.id, { text: e.target.value }, 'text:' + f.id)}
+                    />
+                  )}
+                  {f.locks.delete && (
+                    <button type="button" className="btn small" onClick={() => change((d) => removeElement(d, f.id))}>
+                      הסרה מהכרטיס
+                    </button>
+                  )}
                 </div>
               ))
             )}
-            {swappables.map((el) => {
-              const options = library.images.filter((i) => !el.swapCategoryId || i.categoryId === el.swapCategoryId);
-              return (
-                <div key={el.id} className={'field field-card' + (aiTouched.has(el.id) ? ' ai-touched' : '')} style={{ order: -1 }}>
-                  <span className="field-label">{el.label || 'תמונה'}</span>
-                  {options.length === 0 ? (
-                    <span className="status">אין תמונות להחלפה.</span>
-                  ) : (
-                    <div className="pick-grid">
-                      {options.map((img) => (
-                        <button
-                          key={img.id}
-                          type="button"
-                          className="pick"
-                          title={img.name}
-                          aria-pressed={!el.colorOverride && img.id === el.asset_id}
-                          onClick={() => patchElement(el.id, { asset_id: img.id, colorOverride: undefined } as Partial<CanvasElement>)}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={`/api/uploads/${img.file}`} alt={img.name} />
-                        </button>
-                      ))}
-                    </div>
+            {bgChoice && (
+              <div className={'field field-card' + (aiTouched.has('background') ? ' ai-touched' : '')} style={{ order: -1 }}>
+                <span className="field-label">{bg.field?.label || 'רקע'}</span>
+                {bg.locks.content &&
+                  imagePicker(bg.swap_collection_id, bg.image && !bg.image.colorOverride ? bg.image.asset_id : undefined, (img) =>
+                    patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }),
                   )}
-                  <div className="field-head">
-                    <span>או צבע אחיד</span>
-                    <div className="swatches" role="group" aria-label={`צבע אחיד: ${el.label || 'רקע'}`}>
-                      {BG_SWATCHES.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          className="swatch"
-                          style={{ background: c }}
-                          aria-label={`צבע ${c}`}
-                          aria-pressed={el.colorOverride?.toLowerCase() === c.toLowerCase()}
-                          onClick={() => patchElement(el.id, { colorOverride: c } as Partial<CanvasElement>)}
-                        />
-                      ))}
-                      <input
-                        type="color"
-                        className="swatch-picker"
-                        aria-label="צבע אחיד חופשי"
-                        value={el.colorOverride ?? '#faf8f3'}
-                        onChange={(e) => patchElement(el.id, { colorOverride: e.target.value } as Partial<CanvasElement>, 'bgcolor:' + el.id)}
-                      />
-                    </div>
-                  </div>
+                <div className="field-head">
+                  <span>{bg.locks.content ? 'או צבע אחיד' : 'צבע הרקע'}</span>
+                  {colorSwatches(
+                    BG_SWATCHES,
+                    bg.locks.content && bg.image ? bg.image.colorOverride : bg.fill.color,
+                    `צבע אחיד: ${bg.field?.label || 'רקע'}`,
+                    (c) =>
+                      bg.locks.content && bg.image
+                        ? patchBackground({ image: { ...bg.image, colorOverride: c } }, 'bgcolor')
+                        : patchBackground({ fill: { type: 'solid', color: c } }, 'bgcolor'),
+                    'background',
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            )}
+            {swappables.map((el) => (
+              <div key={el.id} className={'field field-card' + (aiTouched.has(el.id) ? ' ai-touched' : '')} style={{ order: -1 }}>
+                <span className="field-label">{el.field?.label || 'תמונה'}</span>
+                {imagePicker(el.swap_collection_id, el.colorOverride ? undefined : el.asset_id, (img) => patchElement(el.id, { asset_id: img.id, colorOverride: undefined }))}
+                <div className="field-head">
+                  <span>או צבע אחיד</span>
+                  {colorSwatches(BG_SWATCHES, el.colorOverride, `צבע אחיד: ${el.field?.label || 'תמונה'}`, (c) => patchElement(el.id, { colorOverride: c }, 'bgcolor:' + el.id), el.id)}
+                </div>
+              </div>
+            ))}
             <footer className="panel-foot">
-              {editableFields.length > 0 && <p>אפשר לגרור כל טקסט בכרטיס כדי לשנות את מיקומו.</p>}
+              {textFields.some((f) => f.locks.transform) && <p>אפשר לגרור טקסט בכרטיס כדי לשנות את מיקומו.</p>}
               <p>שינויים נשמרים אוטומטית. כשמסיימים אפשר להוריד את הכרטיס כקובץ תמונה.</p>
             </footer>
           </aside>
         )}
         {full && (
-        <aside className="left" aria-label="הוספת אלמנטים">
-          <div>
-            <h2 className="panel-title">הוספה</h2>
-            <div className="row">
-              <button className="btn small" onClick={addText}>
-                טקסט
-              </button>
-              <button className="btn small" onClick={addRect}>
-                מלבן
-              </button>
-            </div>
-          </div>
-          <div>
-            <h2 className="panel-title">תמונות מהקטגוריות</h2>
-            {library.categories.length === 0 ? (
-              <p className="status">
-                אין עדיין קטגוריות. <Link href="/categories" style={{ textDecoration: 'underline' }}>צרו קטגוריה והוסיפו תמונות</Link>.
-              </p>
-            ) : (
-              <div style={{ display: 'grid', gap: 8 }}>
-                <select value={libCat} onChange={(e) => setLibCat(e.target.value)} aria-label="קטגוריה">
-                  {library.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                {libImages.length === 0 ? (
-                  <p className="status">אין תמונות בקטגוריה הזו.</p>
-                ) : (
-                  <div className="pick-grid">
-                    {libImages.map((img) => (
-                      <button key={img.id} className="pick" title={img.name} onClick={() => addImage(img)}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={`/api/uploads/${img.file}`} alt={img.name} />
-                      </button>
-                    ))}
-                  </div>
-                )}
+          <aside className="left" aria-label="הוספת אלמנטים">
+            <div>
+              <h2 className="panel-title">הוספה</h2>
+              <div className="row">
+                <button className="btn small" onClick={addText}>
+                  טקסט
+                </button>
+                <button className="btn small" onClick={addRect}>
+                  מלבן
+                </button>
               </div>
+            </div>
+            <div>
+              <h2 className="panel-title">תמונות מהקטגוריות</h2>
+              {library.categories.length === 0 ? (
+                <p className="status">
+                  אין עדיין קטגוריות. <Link href="/categories" style={{ textDecoration: 'underline' }}>צרו קטגוריה והוסיפו תמונות</Link>.
+                </p>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <select value={libCat} onChange={(e) => setLibCat(e.target.value)} aria-label="קטגוריה">
+                    {library.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {libImages.length === 0 ? (
+                    <p className="status">אין תמונות בקטגוריה הזו.</p>
+                  ) : (
+                    <>
+                      <div className="pick-grid">
+                        {libImages.map((img) => (
+                          <button key={img.id} className="pick" title={`${img.name}: הוספה לכרטיס`} onClick={() => addImage(img)}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={uploadUrl(img)} alt={img.name} />
+                          </button>
+                        ))}
+                      </div>
+                      <p className="status">לחיצה מוסיפה את התמונה לכרטיס. לתמונת רקע: בטלו את הבחירה ובחרו בהגדרות העמוד.</p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            {canAgent && (
+              <AgentPanel
+                projectId={id}
+                getDoc={() => docRef.current}
+                onApply={applyAgent}
+                onBusyChange={setAiBusy}
+                placeholder="למשל: הוסף כותרת 'חתונה' ושדות לשמות החתן והכלה"
+                suggestions={['הוסף שדות לשמות, תאריך ומקום', 'סדר את הטקסטים במרכז']}
+              />
             )}
-          </div>
-          {canAgent && (
-            <AgentPanel
-              projectId={id}
-              getDoc={() => docRef.current}
-              onApply={applyAgent}
-                  onBusyChange={setAiBusy}
-              placeholder="למשל: הוסף כותרת 'חתונה' ושדות לשמות החתן והכלה"
-              suggestions={['הוסף שדות לשמות, תאריך ומקום', 'סדר את הטקסטים במרכז']}
-            />
-          )}
-        </aside>
+          </aside>
         )}
 
-        <div
-          className="stage-wrap"
-          ref={wrapRef}
-          onMouseDown={(e) => e.target === e.currentTarget && setSelectedId(null)}
-        >
+        <div className="stage-wrap" ref={wrapRef} onMouseDown={(e) => e.target === e.currentTarget && setSelectedId(null)}>
           <div
             className={'stage-frame' + (aiBusy ? ' ai-working' : '') + (aiTouched.size ? ' ai-done' : '')}
             style={{ width: pageW * zoom, height: pageH * zoom }}
@@ -728,91 +944,13 @@ export default function Editor({ id }: { id: string }) {
                 }
               }}
             >
+              {/* one Konva layer per card layer: the background never takes clicks and is always below */}
+              <Layer listening={false}>
+                <BackgroundNode bg={bg} asset={bg.image ? assetById.get(bg.image.asset_id) : undefined} w={pageW} h={pageH} />
+              </Layer>
+              <Layer>{doc.layers.content.map(renderElement)}</Layer>
+              <Layer>{doc.layers.overlay.map(renderElement)}</Layer>
               <Layer>
-                <Rect x={0} y={0} width={pageW} height={pageH} fill={doc.page.background} onMouseDown={() => { setSelectedId(null); setActiveField(null); }} onTap={() => { setSelectedId(null); setActiveField(null); }} />
-                {doc.elements.map((el) => {
-                  const onSelect = () => setSelectedId(el.id);
-                  const focusField = () => {
-                    if (el.type !== 'text' || !el.editable) return;
-                    setActiveField(el.id);
-                    fieldRefs.current[el.id]?.focus({ preventScroll: false });
-                  };
-                  const onChange = (patch: Partial<CanvasElement>) => patchElement(el.id, patch);
-                  if (el.type === 'image') {
-                    return <ImageNode key={el.id} el={el} asset={assetById.get(el.asset_id)} interactive={full} onSelect={onSelect} onChange={onChange} />;
-                  }
-                  if (el.type === 'rect') {
-                    return (
-                      <Rect
-                        key={el.id}
-                        id={el.id}
-                        x={el.x_mm * PX}
-                        y={el.y_mm * PX}
-                        width={el.w_mm * PX}
-                        height={el.h_mm * PX}
-                        rotation={el.rotation}
-                        fill={el.fill}
-                        draggable={full}
-                        onMouseDown={full ? onSelect : undefined}
-                        onTap={full ? onSelect : undefined}
-                        onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
-                        onTransformEnd={(e) => {
-                          const n = e.target;
-                          const w = n.width() * n.scaleX();
-                          const h = n.height() * n.scaleY();
-                          n.scaleX(1);
-                          n.scaleY(1);
-                          onChange({ x_mm: n.x() / PX, y_mm: n.y() / PX, w_mm: w / PX, h_mm: h / PX, rotation: n.rotation() });
-                        }}
-                      />
-                    );
-                  }
-                  return (
-                    <Text
-                      key={`${el.id}-${fontsTick}`}
-                      id={el.id}
-                      x={el.x_mm * PX}
-                      y={el.y_mm * PX}
-                      width={el.w_mm * PX}
-                      rotation={el.rotation}
-                      text={el.text}
-                      align={el.align}
-                      fontFamily={el.font.family}
-                      fontStyle={el.font.weight === 700 ? 'bold' : 'normal'}
-                      fontSize={el.font.size_pt * PT_TO_MM * PX}
-                      fill={el.font.color}
-                      lineHeight={1.25}
-                      wrap="word"
-                      // customers can drag the texts they are allowed to edit; the position is saved with the card
-                      draggable={full || !!el.editable}
-                      dragBoundFunc={function (this: Konva.Node, pos) {
-                        // keep the text box inside the page while dragging (pos is in screen pixels)
-                        const w = this.width() * zoom;
-                        const h = this.height() * zoom;
-                        return {
-                          x: clamp(pos.x, 0, Math.max(0, pageW * zoom - w)),
-                          y: clamp(pos.y, 0, Math.max(0, pageH * zoom - h)),
-                        };
-                      }}
-                      onMouseDown={full ? onSelect : focusField}
-                      onTap={full ? onSelect : focusField}
-                      onMouseEnter={(e) => {
-                        if (full || el.editable) e.target.getStage()!.container().style.cursor = 'move';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.getStage()!.container().style.cursor = '';
-                      }}
-                      onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
-                      onTransformEnd={(e) => {
-                        const n = e.target;
-                        const w = n.width() * n.scaleX();
-                        n.scaleX(1);
-                        n.scaleY(1);
-                        onChange({ x_mm: n.x() / PX, y_mm: n.y() / PX, w_mm: w / PX, rotation: n.rotation() });
-                      }}
-                    />
-                  );
-                })}
                 <Transformer
                   ref={trRef}
                   resizeEnabled={canManage}
@@ -844,229 +982,278 @@ export default function Editor({ id }: { id: string }) {
         </div>
 
         {full && (
-        <aside className="right" aria-label="מאפיינים">
-          {!selected ? (
-            <>
-              <h2 className="panel-title">הגדרות עמוד</h2>
-              <label className="field">
-                גודל
-                <select
-                  value={PAGE_PRESETS.find((p) => p.width_mm === doc.page.width_mm && p.height_mm === doc.page.height_mm)?.id ?? 'custom'}
-                  onChange={(e) => {
-                    const p = PAGE_PRESETS.find((x) => x.id === e.target.value);
-                    if (p) setPage({ width_mm: p.width_mm, height_mm: p.height_mm });
-                  }}
-                >
-                  <option value="custom" disabled>
-                    מותאם אישית
-                  </option>
-                  {PAGE_PRESETS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
+          <aside className="right" aria-label="מאפיינים">
+            {!selected ? (
+              <>
+                <h2 className="panel-title">הגדרות עמוד</h2>
+                <label className="field">
+                  גודל
+                  <select
+                    value={PAGE_PRESETS.find((p) => p.width_mm === doc.page.width_mm && p.height_mm === doc.page.height_mm)?.id ?? 'custom'}
+                    onChange={(e) => {
+                      const p = PAGE_PRESETS.find((x) => x.id === e.target.value);
+                      if (p) change((d) => ({ ...d, page: { width_mm: p.width_mm, height_mm: p.height_mm } }));
+                    }}
+                  >
+                    <option value="custom" disabled>
+                      מותאם אישית
                     </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                צבע רקע
-                <input type="color" value={doc.page.background} onChange={(e) => setPage({ background: e.target.value }, 'bg')} />
-              </label>
-              <p className="status">בחרו אלמנט על הדף כדי לערוך אותו. מקשי החיצים מזיזים, Delete מוחק, Ctrl+Z מבטל.</p>
-            </>
-          ) : (
-            <>
-              <h2 className="panel-title">
-                {selected.type === 'text' ? 'טקסט' : selected.type === 'image' ? 'תמונה' : 'מלבן'}
-              </h2>
+                    {PAGE_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              {textEl && (
-                <>
+                <h2 className="panel-title">רקע</h2>
+                <label className="field">
+                  צבע רקע
+                  <input type="color" value={bg.fill.color} onChange={(e) => patchBackground({ fill: { type: 'solid', color: e.target.value } }, 'bg')} />
+                </label>
+                <div className="field">
+                  <span>תמונת רקע: {bg.image ? (assetById.get(bg.image.asset_id)?.name ?? 'התמונה נמחקה') : 'אין'}</span>
+                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל ההוספה:</span>
+                  {libImages.length > 0 &&
+                    imagePicker(libCat, bg.image?.asset_id, (img) => patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }))}
+                  {bg.image && (
+                    <div className="row">
+                      <div className="seg" role="group" aria-label="התאמת התמונה">
+                        {(['cover', 'contain'] as const).map((f) => (
+                          <button key={f} aria-pressed={bg.image?.fit === f} onClick={() => bg.image && patchBackground({ image: { ...bg.image, fit: f } })}>
+                            {f === 'cover' ? 'ממלאת את הדף' : 'כולה בתוך הדף'}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        className="btn small"
+                        onClick={() =>
+                          change((d) => {
+                            const { image: _i, ...rest } = d.layers.background;
+                            void _i;
+                            return { ...d, layers: { ...d.layers, background: rest } };
+                          })
+                        }
+                      >
+                        הסרת התמונה
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <LockInspector
+                  locks={bg.locks}
+                  field={bg.field}
+                  allowed={['content', 'style']}
+                  onChange={(p, key) =>
+                    change((d) => {
+                      const next = { ...d.layers.background, ...p };
+                      if (next.locks.content && !next.swap_collection_id && bg.image) {
+                        const cat = assetById.get(bg.image.asset_id)?.categoryId;
+                        if (cat) next.swap_collection_id = cat;
+                      }
+                      if (!next.field) delete next.field;
+                      return { ...d, layers: { ...d.layers, background: next } };
+                    }, key && `bg-${key}`)
+                  }
+                >
+                  {bg.locks.content && (
+                    <label className="field">
+                      הלקוח בוחר מהקטגוריה
+                      <select value={bg.swap_collection_id ?? ''} onChange={(e) => patchBackground({ swap_collection_id: e.target.value || undefined })}>
+                        <option value="">כל התמונות</option>
+                        {library.categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </LockInspector>
+                <p className="status">בחרו אלמנט על הדף כדי לערוך אותו. מקשי החיצים מזיזים, Delete מוחק, Ctrl+Z מבטל.</p>
+              </>
+            ) : (
+              <>
+                <h2 className="panel-title">
+                  {selected.type === 'text' ? 'טקסט' : selected.type === 'image' ? 'תמונה' : 'מלבן'} · {LAYER_LABEL[found!.layer]}
+                </h2>
+
+                {textEl && (
+                  <>
+                    <label className="field">
+                      תוכן
+                      <textarea rows={3} dir="auto" value={textEl.text} onChange={(e) => updateText({ text: e.target.value }, 'text:' + textEl.id)} />
+                    </label>
+                    <label className="field">
+                      פונט
+                      <select
+                        value={textEl.font.family}
+                        onChange={(e) => {
+                          const fam = families.find((f) => f.family === e.target.value);
+                          const weight = fam ? nearestWeight(fam.weights, textEl.font.weight) : textEl.font.weight;
+                          updateText({ font: { ...textEl.font, family: e.target.value, weight } });
+                        }}
+                      >
+                        {!textFamily && <option value={textEl.font.family}>{textEl.font.family} (לא זמין)</option>}
+                        {families.map((f) => (
+                          <option key={f.family} value={f.family}>
+                            {f.family}
+                            {f.builtin ? '' : ' · הועלה'}
+                            {f.hebrew ? '' : ' · ללא עברית'}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="row" style={{ alignItems: 'end' }}>
+                      <label className="field" style={{ width: 90 }}>
+                        גודל (pt)
+                        <input
+                          type="number"
+                          min={4}
+                          max={400}
+                          value={textEl.font.size_pt}
+                          onChange={(e) => {
+                            const v = num(e.target.value);
+                            if (v !== null) updateText({ font: { ...textEl.font, size_pt: clamp(v, 4, 400) } }, 'size:' + textEl.id);
+                          }}
+                        />
+                      </label>
+                      <label className="field">
+                        צבע
+                        <input type="color" value={textEl.font.color} onChange={(e) => updateText({ font: { ...textEl.font, color: e.target.value } }, 'color:' + textEl.id)} />
+                      </label>
+                      <label className="field">
+                        משקל
+                        <select
+                          value={textEl.font.weight}
+                          disabled={textWeights.length < 2}
+                          onChange={(e) => updateText({ font: { ...textEl.font, weight: Number(e.target.value) } })}
+                        >
+                          {textWeights.map((w) => (
+                            <option key={w} value={w}>
+                              {WEIGHT_NAMES[w] ?? w}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="seg" role="group" aria-label="יישור">
+                      {(['right', 'center', 'left'] as const).map((a) => (
+                        <button key={a} aria-pressed={textEl.align === a} onClick={() => updateText({ align: a })}>
+                          {a === 'right' ? 'ימין' : a === 'center' ? 'מרכז' : 'שמאל'}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {selected.type === 'shape' && (
                   <label className="field">
-                    תוכן
-                    <textarea
-                      rows={3}
-                      dir="auto"
-                      value={textEl.text}
-                      onChange={(e) => updateText({ text: e.target.value }, 'text:' + textEl.id)}
+                    צבע מילוי
+                    <input
+                      type="color"
+                      value={selected.fill.color}
+                      onChange={(e) => patchElement(selected.id, { fill: { type: 'solid', color: e.target.value } }, 'fill:' + selected.id)}
                     />
                   </label>
-                  <label className="field">
-                    פונט
-                    <select value={textEl.font.family} onChange={(e) => updateText({ font: { ...textEl.font, family: e.target.value } })}>
-                      {FONTS.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="row" style={{ alignItems: 'end' }}>
-                    <label className="field" style={{ width: 90 }}>
-                      גודל (pt)
+                )}
+
+                {selected.type === 'image' && <p className="status">{assetById.get(selected.asset_id)?.name ?? 'התמונה נמחקה מהקטגוריה'}</p>}
+
+                <LockInspector
+                  locks={selected.locks}
+                  field={selected.field}
+                  allowed={['content', 'style', 'transform', 'delete'].filter((k) => !(k === 'style' && selected.type === 'image')) as (keyof Locks)[]}
+                  onChange={(p, key) => {
+                    const next = { ...p };
+                    // a swappable image offers its own category by default
+                    if (selected.type === 'image' && p.locks?.content && !selected.swap_collection_id) {
+                      const cat = assetById.get(selected.asset_id)?.categoryId;
+                      if (cat) Object.assign(next, { swap_collection_id: cat });
+                    }
+                    setLocks(selected, next, key);
+                  }}
+                >
+                  {selected.type === 'image' && selected.locks.content && (
+                    <label className="field">
+                      הלקוח בוחר מהקטגוריה
+                      <select
+                        value={selected.swap_collection_id ?? ''}
+                        onChange={(e) => patchElement(selected.id, { swap_collection_id: e.target.value || undefined })}
+                      >
+                        <option value="">כל התמונות</option>
+                        {library.categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </LockInspector>
+
+                <div className="row">
+                  {(
+                    [
+                      ['x_mm', 'X'],
+                      ['y_mm', 'Y'],
+                      ['w_mm', 'רוחב'],
+                      ...(selected.type !== 'text' ? [['h_mm', 'גובה']] : []),
+                    ] as [string, string][]
+                  ).map(([k, label]) => (
+                    <label key={k} className="field" style={{ width: 76 }}>
+                      {label} (מ״מ)
                       <input
                         type="number"
-                        min={4}
-                        max={400}
-                        value={textEl.font.size_pt}
+                        step={1}
+                        value={Math.round((selected as unknown as Record<string, number>)[k] * 10) / 10}
                         onChange={(e) => {
                           const v = num(e.target.value);
-                          if (v !== null) updateText({ font: { ...textEl.font, size_pt: clamp(v, 4, 400) } }, 'size:' + textEl.id);
+                          if (v === null) return;
+                          const min = k === 'w_mm' || k === 'h_mm' ? 1 : -5000;
+                          patchElement(selected.id, { [k]: clamp(v, min, 5000) } as Partial<CanvasElement>, `${k}:${selected.id}`);
                         }}
                       />
                     </label>
-                    <label className="field">
-                      צבע
-                      <input type="color" value={textEl.font.color} onChange={(e) => updateText({ font: { ...textEl.font, color: e.target.value } }, 'color:' + textEl.id)} />
-                    </label>
-                    <div className="seg" role="group" aria-label="משקל">
-                      <button aria-pressed={textEl.font.weight === 700} onClick={() => updateText({ font: { ...textEl.font, weight: textEl.font.weight === 700 ? 400 : 700 } })}>
-                        מודגש
-                      </button>
-                    </div>
-                  </div>
-                  <div className="card" style={{ display: 'grid', gap: 8, padding: 12 }}>
-                    <label className="row" style={{ gap: 8 }}>
-                      <input
-                        type="checkbox"
-                        checked={!!textEl.editable}
-                        onChange={(e) => updateText({ editable: e.target.checked })}
-                      />
-                      <span>הלקוח יכול לערוך את הטקסט</span>
-                    </label>
-                    {textEl.editable && (
-                      <label className="field">
-                        שם השדה שהלקוח רואה
-                        <input
-                          type="text"
-                          maxLength={60}
-                          value={textEl.label ?? ''}
-                          placeholder="למשל: שם החתן"
-                          onChange={(e) => updateText({ label: e.target.value }, 'label:' + textEl.id)}
-                        />
-                      </label>
-                    )}
-                  </div>
-                  <div className="seg" role="group" aria-label="יישור">
-                    {(['right', 'center', 'left'] as const).map((a) => (
-                      <button key={a} aria-pressed={textEl.align === a} onClick={() => updateText({ align: a })}>
-                        {a === 'right' ? 'ימין' : a === 'center' ? 'מרכז' : 'שמאל'}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {selected.type === 'rect' && (
-                <label className="field">
-                  צבע מילוי
-                  <input type="color" value={selected.fill} onChange={(e) => patchElement(selected.id, { fill: e.target.value }, 'fill:' + selected.id)} />
-                </label>
-              )}
-
-              {selected.type === 'image' && (
-                <>
-                  <p className="status">{assetById.get(selected.asset_id)?.name ?? 'התמונה נמחקה מהקטגוריה'}</p>
-                  <div className="card" style={{ display: 'grid', gap: 8, padding: 12 }}>
-                    <label className="row" style={{ gap: 8 }}>
-                      <input
-                        type="checkbox"
-                        checked={!!selected.swappable}
-                        onChange={(e) =>
-                          patchElement(selected.id, {
-                            swappable: e.target.checked,
-                            swapCategoryId: selected.swapCategoryId ?? assetById.get(selected.asset_id)?.categoryId,
-                            label: selected.label ?? 'רקע',
-                          } as Partial<CanvasElement>)
-                        }
-                      />
-                      <span>הלקוח יכול להחליף את התמונה</span>
-                    </label>
-                    {selected.swappable && (
-                      <>
-                        <label className="field">
-                          שם שהלקוח רואה
-                          <input
-                            type="text"
-                            maxLength={60}
-                            value={selected.label ?? ''}
-                            placeholder="למשל: רקע"
-                            onChange={(e) => patchElement(selected.id, { label: e.target.value } as Partial<CanvasElement>, 'label:' + selected.id)}
-                          />
-                        </label>
-                        <label className="field">
-                          הלקוח בוחר מהקטגוריה
-                          <select
-                            value={selected.swapCategoryId ?? ''}
-                            onChange={(e) => patchElement(selected.id, { swapCategoryId: e.target.value } as Partial<CanvasElement>)}
-                          >
-                            {library.categories.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-
-              <div className="row">
-                {(
-                  [
-                    ['x_mm', 'X'],
-                    ['y_mm', 'Y'],
-                    ['w_mm', 'רוחב'],
-                    ...(selected.type !== 'text' ? [['h_mm', 'גובה']] : []),
-                  ] as [string, string][]
-                ).map(([k, label]) => (
-                  <label key={k} className="field" style={{ width: 76 }}>
-                    {label} (מ״מ)
+                  ))}
+                  <label className="field" style={{ width: 76 }}>
+                    סיבוב (°)
                     <input
                       type="number"
                       step={1}
-                      value={Math.round((selected as unknown as Record<string, number>)[k] * 10) / 10}
+                      value={Math.round(selected.rotation * 10) / 10}
                       onChange={(e) => {
                         const v = num(e.target.value);
-                        if (v === null) return;
-                        const min = k === 'w_mm' || k === 'h_mm' ? 1 : -5000;
-                        patchElement(selected.id, { [k]: clamp(v, min, 5000) } as Partial<CanvasElement>, `${k}:${selected.id}`);
+                        if (v !== null) patchElement(selected.id, { rotation: clamp(v, -360, 360) }, 'rot:' + selected.id);
                       }}
                     />
                   </label>
-                ))}
-                <label className="field" style={{ width: 76 }}>
-                  סיבוב (°)
-                  <input
-                    type="number"
-                    step={1}
-                    value={Math.round(selected.rotation * 10) / 10}
-                    onChange={(e) => {
-                      const v = num(e.target.value);
-                      if (v !== null) patchElement(selected.id, { rotation: clamp(v, -360, 360) }, 'rot:' + selected.id);
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div>
-                <h3 className="panel-title">סדר שכבות</h3>
-                <div className="row">
-                  <button className="btn small" onClick={() => moveZ('front')}>לחזית</button>
-                  <button className="btn small" onClick={() => moveZ('up')}>קדימה</button>
-                  <button className="btn small" onClick={() => moveZ('down')}>אחורה</button>
-                  <button className="btn small" onClick={() => moveZ('back')}>לרקע</button>
                 </div>
-              </div>
 
-              <div className="row">
-                <button className="btn small" onClick={duplicateSelected}>שכפול</button>
-                <button className="btn small danger" onClick={removeSelected}>מחיקה</button>
-              </div>
-            </>
-          )}
-        </aside>
+                <div>
+                  <h3 className="panel-title">סדר בתוך השכבה</h3>
+                  <div className="row">
+                    <button className="btn small" onClick={() => moveZ('front')}>לחזית</button>
+                    <button className="btn small" onClick={() => moveZ('up')}>קדימה</button>
+                    <button className="btn small" onClick={() => moveZ('down')}>אחורה</button>
+                    <button className="btn small" onClick={() => moveZ('back')}>לתחתית</button>
+                  </div>
+                  <div className="seg" role="group" aria-label="שכבה" style={{ marginTop: 8 }}>
+                    {(['content', 'overlay'] as const).map((l) => (
+                      <button key={l} aria-pressed={found!.layer === l} onClick={() => change((d) => moveToLayer(d, selected.id, l))}>
+                        {LAYER_LABEL[l]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="row">
+                  <button className="btn small" onClick={duplicateSelected}>שכפול</button>
+                  <button className="btn small danger" onClick={removeSelected}>מחיקה</button>
+                </div>
+              </>
+            )}
+          </aside>
         )}
       </div>
     </div>

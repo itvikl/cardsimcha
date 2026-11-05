@@ -8,7 +8,18 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "eval:agent": "tsx scripts/eval-agent.ts",
-    "migrate:firebase": "tsx --env-file=.env.local scripts/migrate-to-firebase.ts"
+    "migrate:firebase": "tsx --env-file=.env.local scripts/migrate-to-firebase.ts",
+    "postinstall": "prisma generate",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset",
+    "db:smoke": "tsx scripts/db-smoke.ts",
+    "migrate:postgres": "tsx scripts/migrate-to-postgres.ts",
+    "cards:v2": "tsx scripts/cards-to-v2.ts",
+    "test:canvas": "tsx scripts/test-canvas.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,9 +27,13 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.293",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "firebase-admin": "^14.5.0",
+    "fontkit": "^2.0.4",
     "konva": "^10.7.1",
     "next": "^16.3.8",
+    "pg": "^8.23.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-konva": "^19.3.0",
@@ -26,9 +41,12 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/fontkit": "^2.0.9",
     "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "prisma": "^7.10.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

@@ -1,6 +1,11 @@
+import { FIELD_LOCKS, LOCKED } from './canvas';
 import type { CanvasDoc, ImageAsset, ImageElement, ShapeElement, TextElement } from './types';
 
-/** Default new elements, shared by the editor's "add" buttons and the agent. */
+/**
+ * Default new elements, shared by the editor's "add" buttons and the agent. A new text is
+ * a customer form field (they may change its text and colour, design doc §4.3); new
+ * images and shapes are locked until the author unlocks them.
+ */
 export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט'): TextElement {
   const w = Math.min(120, doc.page.width_mm - 20);
   return {
@@ -10,11 +15,10 @@ export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט
     y_mm: doc.page.height_mm / 3,
     w_mm: w,
     rotation: 0,
-    z: doc.elements.length,
     text,
     align: 'center',
-    editable: true,
-    label: 'טקסט',
+    locks: FIELD_LOCKS,
+    field: { label: 'טקסט' },
     font: { family: 'Heebo', weight: 700, size_pt: 32, color: '#1F3A2E' },
   };
 }
@@ -22,14 +26,15 @@ export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט
 export function newRect(doc: CanvasDoc): ShapeElement {
   return {
     id: crypto.randomUUID(),
-    type: 'rect',
+    type: 'shape',
+    shape: 'rect',
     x_mm: doc.page.width_mm / 4,
     y_mm: doc.page.height_mm / 4,
     w_mm: doc.page.width_mm / 2,
     h_mm: doc.page.height_mm / 6,
     rotation: 0,
-    z: doc.elements.length,
-    fill: '#E4ECE3',
+    locks: LOCKED,
+    fill: { type: 'solid', color: '#E4ECE3' },
   };
 }
 
@@ -49,7 +54,7 @@ export function newImage(doc: CanvasDoc, asset: ImageAsset): ImageElement {
     w_mm: w,
     h_mm: h,
     rotation: 0,
-    z: doc.elements.length,
+    locks: LOCKED,
     asset_id: asset.id,
   };
 }
