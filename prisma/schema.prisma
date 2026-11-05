@@ -1,0 +1,277 @@
+// v2 data model. See docs/design/v2-foundation.md §3.
+//
+// Ids are text with a UUID default, so the migration from Firestore / db.json can keep
+// today's ids and upsert by id (§6).
+// A null workspace_id means the row belongs to the platform (catalogue templates, shared
+// images and fonts).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceKind {
+  personal
+  company
+}
+
+enum Plan {
+  free
+  personal
+  business
+}
+
+enum PlatformRole {
+  admin
+  none
+}
+
+enum MemberRole {
+  owner
+  manager
+  editor
+  viewer
+}
+
+enum Audience {
+  private
+  business
+}
+
+enum TemplateStatus {
+  draft
+  published
+}
+
+enum AssetKind {
+  image
+  svg
+  pattern
+  sticker
+}
+
+enum ExportFormat {
+  png
+  pdf
+}
+
+enum ExportStatus {
+  queued
+  running
+  done
+  failed
+}
+
+model Workspace {
+  id             String        @id @default(uuid())
+  kind           WorkspaceKind
+  name           String
+  plan           Plan          @default(free)
+  storageQuotaMb Int           @default(500) @map("storage_quota_mb")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  memberships Membership[]
+  templates   Template[]
+  creatives   Creative[]
+  assets      Asset[]
+  collections Collection[]
+  fonts       Font[]
+  brandKits   BrandKit[]
+
+  @@map("workspaces")
+}
+
+model User {
+  id           String       @id @default(uuid())
+  /// null for a guest
+  email        String?      @unique
+  name         String       @default("")
+  passwordHash String?      @map("password_hash")
+  salt         String?
+  platformRole PlatformRole @default(none) @map("platform_role")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  memberships Membership[]
+  sessions    Session[]
+  creatives   Creative[]
+
+  @@map("users")
+}
+
+model Membership {
+  workspaceId String     @map("workspace_id")
+  userId      String     @map("user_id")
+  role        MemberRole
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Session {
+  tokenHash String   @id @map("token_hash")
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Home-page categories (today: CATEGORIES + carousel settings).
+model Topic {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  audience  Audience @default(private)
+  coverUrl  String?  @map("cover_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  hidden    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  templates Template[]
+
+  @@map("topics")
+}
+
+model Template {
+  id           String         @id @default(uuid())
+  workspaceId  String?        @map("workspace_id")
+  topicId      String?        @map("topic_id")
+  name         String
+  status       TemplateStatus @default(draft)
+  /// card document (v1 until rollout step 3, then v2)
+  canvas       Json
+  thumbnailKey String?        @map("thumbnail_key")
+  publishedAt  DateTime?      @map("published_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  topic     Topic?     @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  creatives Creative[]
+
+  @@index([workspaceId, status])
+  @@index([topicId])
+  @@map("templates")
+}
+
+model Creative {
+  id           String   @id @default(uuid())
+  workspaceId  String   @map("workspace_id")
+  userId       String   @map("user_id")
+  templateId   String?  @map("template_id")
+  name         String
+  canvas       Json
+  thumbnailKey String?  @map("thumbnail_key")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template  Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  exports   Export[]
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("creatives")
+}
+
+/// Today's image "categories".
+model Collection {
+  id          String   @id @default(uuid())
+  workspaceId String?  @map("workspace_id")
+  name        String
+  description String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assets    Asset[]
+
+  @@index([workspaceId])
+  @@map("collections")
+}
+
+model Asset {
+  id           String    @id @default(uuid())
+  workspaceId  String?   @map("workspace_id")
+  collectionId String?   @map("collection_id")
+  kind         AssetKind @default(image)
+  name         String    @default("")
+  fileKey      String    @map("file_key")
+  width        Int
+  height       Int
+  metadata     Json      @default("{}")
+  // embedding vector(...) is added with smart search (phase 5); the pgvector extension is already in the image
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([collectionId])
+  @@map("assets")
+}
+
+model Font {
+  id            String   @id @default(uuid())
+  workspaceId   String?  @map("workspace_id")
+  family        String
+  weight        Int      @default(400)
+  style         String   @default("normal")
+  fileKey       String   @map("file_key")
+  unicodeRanges String?  @map("unicode_ranges")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, family, weight, style])
+  @@map("fonts")
+}
+
+/// Table now, UI in phase 4.
+model BrandKit {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  palette     Json     @default("[]")
+  typography  Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("brand_kits")
+}
+
+/// Phase 3.
+model Export {
+  id         String       @id @default(uuid())
+  creativeId String       @map("creative_id")
+  format     ExportFormat
+  status     ExportStatus @default(queued)
+  fileKey    String?      @map("file_key")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  creative Creative @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+
+  @@index([creativeId])
+  @@map("exports")
+}

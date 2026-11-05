@@ -11,6 +11,22 @@ npm run dev      # http://localhost:3000
 
 הנתונים נשמרים מקומית בתיקייה `data/` (קובץ `db.json` ותיקיית `uploads/`). התיקייה לא נכנסת ל-git.
 
+### Postgres ו-Docker (v2, בבנייה)
+
+לפי [מסמך התכנון](docs/design/v2-foundation.he.md). צריך Docker Desktop פועל.
+
+```
+npm run db:up        # Postgres 16 + pgvector ב-localhost:5433
+npm run db:migrate   # מריץ את המיגרציות שב-prisma/migrations
+npm run db:smoke     # בדיקה שהחיבור עובד
+npm run db:studio    # צפייה בטבלאות בדפדפן
+npm run db:down      # עצירה (הנתונים נשמרים ב-volume)
+
+docker compose --profile app up --build   # האפליקציה כ-image של production ב-localhost:3200
+```
+
+הסכמה ב-[prisma/schema.prisma](prisma/schema.prisma). כתובת ברירת המחדל של מסד הנתונים מוגדרת בקוד, ואפשר להחליף אותה עם `DATABASE_URL` ב-`.env.local`. האפליקציה עצמה עדיין קוראת מ-Firestore, עד שהשכבה החדשה תחליף את `db.ts`.
+
 ## משתמשים והרשאות
 
 **כרגע ההתחברות כבויה** (`AUTH_DISABLED` ב-`src/lib/config.ts`, ברירת המחדל פעילה). כל מבקר הוא אורח אנונימי שנזכר לפי עוגייה בדפדפן, עורך כרטיסים בתבניות שפורסמו, ויכול לעבור ל"מצב ניהול" בכפתור בסרגל העליון. להחזרת ההרשמה וההתחברות: להפעיל עם `AUTH_DISABLED=false`.
