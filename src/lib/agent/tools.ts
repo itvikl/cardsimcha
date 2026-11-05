@@ -2,7 +2,6 @@ import { createSdkMcpServer, tool, type SdkMcpToolDefinition } from '@anthropic-
 import { z } from 'zod';
 import {
   addElement,
-  FONTS,
   findElement,
   LOCKED,
   moveInLayer,
@@ -14,6 +13,7 @@ import {
   updateElement,
 } from '../canvas';
 import { newImage, newRect, newText } from '../elements';
+import type { FontFamily } from '../fonts';
 import type { CanvasDoc, CanvasElement, Category, ImageAsset, LayerName, Locks } from '../types';
 
 export type AgentMode = 'full' | 'customer';
@@ -24,6 +24,8 @@ export type AgentState = {
   mode: AgentMode;
   images: ImageAsset[];
   categories: Category[];
+  /** built-in and uploaded font families (fontFamilies) */
+  fonts: FontFamily[];
   changed: boolean;
 };
 
@@ -186,7 +188,7 @@ export function buildServer(s: AgentState) {
       }),
       tool(
         'update_element',
-        `Change properties of any element. Fonts: ${FONTS.join(', ')}. Sizes in mm, font size in pt.
+        `Change properties of any element. Fonts (family: weights): ${s.fonts.map((f) => `${f.family}: ${f.weights.join('/')}${f.hebrew ? '' : ' (no Hebrew letters)'}`).join('; ')}. Sizes in mm, font size in pt.
 editable (texts): customers may change its text and colour. swappable (images): customers may replace it. label: the field name customers see.
 customer_may_move / customer_may_delete: further customer permissions.`,
         {
@@ -196,11 +198,11 @@ customer_may_move / customer_may_delete: further customer permissions.`,
           w_mm: z.number().min(1).max(2000).optional(),
           h_mm: z.number().min(1).max(2000).optional(),
           rotation: z.number().min(-360).max(360).optional(),
-          fill: color.optional(),
+          fill: color.optional().describe('the colour of a text, or the fill of a rectangle'),
           align: z.enum(['right', 'center', 'left']).optional(),
-          font_family: z.enum(FONTS).optional(),
+          font_family: z.string().optional(),
           font_size_pt: z.number().min(4).max(400).optional(),
-          font_weight: z.union([z.literal(400), z.literal(700)]).optional(),
+          font_weight: z.number().int().min(100).max(900).optional().describe('one of the weights the family has'),
           editable: z.boolean().optional(),
           swappable: z.boolean().optional(),
           customer_may_move: z.boolean().optional(),
@@ -215,9 +217,19 @@ customer_may_move / customer_may_delete: further customer permissions.`,
           for (const k of ['x_mm', 'y_mm', 'w_mm', 'rotation'] as const) if (a[k] !== undefined) p[k] = a[k];
           if (a.h_mm !== undefined && e.type !== 'text') p.h_mm = a.h_mm;
           if (e.type === 'text') {
+            const family = a.font_family ?? e.font.family;
+            const fam = s.fonts.find((f) => f.family === family);
+            if (a.font_family && !fam) return fail(`Unknown font ${a.font_family}`);
+            if (a.font_weight && fam && !fam.weights.includes(a.font_weight)) return fail(`${family} has the weights ${fam.weights.join(', ')}`);
             if (a.align) p.align = a.align;
-            if (a.font_family || a.font_size_pt || a.font_weight) {
-              p.font = { ...e.font, ...(a.font_family && { family: a.font_family }), ...(a.font_size_pt && { size_pt: a.font_size_pt }), ...(a.font_weight && { weight: a.font_weight }) };
+            if (a.font_family || a.font_size_pt || a.font_weight || a.fill) {
+              p.font = {
+                ...e.font,
+                ...(a.font_family && { family: a.font_family }),
+                ...(a.font_size_pt && { size_pt: a.font_size_pt }),
+                ...(a.font_weight && { weight: a.font_weight }),
+                ...(a.fill && { color: a.fill }),
+              };
             }
           }
           if (e.type === 'shape' && a.fill) p.fill = { type: 'solid', color: a.fill };

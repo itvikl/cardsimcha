@@ -8,7 +8,6 @@ import type Konva from 'konva';
 import {
   addElement as addTo,
   allElements,
-  FONTS,
   findElement,
   moveInLayer,
   moveToLayer,
@@ -19,6 +18,8 @@ import {
   updateElement,
 } from '@/lib/canvas';
 import { newImage, newRect, newText } from '@/lib/elements';
+import { fontFamilies, nearestWeight, WEIGHT_NAMES, type FontFamily } from '@/lib/fonts';
+import { loadFont, registerUploadedFonts } from '@/lib/fonts-client';
 import { useToast } from './Toast';
 import { AgentPanel } from './AgentPanel';
 import { DownloadIcon, FitIcon, RedoIcon, UndoIcon } from './Icons';
@@ -52,7 +53,7 @@ const LOCK_LABELS: [keyof Locks, string][] = [
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error';
 
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
-const fontStyle = (w: number) => (w >= 700 ? 'bold' : w === 400 ? 'normal' : String(w));
+const fontStyle = (w: number) => (w === 400 ? 'normal' : String(w));
 const uploadUrl = (a: ImageAsset | undefined) => (a ? `/api/uploads/${a.file}` : '');
 
 function ImageNode({
@@ -213,6 +214,7 @@ export default function Editor({ id }: { id: string }) {
   const [save, setSave] = useState<SaveState>('saved');
   const [loadError, setLoadError] = useState('');
   const [fontsTick, setFontsTick] = useState(0);
+  const [families, setFamilies] = useState<FontFamily[]>(() => fontFamilies([]));
 
   const stageRef = useRef<Konva.Stage>(null);
   const trRef = useRef<Konva.Transformer>(null);
@@ -253,14 +255,28 @@ export default function Editor({ id }: { id: string }) {
     }
   }, []);
 
+  // uploaded fonts join the font list; each family and weight the card uses is loaded before the
+  // texts are measured, and again whenever a text switches to one not loaded yet
   useEffect(() => {
+    registerUploadedFonts().then((fonts) => setFamilies(fontFamilies(fonts)));
+  }, []);
+  const usedFonts = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of doc ? allElements(doc) : []) if (e.type === 'text') set.add(JSON.stringify([e.font.family, e.font.weight]));
+    // a string, so the effect below runs only when the set changes, not on every edit
+    return JSON.stringify([...set].sort());
+  }, [doc]);
+  useEffect(() => {
+    const used = (JSON.parse(usedFonts) as string[]).map((k) => JSON.parse(k) as [string, number]);
+    if (!used.length) return;
     let alive = true;
-    const loads = FONTS.flatMap((f) => [`400 16px "${f}"`, `700 16px "${f}"`].map((s) => document.fonts.load(s, 'אבגabc')));
-    Promise.allSettled(loads).then(() => alive && setFontsTick((n) => n + 1));
+    registerUploadedFonts()
+      .then(() => Promise.all(used.map(([family, weight]) => loadFont(family, weight))))
+      .then(() => alive && setFontsTick((n) => n + 1));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [usedFonts]);
 
   // ---- fit zoom ------------------------------------------------------------
   useEffect(() => {
@@ -561,6 +577,8 @@ export default function Editor({ id }: { id: string }) {
   const textFields = elements.filter((e): e is TextElement => e.type === 'text' && (e.locks.content || e.locks.style));
   const bgChoice = bg.locks.content || bg.locks.style;
   const textEl = selected?.type === 'text' ? selected : null;
+  const textFamily = textEl ? families.find((f) => f.family === textEl.font.family) : undefined;
+  const textWeights = textEl ? [...new Set([...(textFamily?.weights ?? []), textEl.font.weight])].sort((a, b) => a - b) : [];
   const updateText = (patch: Partial<TextElement>, key?: string) => selected && patchElement(selected.id, patch, key);
   const num = (v: string) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v));
   /** a lock-inspector change; a field only exists while customers may do something with the element */
@@ -1068,10 +1086,20 @@ export default function Editor({ id }: { id: string }) {
                     </label>
                     <label className="field">
                       פונט
-                      <select value={textEl.font.family} onChange={(e) => updateText({ font: { ...textEl.font, family: e.target.value } })}>
-                        {FONTS.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
+                      <select
+                        value={textEl.font.family}
+                        onChange={(e) => {
+                          const fam = families.find((f) => f.family === e.target.value);
+                          const weight = fam ? nearestWeight(fam.weights, textEl.font.weight) : textEl.font.weight;
+                          updateText({ font: { ...textEl.font, family: e.target.value, weight } });
+                        }}
+                      >
+                        {!textFamily && <option value={textEl.font.family}>{textEl.font.family} (לא זמין)</option>}
+                        {families.map((f) => (
+                          <option key={f.family} value={f.family}>
+                            {f.family}
+                            {f.builtin ? '' : ' · הועלה'}
+                            {f.hebrew ? '' : ' · ללא עברית'}
                           </option>
                         ))}
                       </select>
@@ -1094,14 +1122,20 @@ export default function Editor({ id }: { id: string }) {
                         צבע
                         <input type="color" value={textEl.font.color} onChange={(e) => updateText({ font: { ...textEl.font, color: e.target.value } }, 'color:' + textEl.id)} />
                       </label>
-                      <div className="seg" role="group" aria-label="משקל">
-                        <button
-                          aria-pressed={textEl.font.weight >= 700}
-                          onClick={() => updateText({ font: { ...textEl.font, weight: textEl.font.weight >= 700 ? 400 : 700 } })}
+                      <label className="field">
+                        משקל
+                        <select
+                          value={textEl.font.weight}
+                          disabled={textWeights.length < 2}
+                          onChange={(e) => updateText({ font: { ...textEl.font, weight: Number(e.target.value) } })}
                         >
-                          מודגש
-                        </button>
-                      </div>
+                          {textWeights.map((w) => (
+                            <option key={w} value={w}>
+                              {WEIGHT_NAMES[w] ?? w}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                     <div className="seg" role="group" aria-label="יישור">
                       {(['right', 'center', 'left'] as const).map((a) => (

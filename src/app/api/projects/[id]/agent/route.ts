@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getProject } from '@/lib/data/projects';
 import { listCategories, listImages } from '@/lib/data/library';
+import { listFonts } from '@/lib/data/fonts';
+import { fontFamilies } from '@/lib/fonts';
 import { applyEdits } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
@@ -33,7 +35,7 @@ export async function POST(req: Request, { params }: Ctx) {
     .slice(-10)
     .map((t: ChatTurn) => ({ role: t.role, text: t.text.slice(0, 1000) }));
 
-  const [project, images, categories] = await Promise.all([getProject(id), listImages(), listCategories()]);
+  const [project, images, categories, fonts] = await Promise.all([getProject(id), listImages(), listCategories(), listFonts()]);
   if (!project || !canRead(user, project) || !canWrite(user, project)) {
     return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   }
@@ -45,7 +47,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const base = enforce(body?.canvas);
   if (!base) return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
 
-  const state = { doc: structuredClone(base), mode, images, categories, changed: false };
+  const state = { doc: structuredClone(base), mode, images, categories, fonts: fontFamilies(fonts), changed: false };
   try {
     const { reply } = await runAgent(state, message, history);
     const canvas = state.changed ? enforce(state.doc) : base;

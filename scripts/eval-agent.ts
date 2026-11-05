@@ -6,6 +6,7 @@
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import { runAgent } from '../src/lib/agent/run';
 import type { AgentMode, AgentState } from '../src/lib/agent/tools';
+import { fontFamilies } from '../src/lib/fonts';
 import { allElements, applyEdits, findElement } from '../src/lib/canvas';
 import { migrateV1, type CanvasDocV1 } from '../src/lib/canvas-v1';
 import type { CanvasDoc, Category, ImageAsset, TextElement } from '../src/lib/types';
@@ -139,7 +140,22 @@ const SCENARIOS: Scenario[] = [
       ['reply clean', (_, r) => isHebrewReply(r)],
     ],
   },
+  {
+    name: 'admin: uploaded font',
+    mode: 'full',
+    doc: weddingTemplate,
+    message: 'תעביר את הכותרת לפונט גוטמן, הכי עבה שיש לו',
+    checks: [
+      ['family', (d) => texts(d).find((t) => t.id === 'title')?.font.family === 'Guttman Frank'],
+      ['heaviest weight', (d) => texts(d).find((t) => t.id === 'title')?.font.weight === 800],
+      ['others kept', (d) => texts(d).filter((t) => t.id !== 'title').every((t) => t.font.family === 'Heebo')],
+      ['reply clean', (_, r) => isHebrewReply(r)],
+    ],
+  },
 ];
+
+/** what the font list holds besides the built-in families: one uploaded family with two weights */
+const UPLOADED_FONTS = [400, 800].map((weight) => ({ family: 'Guttman Frank', weight, style: 'normal' as const, hebrew: true }));
 
 // ---- runner ----------------------------------------------------------------------------
 const args = process.argv.slice(2);
@@ -153,7 +169,7 @@ type Row = { config: string; scenario: string; passed: number; total: number; fa
 
 async function one(c: Config, s: Scenario): Promise<Row> {
   const original = s.doc();
-  const state: AgentState = { doc: structuredClone(original), mode: s.mode, images, categories, changed: false };
+  const state: AgentState = { doc: structuredClone(original), mode: s.mode, images, categories, fonts: fontFamilies(UPLOADED_FONTS), changed: false };
   const base = { config: c.name, scenario: s.name, total: s.checks.length };
   try {
     const run = await runAgent(state, s.message, [], { model: c.model, effort: c.effort });

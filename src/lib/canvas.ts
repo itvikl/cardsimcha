@@ -8,8 +8,6 @@ export const PAGE_PRESETS = [
   { id: 'story', label: 'סטורי 9:16', width_mm: 108, height_mm: 192 },
 ] as const;
 
-export const FONTS = ['Heebo', 'Frank Ruhl Libre', 'Assistant', 'Secular One', 'Arial'] as const;
-
 export const LAYERS: LayerName[] = ['content', 'overlay'];
 
 /** customers may do nothing with it */
