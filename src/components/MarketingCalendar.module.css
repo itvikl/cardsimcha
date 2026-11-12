@@ -1,0 +1,118 @@
+.root {
+  padding: 2rem 0;
+}
+
+.head {
+  margin-bottom: 1.25rem;
+}
+
+.title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.sub {
+  font-size: 0.9rem;
+  color: var(--text-muted, #888);
+  margin: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.monthCard {
+  background: var(--surface-alt, #f8f8f8);
+  border-radius: 12px;
+  padding: 1rem;
+  border: 1.5px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.current {
+  border-color: var(--primary, #14336B);
+  background: var(--surface, #fff);
+}
+
+.monthHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.monthName {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.nowBadge {
+  font-size: 0.7rem;
+  background: var(--primary, #14336B);
+  color: #fff;
+  border-radius: 99px;
+  padding: 0.1rem 0.5rem;
+}
+
+.empty {
+  font-size: 0.85rem;
+  color: var(--text-muted, #888);
+  margin: 0;
+}
+
+.eventList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.event {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 0.3rem;
+}
+
+.eventBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.eventLabel {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.eventTip {
+  font-size: 0.8rem;
+  color: var(--text-muted, #666);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.eventCta {
+  font-size: 0.8rem;
+  color: var(--primary, #14336B);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.eventCta:hover {
+  text-decoration: underline;
+}

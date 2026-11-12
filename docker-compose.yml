@@ -1,0 +1,37 @@
+# Local development services.
+#   npm run db:up      start Postgres (with pgvector) on localhost:5433
+#   npm run db:down    stop it (data is kept in the "pgdata" volume)
+#   docker compose --profile app up --build    run the production image of the app on localhost:3200 (APP_PORT)
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: cardsimcha
+      POSTGRES_PASSWORD: cardsimcha
+      POSTGRES_DB: cardsimcha
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardsimcha -d cardsimcha"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    profiles: ["app"]
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://cardsimcha:cardsimcha@db:5432/cardsimcha
+      FILES_DRIVER: local
+    ports:
+      - "${APP_PORT:-3200}:3000"
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  pgdata:

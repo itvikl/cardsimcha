@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { readDb } from '@/lib/db';
-import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
+import { getProject } from '@/lib/data/projects';
+import { listCategories, listImages } from '@/lib/data/library';
+import { listFonts } from '@/lib/data/fonts';
+import { fontFamilies } from '@/lib/fonts';
+import { applyEdits } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
@@ -32,8 +35,7 @@ export async function POST(req: Request, { params }: Ctx) {
     .slice(-10)
     .map((t: ChatTurn) => ({ role: t.role, text: t.text.slice(0, 1000) }));
 
-  const db = await readDb();
-  const project = db.projects.find((p) => p.id === id);
+  const [project, images, categories, fonts] = await Promise.all([getProject(id), listImages(), listCategories(), listFonts()]);
   if (!project || !canRead(user, project) || !canWrite(user, project)) {
     return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   }
@@ -41,11 +43,11 @@ export async function POST(req: Request, { params }: Ctx) {
   const mode: AgentMode = project.kind === 'template' ? 'full' : 'customer';
   // the same rules as saving: a customer's copy only takes the changes a customer may make
   const enforce = (d: unknown): CanvasDoc | null =>
-    mode === 'full' ? validateDoc(d) : applyCustomerEdits(project.canvas, d, db.images);
+    applyEdits(project.canvas, d, mode === 'full' ? 'author' : 'customer', images);
   const base = enforce(body?.canvas);
   if (!base) return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
 
-  const state = { doc: structuredClone(base), mode, images: db.images, categories: db.categories, changed: false };
+  const state = { doc: structuredClone(base), mode, images, categories, fonts: fontFamilies(fonts), changed: false };
   try {
     const { reply } = await runAgent(state, message, history);
     const canvas = state.changed ? enforce(state.doc) : base;

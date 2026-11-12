@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { newId, updateDb } from '@/lib/db';
 import { createSession, hashPassword, publicUser, setSessionCookie } from '@/lib/auth';
-import type { User } from '@/lib/types';
+import { createUser } from '@/lib/data/users';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -17,15 +16,8 @@ export async function POST(req: Request) {
   }
 
   const { salt, hash } = await hashPassword(password);
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const result = await updateDb((db) => {
-    if (db.users.some((u) => u.email === email)) return null;
-    // ADMIN_EMAIL decides who is admin; without it the very first account is the admin.
-    const role = adminEmail ? (email === adminEmail ? 'admin' : 'user') : db.users.length === 0 ? 'admin' : 'user';
-    const user: User = { id: newId(), email, name, role, passwordHash: hash, salt, createdAt: new Date().toISOString() };
-    db.users.push(user);
-    return user;
-  });
+  // ADMIN_EMAIL decides who is admin; without it the very first account is the admin
+  const result = await createUser({ email, name, passwordHash: hash, salt });
   if (!result) return NextResponse.json({ error: 'האימייל כבר רשום' }, { status: 409 });
 
   const res = NextResponse.json(publicUser(result), { status: 201 });

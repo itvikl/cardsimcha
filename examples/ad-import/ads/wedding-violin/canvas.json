@@ -1,497 +1,653 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "page": {
     "width_mm": 210,
-    "height_mm": 297,
-    "background": "#F1E6D3"
+    "height_mm": 297
   },
-  "elements": [
-    {
-      "id": "f45d4893-d6b1-486d-83e2-b2e6666c022f",
-      "type": "image",
-      "x_mm": 0,
-      "y_mm": 0,
-      "w_mm": 210,
-      "h_mm": 297,
-      "rotation": 0,
-      "z": 0,
-      "asset_id": "BACKGROUND",
-      "label": "רקע"
-    },
-    {
-      "id": "34496380-7072-45f6-a926-53ddc683a599",
-      "type": "text",
-      "x_mm": 59.94,
-      "y_mm": 87.0,
-      "w_mm": 37.34,
-      "rotation": 0,
-      "z": 1,
-      "text": "בשבח והודיה להשי״ת",
-      "align": "center",
-      "editable": true,
-      "label": "פתיחה שורה 1",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.3,
-        "color": "#6C5E47"
+  "layers": {
+    "background": {
+      "fill": {
+        "type": "solid",
+        "color": "#F1E6D3"
+      },
+      "image": {
+        "asset_id": "BACKGROUND",
+        "fit": "cover"
+      },
+      "locks": {
+        "content": false,
+        "transform": false,
+        "delete": false,
+        "style": false
       }
     },
-    {
-      "id": "d62aca8f-c106-4e41-9dc5-c98208789db8",
-      "type": "text",
-      "x_mm": 53.1,
-      "y_mm": 92.94,
-      "w_mm": 51.01,
-      "rotation": 0,
-      "z": 2,
-      "text": "הננו מתכבדים להזמינכם לבוא",
-      "align": "center",
-      "editable": true,
-      "label": "פתיחה שורה 2",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.3,
-        "color": "#6D5D45"
+    "content": [
+      {
+        "id": "583e63b9-5219-44fc-bbc9-2c328a1ff654",
+        "type": "text",
+        "x_mm": 59.94,
+        "y_mm": 87.0,
+        "w_mm": 37.34,
+        "rotation": 0,
+        "text": "בשבח והודיה להשי״ת",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "פתיחה שורה 1"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.3,
+          "color": "#6C5E47"
+        }
+      },
+      {
+        "id": "87e92e56-fa7b-422f-9358-e92981307cf5",
+        "type": "text",
+        "x_mm": 53.1,
+        "y_mm": 92.94,
+        "w_mm": 51.01,
+        "rotation": 0,
+        "text": "הננו מתכבדים להזמינכם לבוא",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "פתיחה שורה 2"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.3,
+          "color": "#6D5D45"
+        }
+      },
+      {
+        "id": "362ef405-4ab8-4714-911c-e8268a58e64b",
+        "type": "text",
+        "x_mm": 45.2,
+        "y_mm": 99.25,
+        "w_mm": 66.83,
+        "rotation": 0,
+        "text": "ולהשתתף בשמחת כלולות בנינו היקרים",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "פתיחה שורה 3"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.3,
+          "color": "#6A5A42"
+        }
+      },
+      {
+        "id": "569b0052-e07b-4a5c-8f7c-7451dbeceaa5",
+        "type": "text",
+        "x_mm": 69.72,
+        "y_mm": 108.23,
+        "w_mm": 18.53,
+        "rotation": 0,
+        "text": "החתן המופלג",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "תואר החתן"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 8.5,
+          "color": "#786D5B"
+        }
+      },
+      {
+        "id": "98b91fe5-f5cb-4f70-8c0f-1fe8ba5b5b95",
+        "type": "text",
+        "x_mm": 64.63,
+        "y_mm": 109.61,
+        "w_mm": 28.15,
+        "rotation": 0,
+        "text": "יעקב",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "שם החתן"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 36.4,
+          "color": "#9B6821"
+        }
+      },
+      {
+        "id": "e93561b6-f245-4eb3-b209-a9968e6658d8",
+        "type": "text",
+        "x_mm": 73.39,
+        "y_mm": 126.69,
+        "w_mm": 10.62,
+        "rotation": 0,
+        "text": "עב״ג",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "אחרי שם החתן"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 13.3,
+          "color": "#6C593F"
+        }
+      },
+      {
+        "id": "e1e98cc7-3271-4fda-ba32-cabf85212c3a",
+        "type": "text",
+        "x_mm": 68.06,
+        "y_mm": 135.59,
+        "w_mm": 21.09,
+        "rotation": 0,
+        "text": "הכלה המהוללה",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "תואר הכלה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 8.4,
+          "color": "#7B6F5D"
+        }
+      },
+      {
+        "id": "a3773a8f-d74f-47f7-a962-c06460aa2b92",
+        "type": "text",
+        "x_mm": 41.98,
+        "y_mm": 137.77,
+        "w_mm": 73.45,
+        "rotation": 0,
+        "text": "ציפורה ברכה",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "שם הכלה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 36.4,
+          "color": "#9D6A22"
+        }
+      },
+      {
+        "id": "76bc0ca2-ec2e-43a8-b9f4-b7b1c9d7d399",
+        "type": "text",
+        "x_mm": 37.06,
+        "y_mm": 156.17,
+        "w_mm": 83.28,
+        "rotation": 0,
+        "text": "שתתקיים בעזהשי״ת ובשעה טובה ומוצלחת",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "שורת החתונה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 13.2,
+          "color": "#6B593D"
+        }
+      },
+      {
+        "id": "ef840bea-3008-43e0-bc1f-a5a9b3be99b6",
+        "type": "text",
+        "x_mm": 47.96,
+        "y_mm": 162.78,
+        "w_mm": 61.49,
+        "rotation": 0,
+        "text": "ביום חמישי פרשת חיי שרה",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "יום ופרשה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 14.8,
+          "color": "#966E38"
+        }
+      },
+      {
+        "id": "2414454b-1baf-49c8-a7ea-81ddc1b8d8ad",
+        "type": "text",
+        "x_mm": 55.01,
+        "y_mm": 169.98,
+        "w_mm": 47.38,
+        "rotation": 0,
+        "text": "כ״ה מר-חשון תשפ״ז",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "תאריך"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 15.1,
+          "color": "#956C35"
+        }
+      },
+      {
+        "id": "c0a476d0-b1cf-49b2-a7a6-2ca986a02ec2",
+        "type": "text",
+        "x_mm": 41.58,
+        "y_mm": 178.66,
+        "w_mm": 73.88,
+        "rotation": 0,
+        "text": "קבל״פ בשעה 18:00   חופה בשעה 19:00",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "שעות"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.9,
+          "color": "#6A593C"
+        }
+      },
+      {
+        "id": "d8918ed0-f683-4b3c-a8be-0a609db6f44c",
+        "type": "text",
+        "x_mm": 51.15,
+        "y_mm": 186.09,
+        "w_mm": 55.29,
+        "rotation": 0,
+        "text": "באולמי טנטור-הילס",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "אולם"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 17.8,
+          "color": "#966A2D"
+        }
+      },
+      {
+        "id": "4b81ff54-deba-4096-905b-c107aa76c14d",
+        "type": "text",
+        "x_mm": 59.96,
+        "y_mm": 194.75,
+        "w_mm": 37.12,
+        "rotation": 0,
+        "text": "רחוב דרך חברון 303",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "כתובת"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.4,
+          "color": "#6E5D44"
+        }
+      },
+      {
+        "id": "154040e1-4a48-40c2-b44e-ac214f2419a3",
+        "type": "text",
+        "x_mm": 70.4,
+        "y_mm": 203.74,
+        "w_mm": 16.6,
+        "rotation": 0,
+        "text": "הורי החתן",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "כותרת הורי החתן"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 9.9,
+          "color": "#685B44"
+        }
+      },
+      {
+        "id": "3fc77851-653c-47ad-b6e8-af3f79c5fb04",
+        "type": "text",
+        "x_mm": 59.7,
+        "y_mm": 207.11,
+        "w_mm": 38.19,
+        "rotation": 0,
+        "text": "אהרן זעליקאוויטש",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "הורי החתן"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 13.1,
+          "color": "#9B8551"
+        }
+      },
+      {
+        "id": "869cef13-f582-46e6-a26f-b5e3c0bf6580",
+        "type": "text",
+        "x_mm": 74.06,
+        "y_mm": 212.75,
+        "w_mm": 8.91,
+        "rotation": 0,
+        "text": "וב״ב",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "וב״ב (חתן)"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.1,
+          "color": "#746A54"
+        }
+      },
+      {
+        "id": "ed28cb7c-a861-41af-8b75-02c1f95a8fe4",
+        "type": "text",
+        "x_mm": 70.74,
+        "y_mm": 220.58,
+        "w_mm": 17.03,
+        "rotation": 0,
+        "text": "הורי הכלה",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "כותרת הורי הכלה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 9.8,
+          "color": "#685C47"
+        }
+      },
+      {
+        "id": "b4933c11-24a0-46ce-aabb-244184267d50",
+        "type": "text",
+        "x_mm": 63.88,
+        "y_mm": 223.97,
+        "w_mm": 31.14,
+        "rotation": 0,
+        "text": "מאיר גולדבערג",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "הורי הכלה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 700,
+          "size_pt": 12.9,
+          "color": "#9A8452"
+        }
+      },
+      {
+        "id": "1545c308-d6d1-4c02-bcd5-91bc851cc3ef",
+        "type": "text",
+        "x_mm": 75.02,
+        "y_mm": 231.01,
+        "w_mm": 8.48,
+        "rotation": 0,
+        "text": "וב״ב",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "וב״ב (כלה)"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 10.5,
+          "color": "#7A6953"
+        }
+      },
+      {
+        "id": "65f2e61f-d80a-4972-89ab-1c316eb486b6",
+        "type": "text",
+        "x_mm": 154.62,
+        "y_mm": 73.63,
+        "w_mm": 44.6,
+        "rotation": 0,
+        "text": "אהובי ידידי אחי ורעי היקר",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "הזמנה אישית שורה 1"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.2,
+          "color": "#9A8559"
+        }
+      },
+      {
+        "id": "7459ce9a-997c-4a72-840e-dd8a34406ad5",
+        "type": "text",
+        "x_mm": 149.7,
+        "y_mm": 77.72,
+        "w_mm": 54.43,
+        "rotation": 0,
+        "text": "אשמח לראותך משתתף בשמחתי",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "הזמנה אישית שורה 2"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.2,
+          "color": "#998457"
+        }
+      },
+      {
+        "id": "4fa4fc12-beaf-4941-810e-8587c77bfc16",
+        "type": "text",
+        "x_mm": 149.49,
+        "y_mm": 81.42,
+        "w_mm": 54.86,
+        "rotation": 0,
+        "text": "נא לראות הזמנה זו כאישית ממש",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "הזמנה אישית שורה 3"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.3,
+          "color": "#9B8557"
+        }
+      },
+      {
+        "id": "fe01fc20-f84c-4167-af74-7b5ee31d646f",
+        "type": "text",
+        "x_mm": 162.74,
+        "y_mm": 90.96,
+        "w_mm": 28.36,
+        "rotation": 0,
+        "text": "באחווה ובידידות",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "ברכת סיום"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 11.0,
+          "color": "#9C8558"
+        }
+      },
+      {
+        "id": "30025515-3ec7-45e6-acb6-a2ecbb937a8e",
+        "type": "text",
+        "x_mm": 161.98,
+        "y_mm": 97.64,
+        "w_mm": 28.57,
+        "rotation": 0,
+        "text": "החתן יענקי",
+        "align": "center",
+        "locks": {
+          "content": true,
+          "transform": false,
+          "delete": false,
+          "style": true
+        },
+        "field": {
+          "label": "חתימה"
+        },
+        "font": {
+          "family": "Frank Ruhl Libre",
+          "weight": 400,
+          "size_pt": 16.5,
+          "color": "#9F8858"
+        }
       }
-    },
-    {
-      "id": "6cf61e43-35f3-41eb-850f-5381ee029a0c",
-      "type": "text",
-      "x_mm": 45.2,
-      "y_mm": 99.25,
-      "w_mm": 66.83,
-      "rotation": 0,
-      "z": 3,
-      "text": "ולהשתתף בשמחת כלולות בנינו היקרים",
-      "align": "center",
-      "editable": true,
-      "label": "פתיחה שורה 3",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.3,
-        "color": "#6A5A42"
-      }
-    },
-    {
-      "id": "7fa6c8e6-eb65-40a3-bef6-d2c1b9d0c609",
-      "type": "text",
-      "x_mm": 69.72,
-      "y_mm": 108.23,
-      "w_mm": 18.53,
-      "rotation": 0,
-      "z": 4,
-      "text": "החתן המופלג",
-      "align": "center",
-      "editable": true,
-      "label": "תואר החתן",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 8.5,
-        "color": "#786D5B"
-      }
-    },
-    {
-      "id": "ee738156-4eea-4c31-b60d-c4aef666c3a1",
-      "type": "text",
-      "x_mm": 64.63,
-      "y_mm": 109.61,
-      "w_mm": 28.15,
-      "rotation": 0,
-      "z": 5,
-      "text": "יעקב",
-      "align": "center",
-      "editable": true,
-      "label": "שם החתן",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 36.4,
-        "color": "#9B6821"
-      }
-    },
-    {
-      "id": "41ae765b-2023-4945-a265-35867a5f6ee4",
-      "type": "text",
-      "x_mm": 73.39,
-      "y_mm": 126.69,
-      "w_mm": 10.62,
-      "rotation": 0,
-      "z": 6,
-      "text": "עב״ג",
-      "align": "center",
-      "editable": true,
-      "label": "אחרי שם החתן",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 13.3,
-        "color": "#6C593F"
-      }
-    },
-    {
-      "id": "e38e76be-340c-4846-988d-1b3cbe38bd69",
-      "type": "text",
-      "x_mm": 68.06,
-      "y_mm": 135.59,
-      "w_mm": 21.09,
-      "rotation": 0,
-      "z": 7,
-      "text": "הכלה המהוללה",
-      "align": "center",
-      "editable": true,
-      "label": "תואר הכלה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 8.4,
-        "color": "#7B6F5D"
-      }
-    },
-    {
-      "id": "1b461535-dfa0-40d8-b65b-3c0cc6c17c9e",
-      "type": "text",
-      "x_mm": 41.98,
-      "y_mm": 137.77,
-      "w_mm": 73.45,
-      "rotation": 0,
-      "z": 8,
-      "text": "ציפורה ברכה",
-      "align": "center",
-      "editable": true,
-      "label": "שם הכלה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 36.4,
-        "color": "#9D6A22"
-      }
-    },
-    {
-      "id": "3d9f2698-3900-4200-890f-4e1b0d2ada3c",
-      "type": "text",
-      "x_mm": 37.06,
-      "y_mm": 156.17,
-      "w_mm": 83.28,
-      "rotation": 0,
-      "z": 9,
-      "text": "שתתקיים בעזהשי״ת ובשעה טובה ומוצלחת",
-      "align": "center",
-      "editable": true,
-      "label": "שורת החתונה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 13.2,
-        "color": "#6B593D"
-      }
-    },
-    {
-      "id": "b6c56dca-6f02-4a07-a348-e576e4e80fe8",
-      "type": "text",
-      "x_mm": 47.96,
-      "y_mm": 162.78,
-      "w_mm": 61.49,
-      "rotation": 0,
-      "z": 10,
-      "text": "ביום חמישי פרשת חיי שרה",
-      "align": "center",
-      "editable": true,
-      "label": "יום ופרשה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 14.8,
-        "color": "#966E38"
-      }
-    },
-    {
-      "id": "c8062dd2-c331-4b84-a078-00ebe951e785",
-      "type": "text",
-      "x_mm": 55.01,
-      "y_mm": 169.98,
-      "w_mm": 47.38,
-      "rotation": 0,
-      "z": 11,
-      "text": "כ״ה מר-חשון תשפ״ז",
-      "align": "center",
-      "editable": true,
-      "label": "תאריך",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 15.1,
-        "color": "#956C35"
-      }
-    },
-    {
-      "id": "e4981b00-21e2-4366-8721-b2084ba0e393",
-      "type": "text",
-      "x_mm": 41.58,
-      "y_mm": 178.66,
-      "w_mm": 73.88,
-      "rotation": 0,
-      "z": 12,
-      "text": "קבל״פ בשעה 18:00   חופה בשעה 19:00",
-      "align": "center",
-      "editable": true,
-      "label": "שעות",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.9,
-        "color": "#6A593C"
-      }
-    },
-    {
-      "id": "7bde8b2d-a8b3-49cf-8ce2-aced3c145b73",
-      "type": "text",
-      "x_mm": 51.15,
-      "y_mm": 186.09,
-      "w_mm": 55.29,
-      "rotation": 0,
-      "z": 13,
-      "text": "באולמי טנטור-הילס",
-      "align": "center",
-      "editable": true,
-      "label": "אולם",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 17.8,
-        "color": "#966A2D"
-      }
-    },
-    {
-      "id": "4ba58520-587f-4f8d-9e20-14299b835c6b",
-      "type": "text",
-      "x_mm": 59.96,
-      "y_mm": 194.75,
-      "w_mm": 37.12,
-      "rotation": 0,
-      "z": 14,
-      "text": "רחוב דרך חברון 303",
-      "align": "center",
-      "editable": true,
-      "label": "כתובת",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.4,
-        "color": "#6E5D44"
-      }
-    },
-    {
-      "id": "9b174507-d5e7-4d52-b60c-c9139015d33d",
-      "type": "text",
-      "x_mm": 70.4,
-      "y_mm": 203.74,
-      "w_mm": 16.6,
-      "rotation": 0,
-      "z": 15,
-      "text": "הורי החתן",
-      "align": "center",
-      "editable": true,
-      "label": "כותרת הורי החתן",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 9.9,
-        "color": "#685B44"
-      }
-    },
-    {
-      "id": "5b397213-fbf7-4b40-aca9-fa7256c8c2c0",
-      "type": "text",
-      "x_mm": 59.7,
-      "y_mm": 207.11,
-      "w_mm": 38.19,
-      "rotation": 0,
-      "z": 16,
-      "text": "אהרן זעליקאוויטש",
-      "align": "center",
-      "editable": true,
-      "label": "הורי החתן",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 13.1,
-        "color": "#9B8551"
-      }
-    },
-    {
-      "id": "68852d00-dee1-4f8d-bf97-03b7564157ac",
-      "type": "text",
-      "x_mm": 74.06,
-      "y_mm": 212.75,
-      "w_mm": 8.91,
-      "rotation": 0,
-      "z": 17,
-      "text": "וב״ב",
-      "align": "center",
-      "editable": true,
-      "label": "וב״ב (חתן)",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.1,
-        "color": "#746A54"
-      }
-    },
-    {
-      "id": "b0301656-9bb3-4cc4-9e6e-bc11be8e9a3c",
-      "type": "text",
-      "x_mm": 70.74,
-      "y_mm": 220.58,
-      "w_mm": 17.03,
-      "rotation": 0,
-      "z": 18,
-      "text": "הורי הכלה",
-      "align": "center",
-      "editable": true,
-      "label": "כותרת הורי הכלה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 9.8,
-        "color": "#685C47"
-      }
-    },
-    {
-      "id": "44684b5d-c1f1-42d6-aad2-4c6f9d86790e",
-      "type": "text",
-      "x_mm": 63.88,
-      "y_mm": 223.97,
-      "w_mm": 31.14,
-      "rotation": 0,
-      "z": 19,
-      "text": "מאיר גולדבערג",
-      "align": "center",
-      "editable": true,
-      "label": "הורי הכלה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 700,
-        "size_pt": 12.9,
-        "color": "#9A8452"
-      }
-    },
-    {
-      "id": "743a2d21-cc5c-420d-b358-bdef72711eb7",
-      "type": "text",
-      "x_mm": 75.02,
-      "y_mm": 231.01,
-      "w_mm": 8.48,
-      "rotation": 0,
-      "z": 20,
-      "text": "וב״ב",
-      "align": "center",
-      "editable": true,
-      "label": "וב״ב (כלה)",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 10.5,
-        "color": "#7A6953"
-      }
-    },
-    {
-      "id": "40e22fc6-9f10-4967-9748-07d278dec8a5",
-      "type": "text",
-      "x_mm": 154.62,
-      "y_mm": 73.63,
-      "w_mm": 44.6,
-      "rotation": 0,
-      "z": 21,
-      "text": "אהובי ידידי אחי ורעי היקר",
-      "align": "center",
-      "editable": true,
-      "label": "הזמנה אישית שורה 1",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.2,
-        "color": "#9A8559"
-      }
-    },
-    {
-      "id": "5000f49c-e8b9-4164-8d62-9045c5c9d22e",
-      "type": "text",
-      "x_mm": 149.7,
-      "y_mm": 77.72,
-      "w_mm": 54.43,
-      "rotation": 0,
-      "z": 22,
-      "text": "אשמח לראותך משתתף בשמחתי",
-      "align": "center",
-      "editable": true,
-      "label": "הזמנה אישית שורה 2",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.2,
-        "color": "#998457"
-      }
-    },
-    {
-      "id": "d4404862-ff84-48fc-9bc8-0cb4fd34f70f",
-      "type": "text",
-      "x_mm": 149.49,
-      "y_mm": 81.42,
-      "w_mm": 54.86,
-      "rotation": 0,
-      "z": 23,
-      "text": "נא לראות הזמנה זו כאישית ממש",
-      "align": "center",
-      "editable": true,
-      "label": "הזמנה אישית שורה 3",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.3,
-        "color": "#9B8557"
-      }
-    },
-    {
-      "id": "a224e897-1ccf-465b-96ac-9a208b0b59c3",
-      "type": "text",
-      "x_mm": 162.74,
-      "y_mm": 90.96,
-      "w_mm": 28.36,
-      "rotation": 0,
-      "z": 24,
-      "text": "באחווה ובידידות",
-      "align": "center",
-      "editable": true,
-      "label": "ברכת סיום",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 11.0,
-        "color": "#9C8558"
-      }
-    },
-    {
-      "id": "d9b37c92-c065-485a-bb3a-6738a6c48312",
-      "type": "text",
-      "x_mm": 161.98,
-      "y_mm": 97.64,
-      "w_mm": 28.57,
-      "rotation": 0,
-      "z": 25,
-      "text": "החתן יענקי",
-      "align": "center",
-      "editable": true,
-      "label": "חתימה",
-      "font": {
-        "family": "Frank Ruhl Libre",
-        "weight": 400,
-        "size_pt": 16.5,
-        "color": "#9F8858"
-      }
-    }
-  ]
+    ],
+    "overlay": []
+  }
 }

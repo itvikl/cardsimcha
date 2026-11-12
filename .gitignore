@@ -1,9 +1,12 @@
 node_modules
 .next
-data
+/data
 next-env.d.ts
 .env*
 
 # firebase service-account keys
 service-account*.json
 *-firebase-adminsdk-*.json
+
+# Prisma client, made by "prisma generate" (runs on npm install)
+src/generated

@@ -1,0 +1,198 @@
+/* The album (AlbumView): two photographs and what's set over them. Colours are festive.module.css's tokens, set by .root around it. */
+.stage {
+  position: relative; height: calc(100svh - var(--header-h)); min-height: 520px; overflow: hidden;
+  background: var(--bg); container-type: size;
+}
+
+/* a photograph cropped like object-fit: cover, so what's laid over it in % stays on its spot at any size */
+.plate { position: absolute; aspect-ratio: 16 / 9; left: 50%; top: 50%; width: max(100cqw, 100cqh * 16 / 9); translate: -50% -50%; }
+.photo { position: absolute; inset: 0; width: 100%; height: 100%; display: block; user-select: none; -webkit-user-drag: none; }
+
+/* ── the closed album, and the album open: they cross over ── */
+.hero, .book {
+  position: absolute; inset: 0;
+  transition: opacity 0.7s var(--ease), scale 0.9s var(--ease);
+}
+.book { opacity: 0; scale: 0.985; pointer-events: none; }
+.stage[data-open='true'] .hero { opacity: 0; scale: 1.04; pointer-events: none; }
+.stage[data-open='true'] .book { opacity: 1; scale: 1; pointer-events: auto; }
+.heroBand { position: absolute; inset: 0; overflow: hidden; }
+
+/* the title stamped into the board: gold leaf, sunk into the cloth (a dark lip above, a catch of light below) */
+.foil {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px;
+  padding-top: 40px;
+}
+.foilCrest, .pageCrest {
+  display: block; aspect-ratio: 1; flex: none;
+  background: linear-gradient(160deg, #f1dfb2 0%, #c9a46a 38%, #e8cf98 58%, #a8834c 100%);
+  -webkit-mask: url(/album/crest.png) center / contain no-repeat;
+  mask: url(/album/crest.png) center / contain no-repeat;
+}
+.foilCrest { width: 300px; filter: drop-shadow(0 -2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 2px 1px rgba(255, 236, 200, 0.18)); }
+.foilTitle {
+  font-family: var(--serif); font-size: 92px; font-weight: 400; line-height: 1; white-space: nowrap;
+  background: linear-gradient(170deg, #f3e2b8 0%, #c9a46a 45%, #ecd49f 62%, #a8834c 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 -2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 2px 1px rgba(255, 236, 200, 0.2));
+}
+.foilRule { width: 210px; height: 3px; background: linear-gradient(90deg, transparent, #c9a46a 20%, #e8cf98 50%, #c9a46a 80%, transparent); }
+
+/* the copy sits on the open stone to the right of the album */
+.copy {
+  position: absolute; top: 50%; inset-inline-start: clamp(28px, 7cqw, 120px); translate: 0 -50%;
+  width: min(470px, 38cqw); display: flex; flex-direction: column; align-items: flex-start;
+}
+.eyebrow { margin: 0; font-size: 14px; font-weight: 500; letter-spacing: 0.12em; color: var(--gold-text); }
+.title {
+  margin: 14px 0 18px; font-family: var(--serif); font-weight: 900; color: var(--text);
+  font-size: clamp(44px, 5.2cqw, 80px); line-height: 1.02; letter-spacing: -0.01em; text-wrap: balance;
+}
+.lead { margin: 0 0 30px; font-size: 19px; line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 24px; }
+.cta {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 30px; border: 0; border-radius: 999px;
+  font: inherit; font-size: 17px; font-weight: 700; cursor: pointer;
+  background: var(--solid); color: var(--on-solid); box-shadow: 0 10px 26px rgba(26, 23, 20, 0.22);
+  transition: translate 0.25s var(--ease), box-shadow 0.25s var(--ease), background-color 0.25s;
+}
+.cta:hover:not(:disabled) { translate: 0 -2px; box-shadow: 0 16px 34px rgba(26, 23, 20, 0.28); }
+.cta:active:not(:disabled) { translate: 0 0; box-shadow: 0 6px 16px rgba(26, 23, 20, 0.22); }
+.cta:disabled { opacity: 0.6; cursor: progress; }
+.secondary {
+  font-size: 16px; color: var(--text-2); text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px;
+  padding-block: 12px;
+}
+.secondary:hover { color: var(--text); }
+
+/* ── the album open: pages over the photograph's blank paper ── */
+.page { position: absolute; container-type: inline-size; }
+.pageInner {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; color: var(--text); padding: 9cqw 11cqw;
+}
+/* the binding takes more of the paper than the fore-edge */
+.pageInner[data-side='left'] { padding-inline-start: 8cqw; padding-inline-end: 13cqw; }
+.pageInner[data-side='right'] { padding-inline-start: 13cqw; padding-inline-end: 8cqw; }
+.pageInner > * { mix-blend-mode: multiply; }
+.pageEyebrow { margin: 0 0 4cqw; font-size: 3.1cqw; letter-spacing: 0.14em; color: var(--gold-text); }
+.pageTitle { margin: 0 0 3cqw; font-family: var(--serif); font-weight: 700; font-size: 9cqw; line-height: 1.05; text-wrap: balance; }
+.pageHeading { margin: 0 0 4cqw; font-family: var(--serif); font-weight: 700; font-size: 6.4cqw; line-height: 1.1; }
+.pageLead { margin: 0 0 5cqw; max-width: 70cqw; font-size: 3.5cqw; line-height: 1.6; color: var(--text-2); text-wrap: balance; }
+.pageLink {
+  font-size: 3.6cqw; color: var(--text); text-decoration: underline; text-underline-offset: 1.2cqw; text-decoration-thickness: 1px;
+  padding: 1.5cqw 2cqw;
+}
+.pageLink:hover { color: var(--gold-text); }
+.pageCrest { width: 30cqw; margin-bottom: 5cqw; mix-blend-mode: normal; opacity: 0.9; }
+
+/* a photograph printed on the opening page; with the type under it, it fits a page about 120cqw tall */
+.print { width: 46cqw; aspect-ratio: 4 / 5; object-fit: cover; margin-bottom: 5cqw; display: block; }
+.pageInner[data-kind='opener'] { padding-block: 6cqw; }
+.pageInner[data-kind='opener'] .pageEyebrow { margin-bottom: 3cqw; }
+.pageInner[data-kind='opener'] .pageLead { margin-bottom: 3cqw; }
+
+/* the contents */
+.toc { list-style: none; margin: 0; padding: 0; width: 100%; }
+.toc li + li { border-top: 1px solid rgba(138, 106, 64, 0.32); }
+.toc button {
+  width: 100%; display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'name letter' 'lead lead';
+  gap: 0.6cqw 3cqw; padding: 3.4cqw 1cqw; border: 0; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer;
+}
+.tocLetter { grid-area: letter; font-family: var(--serif); font-size: 3.6cqw; color: var(--gold-text); }
+.tocName { grid-area: name; font-family: var(--serif); font-size: 6cqw; line-height: 1.15; transition: color 0.2s; }
+.tocLead { grid-area: lead; font-size: 2.9cqw; line-height: 1.45; color: var(--muted); }
+.toc button:hover .tocName { color: var(--gold-text); }
+
+/* a design, printed on its own page: it lifts a little to the hand */
+.design {
+  display: flex; flex-direction: column; align-items: center; gap: 2.4cqw; border: 0; padding: 0; background: none;
+  font: inherit; color: inherit; cursor: pointer; mix-blend-mode: normal;
+}
+.designPrint {
+  /* a page is about 120cqw tall: the print, its name and the margins fit inside it whatever the design's shape */
+  display: block; max-width: 70cqw; max-height: 84cqw; width: auto; height: auto; mix-blend-mode: multiply;
+  transition: translate 0.35s var(--ease), filter 0.35s var(--ease);
+}
+.design:hover .designPrint, .design:focus-visible .designPrint {
+  mix-blend-mode: normal; translate: 0 -1.2cqw; filter: drop-shadow(0 2.4cqw 2.6cqw rgba(60, 40, 20, 0.28));
+}
+.designName { font-family: var(--serif); font-size: 3.6cqw; mix-blend-mode: multiply; }
+.designGo { font-size: 3cqw; color: var(--gold-text); opacity: 0; transition: opacity 0.25s; }
+.design:hover .designGo, .design:focus-visible .designGo { opacity: 1; }
+@media (hover: none) { .designGo { opacity: 1; } }
+
+/* the kinds of cards in a chapter */
+.kinds { list-style: none; margin: 0; padding: 0; width: 100%; }
+.kinds li + li { border-top: 1px solid rgba(138, 106, 64, 0.32); }
+.kinds a { display: flex; justify-content: space-between; align-items: baseline; gap: 3cqw; padding: 2.6cqw 1cqw; color: inherit; text-decoration: none; }
+.kinds a span:first-child { font-family: var(--serif); font-size: 4.6cqw; }
+.kinds a:hover span:first-child { color: var(--gold-text); }
+.kindCount { font-size: 2.9cqw; color: var(--muted); }
+
+/* the sheet in the air: two faces of the photograph's own paper, over the spine */
+.leaf { position: absolute; transform-style: preserve-3d; z-index: 3; pointer-events: none; }
+.face {
+  position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; container-type: inline-size;
+  box-shadow: 0 0 2px rgba(60, 40, 20, 0.2);
+}
+.back { transform: rotateY(180deg); }
+.shade { position: absolute; inset: 0; opacity: 0; background: linear-gradient(90deg, rgba(40, 26, 12, 0.9), rgba(40, 26, 12, 0.25)); }
+.back .shade { background: linear-gradient(270deg, rgba(40, 26, 12, 0.9), rgba(40, 26, 12, 0.25)); }
+
+/* the controls float over the stone, a strip of the site's cream */
+.controls {
+  position: absolute; bottom: 18px; left: 50%; translate: -50% 0; z-index: 4;
+  display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 999px;
+  background: rgba(248, 243, 234, 0.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(60, 40, 20, 0.16);
+}
+.round {
+  width: 44px; height: 44px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  font: inherit; font-size: 20px; background: transparent; color: var(--text); transition: background-color 0.2s, opacity 0.2s;
+}
+.round:hover:not(:disabled) { background: rgba(26, 23, 20, 0.08); }
+.round:disabled { opacity: 0.3; cursor: default; }
+.place { min-width: 128px; padding-inline: 8px; text-align: center; font-family: var(--serif); font-size: 17px; white-space: nowrap; }
+.divider { width: 1px; height: 22px; margin-inline: 6px; background: rgba(26, 23, 20, 0.14); }
+.textButton {
+  min-height: 44px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+  font: inherit; font-size: 15px; color: var(--text-2); transition: background-color 0.2s;
+}
+.textButton:hover { background: rgba(26, 23, 20, 0.08); }
+
+.error {
+  position: absolute; top: 16px; left: 50%; translate: -50% 0; z-index: 5; margin: 0; padding: 10px 18px; border-radius: 12px;
+  background: var(--surface); color: var(--danger); box-shadow: var(--sh-1);
+}
+
+/* ── a phone: the photograph above the copy, then one page at a time with the view following the sheet ── */
+@media (max-width: 700px) {
+  .heroBand { inset: 0 0 auto; height: 58%; }
+  .heroPlate { width: 220cqw; left: 0; top: 50%; translate: calc(50cqw - 0.333 * 220cqw) -50%; }
+  .copy { top: auto; bottom: 0; translate: none; inset-inline: 0; width: auto; padding: 0 20px 28px; }
+  .title { font-size: 40px; margin: 8px 0 10px; }
+  .lead { font-size: 16px; margin-bottom: 20px; }
+  .cta { min-height: 50px; }
+  /* the zoomed page is shorter than the screen: the table goes on above and below it, out of focus */
+  .book::before {
+    content: ''; position: absolute; inset: -40px;
+    background: url(/album/open-1280.webp) 30% 0 / cover; filter: blur(16px) brightness(1.02);
+  }
+  .bookPlate {
+    width: 293cqw; left: 0; translate: calc(50cqw - var(--focus) * 293cqw) -50%;
+    transition: translate 0.95s cubic-bezier(0.42, 0.04, 0.22, 1);
+    -webkit-mask-image: linear-gradient(transparent, #000 9%, #000 91%, transparent);
+    mask-image: linear-gradient(transparent, #000 9%, #000 91%, transparent);
+  }
+  .bookPlate[data-side='right'] { --focus: 0.6588; }
+  .bookPlate[data-side='left'] { --focus: 0.345; }
+  .controls { bottom: 12px; max-width: calc(100% - 24px); }
+  .place { min-width: 0; flex: 1; font-size: 15px; }
+  .divider, .textButton[aria-pressed] { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero, .book, .bookPlate, .cta, .designPrint { transition: none; }
+}

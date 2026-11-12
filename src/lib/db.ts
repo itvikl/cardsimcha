@@ -1,3 +1,5 @@
+// Legacy Firestore store. The app uses src/lib/data/ (Postgres) on this branch; this file stays
+// for the migration script (rollout step 2) and so the Firebase branches keep working.
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { firestore, bucket } from './firebase';

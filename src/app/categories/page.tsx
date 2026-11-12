@@ -82,7 +82,22 @@ function CategoriesManager() {
     }
   }
 
-  async function saveCategory(patch: Partial<Pick<Category, 'name' | 'description'>>) {
+  async function saveTags(img: ImageAsset, text: string) {
+    const tags = text.split(',').map((t) => t.trim()).filter(Boolean);
+    if (tags.join() === (img.tags ?? []).join()) return;
+    try {
+      await api(`/api/images/${img.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags }),
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function saveCategory(patch: Partial<Pick<Category, 'name' | 'description' | 'stickers'>>) {
     if (!selected) return;
     setError('');
     try {
@@ -231,6 +246,10 @@ function CategoriesManager() {
                     onBlur={(e) => e.target.value.trim() !== selected.description && saveCategory({ description: e.target.value })}
                   />
                 </label>
+                <label className="row" style={{ gap: 8 }}>
+                  <input type="checkbox" checked={!!selected.stickers} onChange={(e) => saveCategory({ stickers: e.target.checked })} />
+                  <span>מדבקות: לקוחות יכולים להוסיף את התמונות מכאן לעיצובים שלהם (PNG שקוף)</span>
+                </label>
                 <div className="row">
                   <button className="btn danger small" onClick={deleteCategory}>
                     מחיקת קטגוריה
@@ -290,6 +309,16 @@ function CategoriesManager() {
                           style={{ minHeight: 32, padding: '4px 8px' }}
                           onBlur={(e) => renameImage(img, e.target.value)}
                         />
+                        {selected.stickers && (
+                          <input
+                            type="text"
+                            defaultValue={(img.tags ?? []).join(', ')}
+                            aria-label="תגיות, מופרדות בפסיק"
+                            placeholder="תגיות: שם הקטגוריה או כללי, בית, מפתח"
+                            style={{ minHeight: 32, padding: '4px 8px' }}
+                            onBlur={(e) => saveTags(img, e.target.value)}
+                          />
+                        )}
                         <span className="count">
                           {img.width}×{img.height}
                         </span>

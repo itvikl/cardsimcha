@@ -1,7 +1,8 @@
 import { requireAdmin } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import { newId, readDb, removeUploads, saveUpload, updateDb } from '@/lib/db';
-import type { ImageAsset } from '@/lib/types';
+import { addImage, assetFileKey, categoryExists } from '@/lib/data/library';
+import { newId } from '@/lib/data/ids';
+import { files } from '@/lib/files';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -17,8 +18,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const auth = await requireAdmin();
   if (auth instanceof Response) return auth;
   const { id } = await params;
-  const db = await readDb();
-  if (!db.categories.some((c) => c.id === id)) {
+  if (!(await categoryExists(id))) {
     return NextResponse.json({ error: 'הקטגוריה לא נמצאה' }, { status: 404 });
   }
 
@@ -37,26 +37,13 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const assetId = newId();
   const fileName = assetId + ext;
-  await saveUpload(fileName, Buffer.from(await file.arrayBuffer()), file.type);
+  await files.put(assetFileKey(fileName), Buffer.from(await file.arrayBuffer()), file.type);
 
   const name = file.name.replace(/\.[^.]+$/, '').slice(0, 100) || 'תמונה';
-  const asset: ImageAsset = {
-    id: assetId,
-    categoryId: id,
-    name,
-    file: fileName,
-    width,
-    height,
-    createdAt: new Date().toISOString(),
-  };
-  const ok = await updateDb((d) => {
-    // the category may have been deleted while the file was uploading
-    if (!d.categories.some((c) => c.id === id)) return false;
-    d.images.push(asset);
-    return true;
-  });
-  if (!ok) {
-    await removeUploads([fileName]);
+  // null when the category was deleted while the file was uploading
+  const asset = await addImage({ id: assetId, categoryId: id, name, file: fileName, width, height });
+  if (!asset) {
+    await files.remove([assetFileKey(fileName)]);
     return NextResponse.json({ error: 'הקטגוריה נמחקה' }, { status: 404 });
   }
   return NextResponse.json(asset, { status: 201 });

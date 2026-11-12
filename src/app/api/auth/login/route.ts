@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readDb } from '@/lib/db';
+import { findUserByEmail } from '@/lib/data/users';
 import { clearFailures, createSession, noteFailure, publicUser, setSessionCookie, throttled, verifyPassword } from '@/lib/auth';
 
 export async function POST(req: Request) {
@@ -11,8 +11,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'יותר מדי ניסיונות. נסו שוב בעוד כרבע שעה' }, { status: 429 });
   }
 
-  const db = await readDb();
-  const user = db.users.find((u) => u.email === email);
+  const user = await findUserByEmail(email);
   // run a hash even for unknown emails so response time does not reveal whether the account exists
   const ok = user ? await verifyPassword(password, user.salt, user.passwordHash) : (await verifyPassword(password, '00', '00'), false);
   if (!user || !ok) {

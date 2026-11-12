@@ -1,19 +1,21 @@
 """Turns a flat ad image into an editable template, driven by a spec.json per ad.
 
     python adimport.py build  ads/<name>   # source.jpg + spec.json -> background.jpg, canvas.json, preview.png
-    python adimport.py import ads/<name>   # adds a test category + published template to data/db.json
+    python adimport.py import ads/<name>   # uploads it to the running app as a published template (card format v2)
 
 All coordinates in spec.json are pixels of source.jpg. See README.md for the spec format.
 """
-import argparse, base64, datetime, io, json, os, random, shutil, urllib.request, uuid
+import argparse, base64, io, json, os, random, urllib.error, urllib.request, uuid
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(os.path.dirname(HERE))
 PT = 25.4 / 72   # mm per pt
 LINE = 1.25      # Konva lineHeight used by the editor
+# what customers may do with an imported text: change its words and colour (design doc §4.3)
+FIELD_LOCKS = dict(content=True, transform=False, delete=False, style=True)
+LOCKED = dict(content=False, transform=False, delete=False, style=False)
 
 # the Google fonts the app loads (src/lib/canvas.ts); downloaded on first use, not committed
 FONT_URLS = {
@@ -139,16 +141,18 @@ def clean(img, gray, spec, boxes):
 
 
 def to_canvas(spec, img, gray, boxes, bg_asset_id):
+    """card format v2: the cleaned image on the background layer, rects and texts on the content layer"""
     h_px, w_px = gray.shape
     page = spec['page']
     s = page['width_mm'] / w_px  # mm per source px
     mm = lambda v: round(v * s, 2)
-    els = [dict(id=str(uuid.uuid4()), type='image', x_mm=0, y_mm=0, w_mm=page['width_mm'], h_mm=page['height_mm'],
-                rotation=0, z=0, asset_id=bg_asset_id, label='רקע')]
+    background = dict(fill=dict(type='solid', color=page.get('background', '#FFFFFF')),
+                      image=dict(asset_id=bg_asset_id, fit='cover'), locks=LOCKED)
+    content = []
     for r in spec.get('rects', []):
         x0, y0, x1, y1 = r['box']
-        els.append(dict(id=str(uuid.uuid4()), type='rect', x_mm=mm(x0), y_mm=mm(y0), w_mm=mm(x1 - x0),
-                        h_mm=mm(y1 - y0), rotation=0, z=len(els), fill=r['fill']))
+        content.append(dict(id=str(uuid.uuid4()), type='shape', shape='rect', x_mm=mm(x0), y_mm=mm(y0), w_mm=mm(x1 - x0),
+                            h_mm=mm(y1 - y0), rotation=0, locks=LOCKED, fill=dict(type='solid', color=r['fill'])))
     for t, (x0, y0, x1, y1) in zip(spec['texts'], boxes):
         rot = t.get('rotation', 0)
         fam, wt = t.get('font', 'Heebo'), t.get('weight', 400)
@@ -166,10 +170,11 @@ def to_canvas(spec, img, gray, boxes, bg_asset_id):
         else:
             bx, by = cx - box_w / 2, cy - box_h / 2
         color = t.get('color') or sample_color(img, gray, (x0, y0, x1, y1))
-        els.append(dict(id=str(uuid.uuid4()), type='text', x_mm=mm(bx), y_mm=mm(by), w_mm=mm(box_w), rotation=rot,
-                        z=len(els), text=t['text'], align='center', editable=True, label=t.get('label', 'טקסט'),
-                        font=dict(family=fam, weight=wt, size_pt=round(fs_px * s / PT, 1), color=color)))
-    return dict(schema_version=1, page=page, elements=els)
+        content.append(dict(id=str(uuid.uuid4()), type='text', x_mm=mm(bx), y_mm=mm(by), w_mm=mm(box_w), rotation=rot,
+                            text=t['text'], align='center', locks=FIELD_LOCKS, field=dict(label=t.get('label', 'טקסט')),
+                            font=dict(family=fam, weight=wt, size_pt=round(fs_px * s / PT, 1), color=color)))
+    return dict(schema_version=2, page=dict(width_mm=page['width_mm'], height_mm=page['height_mm']),
+                layers=dict(background=background, content=content, overlay=[]))
 
 
 def preview(doc, background):
@@ -177,9 +182,9 @@ def preview(doc, background):
     im = background.convert('RGB')
     k = im.width / doc['page']['width_mm']
     d = ImageDraw.Draw(im)
-    for e in doc['elements']:
-        if e['type'] == 'rect':
-            d.rectangle([e['x_mm'] * k, e['y_mm'] * k, (e['x_mm'] + e['w_mm']) * k, (e['y_mm'] + e['h_mm']) * k], fill=e['fill'])
+    for e in doc['layers']['content'] + doc['layers']['overlay']:
+        if e['type'] == 'shape':
+            d.rectangle([e['x_mm'] * k, e['y_mm'] * k, (e['x_mm'] + e['w_mm']) * k, (e['y_mm'] + e['h_mm']) * k], fill=e['fill']['color'])
         if e['type'] != 'text':
             continue
         fs = e['font']['size_pt'] * PT * k
@@ -218,60 +223,79 @@ def build(folder):
     side.paste(src, (0, 0))
     side.paste(prev, (src.width + 20, 0))
     side.resize((side.width // 2, side.height // 2)).save(os.path.join(folder, 'compare.png'))
-    print('built', folder, '-', len(doc['elements']), 'elements')
+    print('built', folder, '-', len(doc['layers']['content']), 'elements on the background')
 
 
-def import_ad(folder):
+class Api:
+    """the app's HTTP API, as an admin: in no-login mode the "mode=admin" cookie, otherwise --cookie sid=<session>"""
+
+    def __init__(self, url, cookie):
+        self.url = url.rstrip('/')
+        self.cookie = cookie
+
+    def call(self, method, path, body=None, files=None):
+        headers = {'Cookie': self.cookie}
+        data = None
+        if files:
+            boundary = uuid.uuid4().hex
+            parts = []
+            for name, value in (body or {}).items():
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+            for name, (filename, content, ctype) in files.items():
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+                             f'Content-Type: {ctype}\r\n\r\n'.encode() + content + b'\r\n')
+            data = b''.join(parts) + f'--{boundary}--\r\n'.encode()
+            headers['Content-Type'] = f'multipart/form-data; boundary={boundary}'
+        elif body is not None:
+            data = json.dumps(body).encode()
+            headers['Content-Type'] = 'application/json'
+        req = urllib.request.Request(self.url + path, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return json.loads(r.read() or b'null')
+        except urllib.error.HTTPError as e:
+            raise SystemExit(f'{method} {path} failed: {e.code} {e.read().decode(errors="replace")}')
+
+
+def import_ad(folder, url, cookie):
+    """Uploads the built ad to the running app: a test category with the background image, then a
+    published template whose canvas is canvas.json. Runs through the same checks as the editor."""
     spec = json.load(open(os.path.join(folder, 'spec.json'), encoding='utf8'))
-    data = os.path.join(REPO, 'data')
-    db_path = os.path.join(data, 'db.json')
-    uploads = os.path.join(data, 'uploads')
-    os.makedirs(uploads, exist_ok=True)
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
-    empty = {'categories': [], 'images': [], 'projects': [], 'users': [], 'sessions': []}
-    db = {**empty, **json.load(open(db_path, encoding='utf8'))} if os.path.exists(db_path) else empty
+    api = Api(url, cookie)
 
-    cat = dict(id=str(uuid.uuid4()), name=spec.get('category') or 'מודעות - בדיקה ' + str(random.randint(100, 999)),
-               description='קטגוריית בדיקה לייבוא מודעות', createdAt=now)
-    asset_id = str(uuid.uuid4())
-    shutil.copy(os.path.join(folder, 'background.jpg'), os.path.join(uploads, asset_id + '.jpg'))
-    w, h = Image.open(os.path.join(folder, 'background.jpg')).size
-    asset = dict(id=asset_id, categoryId=cat['id'], name=spec.get('background_name', 'רקע'), file=asset_id + '.jpg',
-                 width=w, height=h, createdAt=now)
+    name = spec.get('category') or 'מודעות - בדיקה ' + str(random.randint(100, 999))
+    cat = api.call('POST', '/api/categories', {'name': name, 'description': 'קטגוריית בדיקה לייבוא מודעות'})
+    bg_path = os.path.join(folder, 'background.jpg')
+    w, h = Image.open(bg_path).size
+    asset = api.call('POST', f"/api/categories/{cat['id']}/images", {'width': w, 'height': h},
+                     files={'file': (spec.get('background_name', 'רקע') + '.jpg', open(bg_path, 'rb').read(), 'image/jpeg')})
 
     doc = json.load(open(os.path.join(folder, 'canvas.json'), encoding='utf8'))
-    for e in doc['elements']:
+    for e in doc['layers']['content'] + doc['layers']['overlay']:
         e['id'] = str(uuid.uuid4())  # fresh ids, so an ad can be imported more than once
-        if e['type'] == 'image' and e['asset_id'] == 'BACKGROUND':
-            e['asset_id'] = asset_id
+    if doc['layers']['background'].get('image', {}).get('asset_id') == 'BACKGROUND':
+        doc['layers']['background']['image']['asset_id'] = asset['id']
 
     # gallery thumbnail; the editor replaces it with a real render on the first save
     buf = io.BytesIO()
     prev = Image.open(os.path.join(folder, 'preview.png')).convert('RGB')
     prev.resize((600, round(600 * prev.height / prev.width))).save(buf, 'JPEG', quality=70)
-    owner = next((p.get('ownerId', '') for p in db['projects'] if p.get('kind') == 'template'), '')
-    project = dict(id=str(uuid.uuid4()), kind='template', ownerId=owner, status='published', name=spec['name'],
-                   canvas=doc, thumbnail='data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode(),
-                   createdAt=now, updatedAt=now)
-
-    db['categories'].append(cat)
-    db['images'].append(asset)
-    db['projects'].append(project)
-    os.makedirs(data, exist_ok=True)
-    tmp = db_path + '.tmp'
-    with open(tmp, 'w', encoding='utf8') as f:
-        json.dump(db, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, db_path)
-    print('category:', cat['name'])
-    print('template: /editor/' + project['id'])
+    page = doc['page']
+    created = api.call('POST', '/api/projects', {'name': spec['name'], 'width_mm': page['width_mm'], 'height_mm': page['height_mm']})
+    api.call('PUT', f"/api/projects/{created['id']}", {
+        'canvas': doc, 'status': 'published', 'thumbnail': 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()})
+    print('category:', name)
+    print('template:', url.rstrip('/') + '/editor/' + created['id'])
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('command', choices=['build', 'import'])
     p.add_argument('folder', help='an ad folder, e.g. ads/streimel')
+    p.add_argument('--url', default='http://localhost:3100', help='the running app (import)')
+    p.add_argument('--cookie', default='mode=admin', help='admin cookie: "mode=admin" in no-login mode, else "sid=<session>"')
     a = p.parse_args()
     folder = a.folder if os.path.isabs(a.folder) else os.path.join(os.getcwd(), a.folder)
     if not os.path.isdir(folder):
         folder = os.path.join(HERE, a.folder)
-    (build if a.command == 'build' else import_ad)(folder)
+    build(folder) if a.command == 'build' else import_ad(folder, a.url, a.cookie)

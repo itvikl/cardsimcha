@@ -24,6 +24,7 @@ export function TopBar() {
     ...(me?.role === 'admin'
       ? [
           { href: '/categories', label: 'קטגוריות ותמונות' },
+          { href: '/fonts', label: 'פונטים' },
           { href: '/carousel', label: 'קרוסלה' },
         ]
       : []),

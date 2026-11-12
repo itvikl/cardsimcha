@@ -1,25 +1,31 @@
 import { NextResponse } from 'next/server';
-import { readDb, updateDb } from '@/lib/db';
-import { applyCustomerEdits, validateDoc } from '@/lib/canvas';
+import { applyEdits } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { AGENT_ENABLED } from '@/lib/config';
-import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
+import { parseAudience } from '@/lib/topics';
+import { listImages } from '@/lib/data/library';
+import { deleteProject, getProject, updateProject, type ProjectPatch } from '@/lib/data/projects';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const dynamic = 'force-dynamic';
 
 const MAX_THUMB = 700_000;
-const validThumb = (t: unknown): t is string =>
-  typeof t === 'string' && t.length <= MAX_THUMB && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(t);
+const THUMB = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/;
+
+/** the editor sends the thumbnail as a data URL; it is stored as a file */
+function parseThumb(t: unknown): ProjectPatch['thumbnail'] | null {
+  if (typeof t !== 'string' || t.length > MAX_THUMB) return null;
+  const m = THUMB.exec(t);
+  return m ? { data: Buffer.from(m[2], 'base64'), ext: m[1] === 'png' ? 'png' : 'jpg' } : null;
+}
 
 export async function GET(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const db = await readDb();
-  const project = db.projects.find((p) => p.id === id);
+  const project = await getProject(id);
   if (!project || !canRead(user, project)) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   // `canEdit` tells the editor which mode to open in; the server enforces it again on save.
   return NextResponse.json({
@@ -36,38 +42,22 @@ export async function PUT(req: Request, { params }: Ctx) {
   const body = await req.json().catch(() => null);
   const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : undefined;
   if (name === '') return NextResponse.json({ error: 'שם חובה' }, { status: 400 });
-  const thumbnail = body?.thumbnail === undefined ? undefined : validThumb(body.thumbnail) ? body.thumbnail : null;
-  const status = body?.status === 'draft' || body?.status === 'published' ? body.status : undefined;
-  const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : undefined;
 
-  const audience = parseAudience(body?.audience);
+  const patch: ProjectPatch = {
+    name,
+    thumbnail: body?.thumbnail === undefined ? undefined : (parseThumb(body.thumbnail) ?? undefined),
+    status: body?.status === 'draft' || body?.status === 'published' ? body.status : undefined,
+    topic: typeof body?.topic === 'string' ? body.topic.trim().slice(0, 60) : undefined,
+    audience: parseAudience(body?.audience),
+  };
+  if (body?.canvas !== undefined) {
+    // a customer's design takes only the changes a customer may make; that needs the image library
+    const images = await listImages();
+    // admin editing a template: full control. A customer's design: what each element's locks allow.
+    patch.canvas = (p) => applyEdits(p.canvas, body.canvas, p.kind === 'template' ? 'author' : 'customer', images);
+  }
 
-  type Result = 'missing' | 'invalid' | { conflict: string } | { id: string; updatedAt: string };
-  const result = await updateDb<Result>((db) => {
-    const p = db.projects.find((x) => x.id === id);
-    if (!p || !canWrite(user, p)) return 'missing';
-    // checked before anything changes: a template only takes a topic of the admin's current door
-    if (topic !== undefined && p.kind === 'template' && audience) {
-      const why = topicConflict(db, topic, audience);
-      if (why) return { conflict: why };
-    }
-
-    if (body?.canvas !== undefined) {
-      // admin editing a template: full control. A customer's design: text of editable fields only.
-      const next = p.kind === 'template' ? validateDoc(body.canvas) : applyCustomerEdits(p.canvas, body.canvas, db.images);
-      if (!next) return 'invalid';
-      p.canvas = next;
-    }
-    if (name) p.name = name;
-    if (thumbnail) p.thumbnail = thumbnail;
-    if (status && p.kind === 'template') p.status = status;
-    if (topic !== undefined && p.kind === 'template') {
-      p.topic = topic || undefined;
-      if (audience) claimTopic(db, topic, audience);
-    }
-    p.updatedAt = new Date().toISOString();
-    return { id: p.id, updatedAt: p.updatedAt };
-  });
+  const result = await updateProject(user, id, patch);
   if (result === 'missing') return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   if (result === 'invalid') return NextResponse.json({ error: 'מסמך העיצוב לא תקין' }, { status: 400 });
   if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
@@ -78,12 +68,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const found = await updateDb((db) => {
-    const p = db.projects.find((x) => x.id === id);
-    if (!p || !canWrite(user, p)) return false;
-    db.projects = db.projects.filter((x) => x.id !== id);
-    return true;
-  });
-  if (!found) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
+  if (!(await deleteProject(user, id))) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
