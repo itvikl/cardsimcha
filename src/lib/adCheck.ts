@@ -1,12 +1,13 @@
 import { formatOfPage } from './adFormats';
 import { heightOf } from './adText';
+import { hasProducts } from './products';
 import type { CanvasDoc, CanvasElement, TextElement } from './types';
 
 /** `must`: worth stopping for before the ad goes out. `tip`: worth knowing. Either way the business decides. */
 export type AdIssue = { id: string; level: 'must' | 'tip'; text: string };
 
 const PT_TO_MM = 25.4 / 72;
-const SAMPLES = ['050-0000000', 'שם העסק', 'סלוגן קצר'];
+const SAMPLES = ['050-0000000', 'שם העסק', 'סלוגן קצר', 'הכותרת שלכם', 'כאן כותבים את המסר', 'מה לעשות עכשיו'];
 const RISKY = [/100%/, /מובטח/, /הכי\s+זול/, /בלי\s+סיכון/, /הטוב\s+ביותר/];
 const CONTACT = /(?:\d[\s-]?){7,}/;
 
@@ -47,6 +48,7 @@ export function checkAd(doc: CanvasDoc, { risky = [], measured = {} }: { risky?:
   const label = (e: TextElement) => (e.label ? `"${e.label}"` : 'אחד הטקסטים');
   const heightFor = (e: TextElement) => measured[e.id] ?? heightOf(e.text, e.font.size_pt, e.w_mm);
 
+  if (hasProducts(doc) && !doc.productIds?.length) add('products', 'must', 'עוד לא בחרתם מוצרים: מה שבמודעה הוא לדוגמה');
   if (all.some((e) => e.role === 'businessName' && !e.text.trim())) add('name', 'must', 'חסר שם העסק');
   if (!texts.some((e) => CONTACT.test(e.text) || (e.role === 'website' && e.text.trim()))) add('contact', 'must', 'אין טלפון או דרך אחרת ליצור קשר');
   for (const e of all) if (e.label === 'קריאה לפעולה' && !e.text.trim()) add('cta', 'must', 'אין קריאה לפעולה: מה הקורא צריך לעשות?');

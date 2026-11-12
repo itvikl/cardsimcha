@@ -1,4 +1,5 @@
-import type { BrandColorRole, BrandDetail, BrandKit, BrandTextRole, BusinessProfile, CanvasDoc, CanvasElement, ImageAsset } from './types';
+import { addStrip, STRIP_PREFIX } from './strip';
+import type { BrandColorRole, BrandDetail, BrandKit, BrandTextRole, BusinessProfile, CanvasDoc, CanvasElement, ImageAsset, QrTarget } from './types';
 
 /**
  * A business's brand kit, and how it reaches a design: an admin tags a template's elements with a role
@@ -38,7 +39,19 @@ export const emptyBrand = (id: string): BrandKit => ({
   updatedAt: new Date().toISOString(),
 });
 
-export type BrandFields = Pick<BrandKit, BrandDetail | 'primaryColor' | 'secondaryColor' | 'profile'>;
+export type BrandFields = Pick<BrandKit, BrandDetail | 'primaryColor' | 'secondaryColor' | 'profile'> & { qrTarget?: QrTarget | null };
+
+/** where a QR code of this kit would lead, or null when the kit has no such detail */
+export function qrUrl(target: QrTarget, kit: Pick<BrandKit, 'website' | 'phone'>): string | null {
+  if (target === 'website') {
+    const site = kit.website.trim();
+    if (!site) return null;
+    return /^https?:\/\//i.test(site) ? site : `https://${site}`;
+  }
+  const digits = kit.phone.replace(/\D/g, '');
+  if (!digits) return null;
+  return `https://wa.me/${digits.startsWith('0') ? `972${digits.slice(1)}` : digits}`;
+}
 
 /** what a business tells about itself; the system writes ads from these and invents nothing beyond them */
 export const PROFILE_FIELDS: { key: keyof BusinessProfile; label: string; placeholder: string }[] = [
@@ -73,6 +86,7 @@ export function parseBrand(body: unknown): BrandFields | string {
     primaryColor: b.primaryColor,
     secondaryColor: b.secondaryColor,
     profile: parseProfile(b.profile),
+    qrTarget: b.qrTarget === undefined ? undefined : b.qrTarget === 'website' || b.qrTarget === 'whatsapp' ? b.qrTarget : null,
   };
 }
 
@@ -133,7 +147,7 @@ function fitLogo(e: Extract<CanvasElement, { type: 'image' }>, logo: NonNullable
  * logo's place: a sample phone number or logo left on a business's ad would be wrong.
  */
 export function applyBrand<D extends CanvasDoc>(doc: D, brand: BrandKit): D {
-  return {
+  return addStrip({
     ...doc,
     elements: doc.elements.flatMap((e): CanvasElement[] => {
       if (e.type === 'text') {
@@ -155,7 +169,7 @@ export function applyBrand<D extends CanvasDoc>(doc: D, brand: BrandKit): D {
       void _old;
       return [{ ...rest, ...fitLogo(e, brand.logo), asset_id: brand.logo.assetId, swappable: false }];
     }),
-  };
+  }, brand);
 }
 
 /** only the colours: an event's own colours on a simcha's set, with no business behind it */
@@ -172,6 +186,13 @@ export const applyColors = <D extends CanvasDoc>(doc: D, colors: BrandColors): D
 export function brandPreview<D extends CanvasDoc>(doc: D, brand: BrandKit): D {
   const applied = applyBrand(doc, brand);
   const logo = brand.logo;
-  if (!logo) return applied;
-  return { ...applied, elements: applied.elements.map((e) => (e.type === 'image' && e.role === 'logo' ? { ...e, src: `/api/uploads/${logo.file}` } : e)) };
+  return {
+    ...applied,
+    elements: applied.elements.map((e) => {
+      if (e.type === 'image' && e.role === 'logo' && logo) return { ...e, src: `/api/uploads/${logo.file}` };
+      // the strip's pictures are all PNGs named after their id
+      if (e.type === 'image' && e.id.startsWith(STRIP_PREFIX)) return { ...e, src: `/api/uploads/${e.asset_id}.png` };
+      return e;
+    }),
+  };
 }

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
+import { copyThumbnail, findRows, getRow, newId, readDb, setRow, updateDb } from '@/lib/db';
 import { itemTexts } from '@/lib/adText';
 import { parseAdTexts } from '@/lib/adTextsParse';
 import { emptyDoc, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
-import { parseColors } from '@/lib/brand';
+import { brandCategory, parseColors } from '@/lib/brand';
 import { copyTemplate } from '@/lib/copyTemplate';
 import { hasActiveSubscription } from '@/lib/entitlement';
 import { comingShabbat } from '@/lib/shabbat';
@@ -42,7 +42,8 @@ export async function GET() {
  *   `useBrand` writes the caller's brand kit into the copy; the kit is read here, never taken from the client.
  *   `shabbatCity` writes that city's coming Shabbat into a design with Shabbat fields; the times are worked out here too.
  *   `itemId` puts an item of the caller's own catalog on the ad. `adTexts` (field label -> text) are the ad's words; without them the item's are used.
- *   `stickerId` puts a sticker of the library on it.
+ *   `stickerId` puts a sticker of the library, or of the caller's own, on it.
+ * - { fromDesign }: a new design from one of the caller's own, which they keep as a template.
  * - { name, width_mm, height_mm, topic?, audience?, wording? }: create a new blank template (admin only);
  *   with `audience`, the topic must belong to that door (a new topic is claimed for it).
  *   `wording` makes it a wording instead, which needs a topic: the cards that can take it are found by that.
@@ -52,6 +53,16 @@ export async function POST(req: Request) {
   if (user instanceof Response) return user;
   const body = await req.json().catch(() => null);
   const now = new Date().toISOString();
+
+  // a new ad from a design the business keeps as its template
+  if (typeof body?.fromDesign === 'string') {
+    const from = await getRow('projects', body.fromDesign);
+    if (!from || from.kind !== 'design' || from.ownerId !== user.id) return NextResponse.json({ error: 'התבנית לא נמצאה' }, { status: 404 });
+    const id = newId();
+    const copy: Project = { ...structuredClone(from), id, keep: undefined, thumbnail: await copyThumbnail(from.thumbnail, id), createdAt: now, updatedAt: now, editedAt: now };
+    await setRow('projects', copy);
+    return NextResponse.json({ id }, { status: 201 });
+  }
 
   if (typeof body?.templateId === 'string') {
     const t = await getRow('projects', body.templateId);
@@ -71,7 +82,7 @@ export async function POST(req: Request) {
       noCredit,
       adTexts: adTexts ?? (item ? itemTexts(item) : undefined),
       photo: item?.photo,
-      sticker: sticker?.sticker ? { assetId: sticker.id, width: sticker.width, height: sticker.height } : undefined,
+      sticker: sticker && (sticker.sticker || (sticker.ownSticker && sticker.categoryId === brandCategory(user.id))) ? { assetId: sticker.id, width: sticker.width, height: sticker.height } : undefined,
       noPoints: !!item && !adTexts,
       colors: parseColors(body.colors),
       // opened without choosing a city (a direct link, an admin's test): the first city, whose name shows on the design

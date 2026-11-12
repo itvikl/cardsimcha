@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { SiteFooter } from './SiteFooter';
 import s from './festive.module.css';
 
-type Mine = { id: string; kind: 'template' | 'design'; name: string; updatedAt: string; thumbnail: string | null };
+type Mine = { id: string; kind: 'template' | 'design'; name: string; updatedAt: string; thumbnail: string | null; keep: boolean };
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -16,6 +17,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 
 /** The customer's basket: only cards they already started editing (the server leaves out ones just opened). */
 export function Basket() {
+  const router = useRouter();
   const [mine, setMine] = useState<Mine[] | null>(null);
   const [error, setError] = useState('');
 
@@ -27,6 +29,16 @@ export function Basket() {
   useEffect(() => {
     load().catch((e) => setError(e.message));
   }, [load]);
+
+  /** a new ad from one the business keeps as its template; the template itself stays as it is */
+  async function startFrom(it: Mine) {
+    try {
+      const { id } = await api<{ id: string }>('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fromDesign: it.id }) });
+      router.push(`/editor/${id}`);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function remove(it: Mine) {
     if (!confirm(`למחוק את "${it.name}"? אי אפשר לבטל.`)) return;
@@ -72,7 +84,13 @@ export function Basket() {
                 </Link>
                 <strong>{it.name}</strong>
                 <small>עודכן {new Date(it.updatedAt).toLocaleString('he-IL')}</small>
+                {it.keep && <small>✓ התבנית שלי</small>}
                 <div className={s.mineRow}>
+                  {it.keep && (
+                    <button type="button" className={`${s.btn} ${s.dark}`} onClick={() => startFrom(it)}>
+                      מודעה חדשה מהתבנית
+                    </button>
+                  )}
                   <Link className={`${s.btn} ${s.dark}`} href={`/editor/${it.id}`}>
                     המשך עריכה
                   </Link>

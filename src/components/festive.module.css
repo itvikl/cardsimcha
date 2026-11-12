@@ -124,7 +124,7 @@
   text-align: center;
 }
 .landingHero .title { margin: 0; }
-.landingHero .lead { margin: var(--sp-2) auto 0; }
+.landingHero .lead { margin: var(--sp-2) auto 0; max-width: 760px; }
 .bizLinks {
   display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); margin-top: var(--sp-2);
 }
@@ -200,7 +200,8 @@
   display: flex; flex-direction: column;
 }
 .cardTile:hover { transform: translateY(-3px); box-shadow: var(--sh-2); }
-.cardTileImg { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; }
+/* contain: the design whole, whatever its size (A4, square, story); never cropped */
+.cardTileImg { width: 100%; aspect-ratio: 3/4; object-fit: contain; display: block; background: var(--surface-2); }
 .cardTilePlaceholder { width: 100%; aspect-ratio: 3/4; background: var(--surface-2); }
 .cardTileMeta {
   display: flex; flex-direction: column; gap: 2px;
@@ -210,6 +211,20 @@
 .cardTilePrice {
   font-size: 12px; font-weight: 700; color: var(--accent);
 }
+/* the home page's three steps */
+.howSteps {
+  list-style: none; margin: 0; padding: 0; counter-reset: step;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-2);
+}
+.howSteps li {
+  counter-increment: step; display: flex; flex-direction: column; gap: 4px;
+  padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface-glass); border: 1px solid var(--line);
+}
+.howSteps li::before {
+  content: counter(step); font-family: var(--serif); font-weight: 900; font-size: 28px; line-height: 1; color: var(--gold-text);
+}
+.howSteps strong { font-size: 18px; }
+.howSteps span { color: var(--text-2); }
 .cardTileMore {
   align-items: center; justify-content: center; gap: var(--sp-1);
   font-weight: 700; font-size: 15px;
@@ -298,6 +313,9 @@
 .composeForm textarea { width: 100%; resize: vertical; }
 .composeCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 260px)); justify-content: center; gap: var(--sp-2); }
 .composePicture { display: block; width: 100%; height: auto; border-radius: 10px; }
+.composeWordings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--sp-2); }
+.composeWording { display: grid; gap: 8px; align-content: start; padding: var(--sp-2); border: 1px solid var(--line); border-radius: 12px; }
+.composeWording textarea { width: 100%; resize: vertical; }
 
 /* what a business tells about itself, and its catalog */
 .profile { display: grid; gap: 14px; margin: 0; padding: var(--sp-2); border: 1px solid var(--line); border-radius: 12px; }
@@ -428,6 +446,8 @@ a.quickMenuLink:hover { background: rgba(201, 168, 115, 0.2); color: var(--gold-
 }
 .design:disabled { cursor: progress; }
 .design[data-soon='true'] { cursor: default; opacity: 0.6; pointer-events: none; }
+.soonLine { margin: 0 auto; max-width: 640px; text-align: center; color: var(--muted); text-wrap: balance; }
+.soonLine strong { color: var(--text-2); }
 /* the printed card, like the ring's: paper edge, gilded rim, a sheen on hover */
 .designFace {
   position: relative; width: 100%; border-radius: var(--r-sm); overflow: hidden;

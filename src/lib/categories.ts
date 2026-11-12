@@ -39,6 +39,7 @@ export const CATEGORIES: { name: string; image: string | null; audience: Audienc
   { name: 'מודעות מבצע', image: '/categories/sale.webp', audience: 'business' },
   { name: 'פתיחת עסק', image: '/categories/opening.webp', audience: 'business' },
   { name: 'פוסטים לרשתות', image: '/categories/social.webp', audience: 'business' },
+  { name: 'מודעה חופשית', image: null, audience: 'business' },
   // not advertising, so they step back from the door; the admin can bring them back in /carousel
   { name: 'כרטיסי ביקור', image: '/categories/business-cards.webp', audience: 'business', hidden: true },
   { name: 'תפריטים', image: '/categories/menus.webp', audience: 'business', hidden: true },

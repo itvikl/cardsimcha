@@ -10,6 +10,7 @@ export const summarize = (p: Project) => ({
   audience: formatOfPage(p.canvas.page.width_mm, p.canvas.page.height_mm) ? 'business' : 'private',
   price: p.price ?? null,
   series: p.series ?? null,
+  keep: !!p.keep,
   updatedAt: p.updatedAt,
   width_mm: p.canvas.page.width_mm,
   height_mm: p.canvas.page.height_mm,

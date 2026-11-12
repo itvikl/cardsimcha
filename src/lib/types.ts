@@ -19,12 +19,19 @@ export type ImageAsset = {
   sticker?: boolean;
   /** what the picture shows, and the category names it suits: how a customer or the system finds a sticker */
   tags?: string[];
+  /** a business's own sticker, from its own file: stays in its private category, so only it sees it */
+  ownSticker?: boolean;
+  /** taken off the business's list of pictures; designs made with it keep showing it */
+  removed?: boolean;
 };
 
 export type PageSpec = {
   width_mm: number;
   height_mm: number;
   background: string;
+  /** with it the page is a gradient from `background` to this colour, at `backgroundAngle` degrees */
+  background2?: string;
+  backgroundAngle?: number;
 };
 
 /** the details a business writes in its brand kit */
@@ -61,6 +68,30 @@ export type TextElement = {
   detail?: boolean;
   /** the colour the designer gave this wording's text; matching it to a background always starts from here */
   designColor?: string;
+  /** bends the line onto a circle, -100 to 100 (see arcText.ts); unset or near 0 is a straight line */
+  arc?: number;
+  /** extra space between letters, in pt; negative draws them closer */
+  letterSpacing?: number;
+  /** the distance between lines as a multiple of the font size; unset is 1.25 */
+  lineHeight?: number;
+  /** 'shrink': the text gets smaller until each of its lines fits the box on one line */
+  fit?: 'shrink';
+  /** a soft shadow under the letters */
+  shadow?: boolean;
+  /** an outline around the letters */
+  stroke?: { color: string; width_mm: number };
+  /** a metal foil look instead of the flat colour */
+  foil?: 'gold' | 'silver';
+  /** elements sharing this move, align and get selected together (Ctrl+G) */
+  group?: string;
+  /** an author's lock: the element stays where it is in the editor and clicks go through it */
+  locked?: boolean;
+  /** hidden in the editor and left out of every download */
+  hidden?: boolean;
+  /** a text the business added to its ad itself: it can restyle or remove it */
+  own?: boolean;
+  /** generated for this catalog item by applyProducts; the next choice of products replaces it */
+  product?: string;
   font: { family: string; weight: 400 | 700; size_pt: number; color: string };
 };
 
@@ -90,6 +121,21 @@ export type ImageElement = {
   photoBox?: { x_mm: number; y_mm: number; w_mm: number; h_mm: number };
   /** in the design's video, this picture is replaced by that moving background (see shabbatLoops.ts) */
   loopId?: string;
+  /** generated for this catalog item by applyProducts; the next choice of products replaces it */
+  product?: string;
+  /** the picture shows through this shape instead of its square box */
+  mask?: 'circle' | 'rounded' | 'arch';
+  /**
+   * The part of the picture the box shows: it covers the box at `zoom` 1 and closer above that, moved by `x` and `y`
+   * (-1 to 1, from the middle to an edge). Unset: the whole picture is drawn into the box, as before.
+   */
+  crop?: { zoom: number; x: number; y: number };
+  /** elements sharing this move, align and get selected together (Ctrl+G) */
+  group?: string;
+  /** an author's lock: the element stays where it is in the editor and clicks go through it */
+  locked?: boolean;
+  /** hidden in the editor and left out of every download */
+  hidden?: boolean;
 };
 
 export type ShapeElement = {
@@ -103,12 +149,26 @@ export type ShapeElement = {
   z: number;
   fill: string;
   colorRole?: BrandColorRole;
-  /** the plate behind the business's logo: it goes with the logo when the business has none */
-  role?: 'logoPlate';
+  /**
+   * `logoPlate`: the plate behind the business's logo, which goes with the logo when the business has none.
+   * `productArea`: where the ad's products are laid out (see products.ts); drawn under them.
+   */
+  role?: 'logoPlate' | 'productArea';
   /** rounded corners; half the shorter side makes a pill or a circle */
   cornerRadius_mm?: number;
   /** 0 to 1; unset is solid */
   opacity?: number;
+  /** with it the shape is a gradient from `fill` to this colour, at `angle` degrees */
+  fill2?: string;
+  angle?: number;
+  /** elements sharing this move, align and get selected together (Ctrl+G) */
+  group?: string;
+  /** an author's lock: the element stays where it is in the editor and clicks go through it */
+  locked?: boolean;
+  /** hidden in the editor and left out of every download */
+  hidden?: boolean;
+  /** generated for this catalog item by applyProducts; the next choice of products replaces it */
+  product?: string;
 };
 
 export type CanvasElement = TextElement | ImageElement | ShapeElement;
@@ -119,6 +179,10 @@ export type CanvasDoc = {
   elements: CanvasElement[];
   /** the wording this card's texts came from; only a card that has one can change wording (see wording.ts) */
   wordingId?: string;
+  /** what this card's texts lie on, when the customer chose another backdrop than the card's own (see backdrop.ts) */
+  backdropId?: string;
+  /** the catalog items on an ad with a product area, in order; unset while it still shows the sample ones (see products.ts) */
+  productIds?: string[];
 };
 
 export type Role = 'admin' | 'user';
@@ -164,6 +228,8 @@ export type Project = {
   seriesRun?: string;
   /** designs only: the Friday (YYYY-MM-DD) whose Shabbat times were written in; after it the design is out of date */
   shabbatFor?: string;
+  /** designs only: the business keeps this one as its own template, to start a new ad from it each time */
+  keep?: boolean;
   canvas: CanvasDoc;
   thumbnail?: string;
   createdAt: string;
@@ -198,10 +264,15 @@ export type BrandKit = {
   primaryColor: string;
   secondaryColor: string;
   logo?: { assetId: string; file: string; width: number; height: number };
+  /** the QR code on its ads, and where it leads; made on the server when the kit is saved (see brandQr.ts) */
+  qr?: { target: QrTarget; url: string; assetId: string; file: string; width: number; height: number };
   /** what the business tells about itself, so an ad can say true and specific things */
   profile?: BusinessProfile;
   updatedAt: string;
 };
+
+/** what a business's QR code opens */
+export type QrTarget = 'website' | 'whatsapp';
 
 export type BusinessProfile = {
   services: string;
@@ -222,6 +293,15 @@ export type CatalogItem = {
   photo?: { assetId: string; file: string; width: number; height: number };
   createdAt: string;
   updatedAt: string;
+};
+
+/** A font an admin uploaded for designs; `customer` offers it to businesses when they write their own text. */
+export type FontAsset = {
+  id: string;
+  family: string;
+  file: string;
+  customer: boolean;
+  createdAt: string;
 };
 
 /** How many ads a user asked the system to write on one day; its id is "<user id>:<YYYY-MM-DD>". */
@@ -256,6 +336,7 @@ export type Purchase = {
 };
 
 export type Db = {
+  fonts: FontAsset[];
   catalog: CatalogItem[];
   usage: DailyUse[];
   subscriptions: Subscription[];

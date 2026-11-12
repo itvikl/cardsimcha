@@ -1,0 +1,67 @@
+/* The reel (ReelView): clean cards on one strip. Colours are festive.module.css's tokens, set by .root around it. */
+.root { min-height: calc(100svh - var(--header-h)); }
+
+.stage {
+  position: relative; height: calc(100svh - var(--header-h)); min-height: 560px; overflow: hidden;
+  perspective: 1800px; perspective-origin: 50% var(--row-y, 50%);
+}
+
+/* the title and the controls wait for the cards to settle */
+.head, .below {
+  position: absolute; inset-inline: 0; z-index: 2; text-align: center; padding-inline: 16px;
+  opacity: 0; translate: 0 10px; transition: opacity 0.8s var(--ease), translate 0.8s var(--ease);
+  pointer-events: none;
+}
+.stage[data-phase='carousel'] .head,
+.stage[data-phase='carousel'] .below { opacity: 1; translate: none; }
+.stage[data-phase='carousel'] .below { pointer-events: auto; }
+.head { top: clamp(24px, 5vh, 56px); }
+.lead { margin: 12px auto 0; }
+
+.viewport { position: absolute; inset: 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; }
+.viewport:active { cursor: grabbing; }
+
+/* the strip is held at its middle, on the row's line; ReelView moves it and each card */
+.group {
+  position: absolute; left: 50%; top: var(--row-y, 50%); width: 0; height: 0;
+  transform-style: preserve-3d; opacity: 0; will-change: transform;
+}
+.card {
+  position: absolute; display: block; border-radius: 14px; overflow: hidden;
+  background: var(--surface); box-shadow: var(--sh-2);
+  transition: box-shadow 0.4s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.card[data-front='true'] { box-shadow: var(--sh-3); cursor: pointer; }
+.card img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
+
+.below {
+  bottom: clamp(16px, 3.5vh, 36px);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.caption { margin: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.kind { font-size: 13px; letter-spacing: 0.12em; color: var(--accent); }
+.name { font-family: var(--serif); font-size: clamp(20px, 2.2vw, 26px); font-weight: 700; color: var(--text); }
+
+.controls { display: flex; align-items: center; gap: 12px; }
+.arrow {
+  width: 48px; height: 48px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--line); background: var(--surface-glass); color: var(--text);
+  font: inherit; font-size: 20px; cursor: pointer; box-shadow: var(--sh-1);
+  transition: background-color 0.25s, translate 0.25s var(--ease);
+}
+.arrow:hover { background: var(--surface); translate: 0 -1px; }
+
+.replay {
+  min-height: 36px; padding: 6px 12px; border: 0; background: none; color: var(--muted);
+  font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+}
+.replay:hover { color: var(--text); }
+
+.error { position: absolute; top: 50%; inset-inline: 0; text-align: center; color: var(--danger); }
+
+@media (max-width: 640px) {
+  .lead { font-size: 16px; }
+  .below { gap: 10px; }
+  .controls .arrow { width: 44px; height: 44px; }
+}

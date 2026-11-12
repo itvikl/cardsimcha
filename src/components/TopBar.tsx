@@ -28,6 +28,7 @@ export function TopBar() {
     ? [
         { href: '/', label: 'תבניות' },
         { href: '/categories', label: 'קטגוריות ותמונות' },
+        { href: '/fonts', label: 'פונטים' },
         { href: '/carousel', label: 'קרוסלה' },
       ]
     : [];

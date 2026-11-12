@@ -5,8 +5,10 @@ import { hasPoints } from '@/lib/adText';
 import { parseAdTexts } from '@/lib/adTextsParse';
 import { requireUser } from '@/lib/auth';
 import { copyTemplate } from '@/lib/copyTemplate';
-import { findRows, getRow, setRow } from '@/lib/db';
+import { findRows, getRow, getRows, setRow } from '@/lib/db';
 import { hasActiveSubscription } from '@/lib/entitlement';
+import { applyProducts } from '@/lib/products';
+import type { CanvasElement } from '@/lib/types';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -43,6 +45,21 @@ export async function POST(req: Request, { params }: Ctx) {
     noPoints: !hasPoints(project.canvas),
   });
   copy.name = project.name.replace(/ · .*$/, '') + ` · ${format.label}`;
+  // what the business added itself goes along, keeping its place on the page in proportion
+  const from = project.canvas.page;
+  const to = copy.canvas.page;
+  const scale = Math.min(to.width_mm / from.width_mm, to.height_mm / from.height_mm);
+  const added = project.canvas.elements.flatMap((e): CanvasElement[] => {
+    const place = { x_mm: (e.x_mm / from.width_mm) * to.width_mm, y_mm: (e.y_mm / from.height_mm) * to.height_mm, w_mm: e.w_mm * scale };
+    if (e.type === 'image' && e.role === 'sticker') return [{ ...e, ...place, h_mm: e.h_mm * scale }];
+    if (e.type === 'text' && e.own) return [{ ...e, ...place, font: { ...e.font, size_pt: e.font.size_pt * scale } }];
+    return [];
+  });
+  copy.canvas = { ...copy.canvas, elements: [...copy.canvas.elements, ...added].map((e, i) => ({ ...e, z: i })) };
+  if (project.canvas.productIds?.length) {
+    const found = new Map((await getRows('catalog', project.canvas.productIds)).filter((i) => i.ownerId === user.id).map((i) => [i.id, i]));
+    copy.canvas = applyProducts(copy.canvas, project.canvas.productIds.flatMap((i) => found.get(i) ?? []));
+  }
   await setRow('projects', copy);
   return NextResponse.json({ id: copy.id }, { status: 201 });
 }

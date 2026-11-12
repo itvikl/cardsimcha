@@ -17,7 +17,7 @@ async function api<T>(url: string): Promise<T> {
 
 /**
  * The screen behind one of the private ring's cards: every kind of card in that group, in the admin's order.
- * A kind with no designs yet stays on the screen as "coming soon", since it has nothing to open.
+ * A kind with no designs yet is named in one "coming soon" line under the grid, since it has nothing to open.
  */
 export function GroupView({ id }: { id: string }) {
   const group = PRIVATE_GROUPS.find((g) => g.id === id)!;
@@ -67,30 +67,27 @@ export function GroupView({ id }: { id: string }) {
             ))}
           </div>
         ) : (
-          <div className={`${s.designs} ${s.rise}`} style={{ animationDelay: '.15s' }}>
-            {kinds.map((k) => {
-              const face = (
-                <span
-                  className={s.designFace}
-                  style={{ aspectRatio: '5 / 7', ...(k.image ? { backgroundImage: `url("${k.image}")`, backgroundSize: 'cover' } : {}) }}
-                  aria-hidden="true"
-                />
-              );
-              return k.count > 0 ? (
+          <>
+            <div className={`${s.designs} ${s.rise}`} style={{ animationDelay: '.15s' }}>
+              {kinds.filter((k) => k.count > 0).map((k) => (
                 <Link key={k.name} href={categoryHref(k.name)} className={s.design}>
-                  {face}
+                  <span
+                    className={s.designFace}
+                    style={{ aspectRatio: '5 / 7', ...(k.image ? { backgroundImage: `url("${k.image}")`, backgroundSize: 'cover' } : {}) }}
+                    aria-hidden="true"
+                  />
                   <span className={s.designName}>{k.name}</span>
                   <span className={s.designHint}>{k.count === 1 ? 'עיצוב אחד' : `${k.count} עיצובים`}</span>
                 </Link>
-              ) : (
-                <div key={k.name} className={s.design} data-soon="true">
-                  {face}
-                  <span className={s.designName}>{k.name}</span>
-                  <span className={s.designHint}>בקרוב</span>
-                </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+            {kinds.some((k) => k.count === 0) && (
+              <p className={s.soonLine}>
+                <strong>בקרוב: </strong>
+                {kinds.filter((k) => k.count === 0).map((k) => k.name).join(' · ')}
+              </p>
+            )}
+          </>
         )}
       </section>
       <SiteFooter />

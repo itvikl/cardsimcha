@@ -6,9 +6,9 @@ import { SiteFooter } from './SiteFooter';
 import s from './festive.module.css';
 import { emptyBrand, PROFILE_FIELDS, type BrandFields } from '@/lib/brand';
 import { categoryHref, LOGO_TOPIC } from '@/lib/categories';
-import type { BrandKit } from '@/lib/types';
+import type { BrandKit, QrTarget } from '@/lib/types';
 
-const TEXT_FIELDS: { key: Exclude<keyof BrandFields, 'profile'>; label: string; placeholder: string; maxLength: number; dir?: 'ltr'; required?: boolean }[] = [
+const TEXT_FIELDS: { key: Exclude<keyof BrandFields, 'profile' | 'qrTarget'>; label: string; placeholder: string; maxLength: number; dir?: 'ltr'; required?: boolean }[] = [
   { key: 'businessName', label: 'שם העסק', placeholder: 'למשל: כהן מיזוג אוויר', maxLength: 80, required: true },
   { key: 'slogan', label: 'סלוגן', placeholder: 'למשל: קר בקיץ, חם בחורף', maxLength: 120 },
   { key: 'phone', label: 'טלפון', placeholder: '050-0000000', maxLength: 30, dir: 'ltr' },
@@ -45,6 +45,7 @@ export function BrandKitForm() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [qrTarget, setQrTarget] = useState<QrTarget | null | undefined>(undefined);
 
   useEffect(() => {
     fetch('/api/brand', { cache: 'no-store' })
@@ -80,10 +81,19 @@ export function BrandKitForm() {
     e.preventDefault();
     if (!kit) return;
     run(
-      () => send('/api/brand', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(kit) }),
+      () => send('/api/brand', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...kit, qrTarget: qrTarget === undefined ? kit.qr?.target ?? null : qrTarget }) }),
       (done) => done,
-      () => setSaved(true),
+      () => {
+        setSaved(true);
+        setQrTarget(undefined);
+      },
     );
+  }
+
+  /** the code itself is made on the server when the kit is saved */
+  function pickQr(value: QrTarget | '') {
+    setQrTarget(value || null);
+    set(value ? { qr: kit?.qr && { ...kit.qr, target: value } } : { qr: undefined });
   }
 
   async function uploadLogo(e: ChangeEvent<HTMLInputElement>) {
@@ -175,6 +185,15 @@ export function BrandKitForm() {
                 </label>
               ))}
 
+              <label className="field">
+                קוד QR על המודעות
+                <select value={kit.qr?.target ?? qrTarget ?? ''} onChange={(e) => pickQr(e.target.value as QrTarget | '')}>
+                  <option value="">בלי קוד</option>
+                  <option value="whatsapp">פותח שיחת וואטסאפ עם הטלפון שלמעלה</option>
+                  <option value="website">פותח את האתר שלמעלה</option>
+                </select>
+              </label>
+
               <div className={s.brandColors}>
                 <label className="field">
                   צבע ראשי
@@ -226,6 +245,7 @@ export function BrandKitForm() {
               {kit.phone && <span dir="ltr">{kit.phone}</span>}
               {kit.address && <span>{kit.address}</span>}
               {kit.website && <span dir="ltr">{kit.website}</span>}
+              {kit.qr?.file && <img src={`/api/uploads/${kit.qr.file}`} alt="קוד ה-QR של העסק" style={{ width: 96, height: 96 }} />}
             </aside>
           </div>
         )}

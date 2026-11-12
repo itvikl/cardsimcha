@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { deleteRow, findRows, getRow, getRows, removeThumbnail, thumbnailFile, updateDb, updateRow } from '@/lib/db';
 import { formatOfPage } from '@/lib/adFormats';
-import { applyCustomerEdits, sentAssetIds, validateDoc } from '@/lib/canvas';
+import { sentAssetIds, validateDoc } from '@/lib/canvas';
 import { requireUser } from '@/lib/auth';
 import { canRead, canWrite } from '@/lib/access';
 import { visibleImages } from '@/lib/brand';
 import { AGENT_ENABLED } from '@/lib/config';
 import { BILLING_ENABLED } from '@/lib/config';
+import { customerEdit } from '@/lib/customerSave';
 import { entitlement } from '@/lib/entitlement';
 import { projectContext } from '@/lib/projectContext';
 import { isLoopId } from '@/lib/shabbatLoops';
 import { parsePrice } from '@/lib/price';
 import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
-import { withSentWording } from '@/lib/wordingSave';
 import type { ImageAsset, Project } from '@/lib/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -85,11 +85,12 @@ export async function PUT(req: Request, { params }: Ctx) {
     const oldName = p.name;
     if (body?.canvas !== undefined) {
       // admin editing a template or wording: full control. A customer's design: its wording, and text of editable fields only.
-      const next = p.kind !== 'design' ? validateDoc(body.canvas) : applyCustomerEdits(await withSentWording(p, body.canvas, user), body.canvas, assets);
+      const next = p.kind !== 'design' ? validateDoc(body.canvas) : await customerEdit(p, body.canvas, user, assets);
       if (!next) return 'invalid';
       p.canvas = next;
     }
     if (name) p.name = name;
+    if (p.kind === 'design' && typeof body?.keep === 'boolean') p.keep = body.keep || undefined;
     // a save that only adds the preview image (the editor does that on first open) is not an edit
     if (p.kind === 'design' && !p.editedAt && (p.name !== oldName || sameKeys(p.canvas) !== before)) {
       p.editedAt = new Date().toISOString();
