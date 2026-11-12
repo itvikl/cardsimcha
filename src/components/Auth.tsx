@@ -3,16 +3,16 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
-export type Me = { id: string; email: string; name: string; role: 'admin' | 'user'; authDisabled?: boolean };
+export type Me = { id: string; email: string; name: string; role: 'admin' | 'user'; authDisabled?: boolean; guest?: boolean };
 
-type Ctx = { me: Me | null; loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void> };
+type Ctx = { me: Me | null; loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void>; ensureSession: () => Promise<void> };
 
-const AuthContext = createContext<Ctx>({ me: null, loading: true, refresh: async () => {}, logout: async () => {} });
+const AuthContext = createContext<Ctx>({ me: null, loading: true, refresh: async () => {}, logout: async () => {}, ensureSession: async () => {} });
 
 export const useMe = () => useContext(AuthContext);
 
 /** Pages a visitor can open without an account: the gallery, its categories, a card's preview, and login itself. */
-const isPublic = (path: string) => path === '/' || path === '/business' || path === '/login' || path.startsWith('/t/') || path.startsWith('/category/');
+const isPublic = (path: string) => path === '/' || path === '/business' || path === '/login' || path === '/accessibility' || path.startsWith('/t/') || path.startsWith('/group/') || path.startsWith('/category/') || path.startsWith('/business/category/');
 
 /** Only follow same-site paths when returning after login. */
 export const safeNext = (next: string | null | undefined) =>
@@ -40,15 +40,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace('/');
   }, [router]);
 
-  // The API enforces access; this only sends signed-out visitors away from private pages.
+  /** No sign-up to get in: a visitor who starts working becomes a guest, and can register whenever they like. */
+  const ensureSession = useCallback(async () => {
+    if (me) return;
+    const res = await fetch('/api/auth/guest', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'לא הצלחנו להיכנס. נסו שוב.');
+    setMe(data);
+  }, [me]);
+
+  // The API enforces access; a visitor opening a page of their own just starts as a guest.
   useEffect(() => {
     if (!loading && !me && !isPublic(pathname)) {
-      router.replace('/login?next=' + encodeURIComponent(pathname));
+      ensureSession().catch(() => router.replace('/login?next=' + encodeURIComponent(pathname)));
     }
-  }, [loading, me, pathname, router]);
+  }, [loading, me, pathname, router, ensureSession]);
 
   if (loading) return <p className="status" style={{ padding: 24 }}>טוען…</p>;
   if (!me && !isPublic(pathname)) return null;
 
-  return <AuthContext.Provider value={{ me, loading, refresh, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ me, loading, refresh, logout, ensureSession }}>{children}</AuthContext.Provider>;
 }

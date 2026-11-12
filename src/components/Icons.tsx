@@ -7,6 +7,13 @@ export const LogoIcon = () => (
   </svg>
 );
 
+export const BasketIcon = () => (
+  <svg {...base} width={22} height={22} strokeWidth={1.6}>
+    <path d="M3 10h18l-2 10H5Z" />
+    <path d="M8 10l3-6M16 10l-3-6M9 14v3M12 14v3M15 14v3" />
+  </svg>
+);
+
 export const ArrowIcon = () => (
   <svg {...base} width={18} height={18}>
     <path d="M19 12H5M11 6l-6 6 6 6" />

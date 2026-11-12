@@ -19,7 +19,11 @@
     "db:smoke": "tsx scripts/db-smoke.ts",
     "migrate:postgres": "tsx scripts/migrate-to-postgres.ts",
     "cards:v2": "tsx scripts/cards-to-v2.ts",
-    "test:canvas": "tsx scripts/test-canvas.ts"
+    "test:canvas": "tsx scripts/test-canvas.ts",
+    "migrate:thumbnails": "tsx --env-file=.env.local scripts/migrate-thumbnails.ts",
+    "seed:content": "tsx --env-file=.env.local scripts/seed-content.ts",
+    "seed:wording-pilot": "tsx --env-file=.env.local scripts/seed-wording-pilot.ts",
+    "seed:stickers": "tsx --env-file=.env.local scripts/seed-stickers.ts"
   },
   "keywords": [],
   "author": "",
@@ -27,8 +31,10 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.293",
+    "@hebcal/core": "^6.14.7",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "fflate": "^0.8.3",
     "firebase-admin": "^14.5.0",
     "fontkit": "^2.0.4",
     "konva": "^10.7.1",
@@ -47,6 +53,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "prisma": "^7.10.1",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

@@ -22,7 +22,8 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (me) router.replace(next);
+    // a guest comes here on purpose, to keep what they made in an account
+    if (me && !me.guest) router.replace(next);
   }, [me, next, router]);
 
   async function submit(e: React.FormEvent) {
@@ -48,7 +49,7 @@ export default function LoginPage() {
     <main className="page">
       <form className="card login-box" onSubmit={submit}>
         <h1 style={{ fontSize: 24, margin: 0 }}>{mode === 'login' ? 'כניסה' : 'יצירת חשבון'}</h1>
-        {next !== '/' && <p className="status" style={{ margin: 0 }}>כדי להתחיל לערוך את הכרטיס צריך להיכנס או להירשם. זה לוקח דקה.</p>}
+        {me?.guest && <p className="status" style={{ margin: 0 }}>מה שיצרתם עד עכשיו יישמר בחשבון, ותוכלו לחזור אליו מכל מכשיר.</p>}
         {mode === 'register' && (
           <label className="field">
             שם

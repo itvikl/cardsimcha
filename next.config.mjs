@@ -4,7 +4,7 @@ const nextConfig = {
   output: 'standalone',
   turbopack: {},
   // the Agent SDK starts the bundled Claude Code binary, so it must load from node_modules as-is
-  serverExternalPackages: ['@anthropic-ai/claude-agent-sdk', 'firebase-admin'],
+  serverExternalPackages: ['@anthropic-ai/claude-agent-sdk', 'firebase-admin', '@hebcal/core'],
 };
 
 export default nextConfig;

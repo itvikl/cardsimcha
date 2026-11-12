@@ -4,13 +4,14 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMe } from '@/components/Auth';
+import { formatPrice } from '@/lib/price';
 
-type Template = { id: string; name: string; width_mm: number; height_mm: number; thumbnail: string | null; fields: string[]; canSwapBackground: boolean };
+type Template = { id: string; name: string; price: number | null; width_mm: number; height_mm: number; thumbnail: string | null; fields: string[]; canSwapBackground: boolean };
 
 export default function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { me } = useMe();
+  const { ensureSession } = useMe();
   const [tpl, setTpl] = useState<Template | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
     setBusy(true);
     setError('');
     try {
+      await ensureSession();
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -42,21 +44,16 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
       setError((e as Error).message);
       setBusy(false);
     }
-  }, [id, router]);
+  }, [id, router, ensureSession]);
 
-  // coming back from sign-up with ?start=1: create the card right away
+  // a link saved with ?start=1 from when this page sent visitors to sign up: create the card right away
   useEffect(() => {
-    if (!me || !tpl || started.current) return;
+    if (!tpl || started.current) return;
     if (new URLSearchParams(window.location.search).get('start') === '1') {
       started.current = true;
       start();
     }
-  }, [me, tpl, start]);
-
-  function onStart() {
-    if (me) start();
-    else router.push('/login?next=' + encodeURIComponent(`/t/${id}?start=1`));
-  }
+  }, [tpl, start]);
 
   if (error && !tpl) {
     return (
@@ -89,6 +86,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
           <div>
             <span className="eyebrow">כרטיס</span>
             <h1 style={{ margin: '4px 0 0', fontSize: 'clamp(34px, 5vw, 56px)', lineHeight: 1.08 }}>{tpl.name}</h1>
+            {tpl.price !== null && <p style={{ margin: '10px 0 0', fontSize: 24, fontWeight: 700 }}>{formatPrice(tpl.price)}</p>}
           </div>
           {(tpl.fields.length > 0 || tpl.canSwapBackground) && (
             <div>
@@ -104,11 +102,10 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
           )}
           {error && <p className="error" role="alert" style={{ margin: 0 }}>{error}</p>}
           <div>
-            <button className="btn primary xl" onClick={onStart} disabled={busy}>
-              {me ? 'התחלת עריכה' : 'התחלת עריכה (נדרשת הרשמה)'}
+            <button className="btn primary xl" onClick={start} disabled={busy}>
+              התחלת עריכה
             </button>
           </div>
-          {!me && <p className="status" style={{ margin: 0 }}>צפייה בכרטיסים חופשית. ההרשמה נדרשת רק כדי לערוך ולשמור כרטיס משלך.</p>}
         </div>
       </div>
     </main>
