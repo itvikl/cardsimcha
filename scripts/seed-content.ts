@@ -6,6 +6,7 @@
  *   npm run seed:content -- --draft      as drafts, for the client to review first
  *   npm run seed:content -- --force=ad:  writes again only the designs whose key starts with that
  *   npm run seed:content -- --only=simcha --force=simcha:  only the simcha set, leaving the rest alone
+ *   npm run seed:content -- --only=business               only the strip's icons, the free ad and the ad of several products
  *
  * New templates have no preview picture: the editor makes one the first time an admin opens them.
  * The wording comes from src/lib/professions.ts and needs the client's approval before going live.
@@ -20,6 +21,7 @@ import { brandColor } from '../src/lib/brand';
 import { validateDoc } from '../src/lib/canvas';
 import { audienceOf, CATEGORIES, LOGO_TOPIC } from '../src/lib/categories';
 import { getRow, saveUpload, setRow, updateDb } from '../src/lib/db';
+import { applyProducts, type ProductItem } from '../src/lib/products';
 import { PROFESSIONS, type AdCopy } from '../src/lib/professions';
 import { SHABBAT_TOPIC } from '../src/lib/shabbatDoc';
 import type { BrandColorRole, BrandTextRole, CanvasDoc, CanvasElement, Category, ImageAsset, Project, ShabbatTextRole, TextElement } from '../src/lib/types';
@@ -327,6 +329,50 @@ function adList(f: Format, ad: AdCopy, photo: ImageAsset, logo: Logos): CanvasDo
   return doc(w, h, '#FFFFFF', els);
 }
 
+/** a page of the business's own: any picture behind it, room for its stickers and texts, and its details at the foot */
+function adFree(f: Format, picture: ImageAsset, logo: Logos): CanvasDoc {
+  const { w, h, u, fs } = f;
+  const margin = 7 * u;
+  const width = w - margin * 2;
+  const barH = 27 * fs;
+  const bottom = h - barH;
+  const panelH = 42 * fs;
+  const panelY = bottom - panelH - 22 * fs;
+  return doc(w, h, '#14336B', [
+    adCover(picture, 0, 0, w, bottom + 4),
+    rect(w - margin - 38 * u, margin, 38 * u, 26 * u, '#FFFFFF', { radius: 3.5 * u, logoPlate: true }),
+    logoBox(logo, w - margin - 35.5 * u, margin + 2 * u, 33 * u, 22 * u),
+    rect(margin, panelY, width, panelH, '#14336B', { colorRole: 'primaryColor', radius: 4 * u, opacity: 0.88 }),
+    text({ x: margin + 3 * u, y: panelY + 4 * fs, w: width - 6 * u, text: 'הכותרת שלכם', size: 27 * fs, family: 'Secular One', colorRole: 'onPrimary', label: 'כותרת' }),
+    text({ x: margin + 3 * u, y: panelY + 20 * fs, w: width - 6 * u, text: 'כאן כותבים את המסר', size: 14 * fs, colorRole: 'onPrimary', label: 'משפט משנה' }),
+    ...pill(f, bottom - 17 * fs, 'מה לעשות עכשיו'),
+    rect(0, bottom, w, barH, '#14336B', { colorRole: 'primaryColor' }),
+    ...contactBar(f, bottom + 4 * fs, 'onPrimary'),
+  ]);
+}
+
+/** several products from the business's catalog, under one headline */
+function adGrid(f: Format, samples: ProductItem[], logo: Logos): CanvasDoc {
+  const { w, h, u, fs } = f;
+  const margin = 7 * u;
+  const bandH = 34 * fs;
+  const barH = 27 * fs;
+  const bottom = h - barH;
+  const areaTop = bandH + 3 * fs;
+  const areaBottom = bottom - 18 * fs;
+  const page = doc(w, h, '#FFFFFF', [
+    rect(0, 0, w, bandH, '#14336B', { colorRole: 'primaryColor' }),
+    rect(margin, (bandH - 24 * u) / 2, 34 * u, 24 * u, '#FFFFFF', { radius: 3.5 * u, logoPlate: true }),
+    logoBox(logo, margin + 2.5 * u, (bandH - 18 * u) / 2, 29 * u, 18 * u),
+    text({ x: margin + 37 * u, y: 9 * fs, w: w - margin * 2 - 37 * u, text: 'מבצעי החודש', size: 24 * fs, family: 'Secular One', align: 'right', colorRole: 'onPrimary', label: 'כותרת' }),
+    { ...rect(margin / 2, areaTop, w - margin, areaBottom - areaTop, '#F1F2F5', { radius: 3 * u }), role: 'productArea' } as CanvasElement,
+    ...pill(f, bottom - 15.5 * fs, 'להזמנות'),
+    rect(0, bottom, w, barH, '#14336B', { colorRole: 'primaryColor' }),
+    ...contactBar(f, bottom + 4 * fs, 'onPrimary'),
+  ]);
+  return applyProducts(page, samples, true);
+}
+
 /* ------------------------------------------------------------------ logos */
 
 const logoDesigns: { key: string; name: string; build: () => CanvasDoc }[] = [
@@ -601,9 +647,75 @@ async function seedSimchaSet() {
   return written;
 }
 
+/** small line icons, on one tone for dark bars and another for light ones (see src/lib/strip.ts, which names them by id) */
+const STRIP_ICONS: Record<string, string> = {
+  phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
+  pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+};
+const stripIcon = (shape: string, color: string) => () =>
+  sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${shape}</svg>`)).png().toBuffer();
+
+/** a background to start a free ad from, drawn here rather than sourced so it can be replaced freely */
+const BACKGROUNDS: { key: string; name: string; from: string; to: string }[] = [
+  { key: 'navy', name: 'כחול עמוק', from: '#0E1F3F', to: '#2C5AA0' },
+  { key: 'sand', name: 'חול', from: '#F6EEDD', to: '#D8C39A' },
+  { key: 'forest', name: 'יער', from: '#0F3B2E', to: '#3E8E6E' },
+  { key: 'wine', name: 'יין', from: '#3B0F1C', to: '#A23B4C' },
+  { key: 'mist', name: 'ערפל', from: '#F4F6F9', to: '#BFCADB' },
+  { key: 'gold', name: 'זהב', from: '#3A2A0C', to: '#C9A24B' },
+];
+const backgroundPicture = (from: string, to: string) => () =>
+  sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="1200" height="1600" fill="url(#g)"/></svg>`)).jpeg({ quality: 88 }).toBuffer();
+/** what a product ad shows until the business chooses its own */
+const samplePicture = (color: string) => () =>
+  sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="500" height="400"><rect x="60" y="40" width="380" height="320" rx="50" fill="${color}"/></svg>`)).png().toBuffer();
+const SAMPLE_PRODUCTS: { name: string; price: string; color: string }[] = [
+  { name: 'מוצר לדוגמה', price: '00 ₪', color: '#D8DEE9' },
+  { name: 'מוצר לדוגמה', price: '00 ₪', color: '#E6D9C3' },
+  { name: 'מוצר לדוגמה', price: '00 ₪', color: '#CFE3D7' },
+  { name: 'מוצר לדוגמה', price: '00 ₪', color: '#E9D3D6' },
+  { name: 'מוצר לדוגמה', price: '00 ₪', color: '#D5D9F0' },
+  { name: 'מוצר לדוגמה', price: '00 ₪', color: '#EFE6C2' },
+];
+
+/** What a business builds on its own: the strip's icons, the free ad, and the ad of several products. No price: nothing here has one yet. */
+async function seedBusiness() {
+  const brandCat = await ensureCategory('דוגמאות מיתוג', 'סימנים לדוגמה שמחזיקים את המקום של הלוגו של העסק');
+  const logo = await Promise.all(SAMPLE_LOGO_RATIOS.map((r) => ensureImage(brandCat, `sample-logo-${r}`, 'לוגו לדוגמה', sampleLogo(r), 'image/png')));
+  const iconCat = await ensureCategory('אייקונים למודעות', 'האייקונים ברצועת הפרטים של מודעה');
+  for (const [key, shape] of Object.entries(STRIP_ICONS)) {
+    await ensureImage(iconCat, `strip:${key}:light`, key, stripIcon(shape, '#FFFFFF'), 'image/png');
+    await ensureImage(iconCat, `strip:${key}:dark`, key, stripIcon(shape, '#111111'), 'image/png');
+  }
+  const bgCat = await ensureCategory('רקעים לעסקים', 'רקעים למודעה שהעסק בונה בעצמו');
+  const backgrounds = [];
+  for (const b of BACKGROUNDS) backgrounds.push(await ensureImage(bgCat, `background:${b.key}`, b.name, backgroundPicture(b.from, b.to), 'image/jpeg'));
+  const sampleCat = await ensureCategory('דוגמאות מוצרים', 'מה שמודעת מוצרים מראה עד שהעסק בוחר את שלו');
+  const samples: ProductItem[] = [];
+  for (const [i, p] of SAMPLE_PRODUCTS.entries()) {
+    const a = await ensureImage(sampleCat, `sample-product-${i}`, p.name, samplePicture(p.color), 'image/png');
+    samples.push({ id: `sample${i}`, name: p.name, price: p.price, photo: { assetId: a.id, file: a.file, width: a.width, height: a.height } });
+  }
+
+  let written = 0;
+  for (const f of AD_FORMATS) {
+    const format = SIZES[f.id];
+    counter = 0;
+    if (await save(`free:${f.id}`, `מודעה חופשית · ${f.label}`, 'מודעה חופשית', adFree(format, backgrounds[0], logo), { sizeGroup: 'מודעה חופשית:page', series: f.id === 'status' ? 'מודעה חופשית' : undefined })) written++;
+    counter = 0;
+    if (await save(`grid:${f.id}`, `מבצעי החודש · ${f.label}`, 'מודעות מבצע', adGrid(format, samples, logo), { sizeGroup: 'מודעות מבצע:grid', series: f.id === 'status' ? 'מבצעי החודש' : undefined })) written++;
+  }
+  return written;
+}
+
 async function main() {
   if (ONLY === 'simcha') {
     console.log(`${await seedSimchaSet()} pieces of the simcha set written (${STATUS}).`);
+    return;
+  }
+  if (ONLY === 'business') {
+    console.log(`${await seedBusiness()} templates for businesses written (${STATUS}). Open each in the editor as an admin to make its preview.`);
     return;
   }
   await arrangeRings();
@@ -622,6 +734,8 @@ async function main() {
   const count = (ok: boolean) => void (ok && written++);
 
   for (const p of PROFESSIONS) {
+    // a profession waits here until it has pictures of its own
+    if (!PHOTOS[p.topic]) continue;
     const photos = await Promise.all(PHOTOS[p.topic].map((file) => ensureImage(photosCat, file, file, fromFile(file), 'image/jpeg')));
     const series = `סדרת ${p.topic}`;
     for (const [i, ad] of p.ads.entries()) {
@@ -663,6 +777,7 @@ async function main() {
   }
 
   written += await seedSimchaSet();
+  written += await seedBusiness();
 
   console.log(`${written} templates written (${STATUS}${FORCE ? ', forced' : ''}). Open each in the editor as an admin to make its preview.`);
 }

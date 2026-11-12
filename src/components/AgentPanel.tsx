@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useToast } from './Toast';
 import { SparkIcon, SendIcon } from './Icons';
 import type { Audience } from '@/lib/categories';
-import type { CanvasDoc } from '@/lib/types';
+import type { CanvasDoc, ImageAsset } from '@/lib/types';
 
 type Turn = { role: 'user' | 'assistant'; text: string; changes?: number };
 
@@ -38,6 +38,8 @@ export function AgentPanel({
   suggestions = [],
   intents = [],
   audience = 'private',
+  onLibrary,
+  onOpenSize,
 }: {
   projectId: string;
   getDoc: () => CanvasDoc | null;
@@ -49,6 +51,10 @@ export function AgentPanel({
   /** one-click requests that stay available through the conversation: the button's words, and what it asks of the assistant */
   intents?: { label: string; prompt: string }[];
   audience?: Audience;
+  /** the library pictures the answer's card uses, so they draw */
+  onLibrary?: (assets: ImageAsset[]) => void;
+  /** the assistant asked for this ad in another size */
+  onOpenSize?: (format: string) => void;
 }) {
   const words = WORDS[audience];
   const STEPS = words.steps;
@@ -86,8 +92,10 @@ export function AgentPanel({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'העוזר לא זמין כרגע');
+      if (data.assets?.length) onLibrary?.(data.assets);
       const changes = data.changed ? onApply(data.canvas) : 0;
       setTurns((t) => [...t, { role: 'assistant', text: data.reply || (data.changed ? words.done : 'לא שיניתי דבר.'), changes }]);
+      if (data.openSize) onOpenSize?.(data.openSize);
     } catch (e) {
       push((e as Error).message, 'error');
       setTurns((t) => t.slice(0, -1));

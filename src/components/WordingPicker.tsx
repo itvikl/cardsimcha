@@ -9,6 +9,7 @@ import type { CanvasDoc } from '@/lib/types';
 /**
  * The wordings this card can take, each drawn on the card's own background with the customer's details.
  * An admin building a card sees it too, and with `manage` it also says what to do when there are none yet.
+ * A customer's card gets its `list` from the editor (see looks.ts), and `current` is the one it stands on.
  */
 export function WordingPicker({
   doc,
@@ -16,18 +17,26 @@ export function WordingPicker({
   manage,
   drawable,
   onPick,
+  list,
+  current = doc.wordingId,
+  title = 'בחירת נוסח',
 }: {
   doc: CanvasDoc;
   topic: string;
   manage: boolean;
   drawable: (d: CanvasDoc) => DrawableDoc;
   onPick: (w: Wording) => void;
+  list?: Wording[];
+  current?: string;
+  title?: string;
 }) {
-  const [wordings, setWordings] = useState<Wording[] | null>(null);
+  const [fetched, setWordings] = useState<Wording[] | null>(null);
+  const wordings = list ?? fetched;
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const { width_mm, height_mm } = doc.page;
 
   useEffect(() => {
+    if (list) return;
     let alive = true;
     const q = new URLSearchParams({ topic, width: String(width_mm), height: String(height_mm) });
     fetch(`/api/wordings?${q}`)
@@ -37,10 +46,10 @@ export function WordingPicker({
     return () => {
       alive = false;
     };
-  }, [topic, width_mm, height_mm]);
+  }, [topic, width_mm, height_mm, !!list]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the previews change with what is under the wording and with the customer's details, and not with the rest of their edits
-  const look = JSON.stringify(doc.elements.flatMap<unknown>((e) => (e.type === 'text' ? (e.detail ? [e.label, e.text] : []) : [e])));
+  const look = JSON.stringify([doc.page.background, doc.elements.flatMap<unknown>((e) => (e.type === 'text' ? (e.detail ? [e.label, e.text] : []) : [e]))]);
   useEffect(() => {
     if (!wordings?.length) return;
     let alive = true;
@@ -76,15 +85,16 @@ export function WordingPicker({
 
   return (
     <div className="field field-card" style={{ order: -1 }}>
-      <span className="field-label">בחירת נוסח</span>
+      <span className="field-label">{title}</span>
+      {!manage && <span className="status">השמות, התאריך והמקום שמילאתם עוברים לנוסח החדש.</span>}
       <div className="wording-grid">
         {wordings.map((w) => (
           <button
             key={w.id}
             type="button"
             className="wording-pick"
-            aria-pressed={w.id === doc.wordingId}
-            onClick={() => w.id !== doc.wordingId && onPick(w)}
+            aria-pressed={w.id === current}
+            onClick={() => w.id !== current && onPick(w)}
           >
             <span className="wording-face" style={{ aspectRatio: `${width_mm} / ${height_mm}` }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}

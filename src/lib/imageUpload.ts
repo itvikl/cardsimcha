@@ -17,7 +17,7 @@ export type SavedImage = { assetId: string; file: string; width: number; height:
  * Stores the picture in a form's `file` field (with its `width` and `height`) as a private image of this user:
  * only they see it in the library, and the editor draws it like any picture. Returns the reason when it can't be stored.
  */
-export async function saveUserImage(form: FormData | null, userId: string, name: string): Promise<SavedImage | string> {
+export async function saveUserImage(form: FormData | null, userId: string, name: string, extra: Pick<ImageAsset, 'ownSticker'> = {}): Promise<SavedImage | string> {
   const file = form?.get('file');
   if (!(file instanceof File)) return 'לא נשלח קובץ';
   const type = TYPES[file.type];
@@ -33,7 +33,7 @@ export async function saveUserImage(form: FormData | null, userId: string, name:
   const id = newId();
   const fileName = id + type.ext;
   await saveUpload(fileName, data, file.type);
-  const asset: ImageAsset = { id, categoryId: brandCategory(userId), name, file: fileName, width, height, createdAt: new Date().toISOString() };
+  const asset: ImageAsset = { id, categoryId: brandCategory(userId), name, file: fileName, width, height, createdAt: new Date().toISOString(), ...extra };
   try {
     await setRow('images', asset);
   } catch (e) {

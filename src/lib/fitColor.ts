@@ -1,5 +1,4 @@
 import { heightOf } from './adText';
-import { isWordingText } from './wording';
 import type { CanvasDoc } from './types';
 
 /**
@@ -110,14 +109,17 @@ export function fitColor(designed: string, area: Area, accent: { h: number; s: n
   return [...tones, toLight ? '#FFFFFF' : '#111111', designed].sort((a, b) => worst(b) - worst(a))[0];
 }
 
-/** The card with each of its wording's texts in the colour that fits what is drawn under it. `px` is the card without its texts. */
+/**
+ * The card with each of its wording's texts in the colour that fits what is drawn under it: every text that keeps its designed
+ * colour (`designColor`). `px` is the card without its texts.
+ */
 export function fitDocColors<D extends CanvasDoc>(doc: D, px: Pixels): D {
   const scale = px.width / doc.page.width_mm;
   const accent = accentOf(px);
   return {
     ...doc,
     elements: doc.elements.map((e) => {
-      if (!isWordingText(e)) return e;
+      if (e.type !== 'text' || !e.designColor) return e;
       const area = areaOf(px, { x: e.x_mm * scale, y: e.y_mm * scale, w: e.w_mm * scale, h: heightOf(e.text, e.font.size_pt, e.w_mm) * scale });
       return { ...e, font: { ...e.font, color: fitColor(e.designColor ?? e.font.color, area, accent, e.font.size_pt) } };
     }),

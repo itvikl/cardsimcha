@@ -44,17 +44,23 @@ export function writeAd<D extends CanvasDoc>(doc: D, texts: AdTexts): D {
   };
 }
 
+/** where a picture of this shape stands so it covers the box whole, centred */
+export function coverBox(box: { x_mm: number; y_mm: number; w_mm: number; h_mm: number }, width: number, height: number) {
+  const scale = Math.max(box.w_mm / width, box.h_mm / height);
+  const w = width * scale;
+  const h = height * scale;
+  return { x_mm: box.x_mm + (box.w_mm - w) / 2, y_mm: box.y_mm + (box.h_mm - h) / 2, w_mm: w, h_mm: h };
+}
+
 /** A picture in place of the design's photograph, covering its place whole. `src` is for drawing a preview only. */
 export function placePhoto<D extends CanvasDoc>(doc: D, photo: { assetId: string; width: number; height: number; src?: string }): D {
   return {
     ...doc,
     elements: doc.elements.map((e): CanvasElement => {
       if (e.type !== 'image' || e.role !== 'photo' || !e.photoBox) return e;
-      const { x_mm, y_mm, w_mm, h_mm } = e.photoBox;
-      const scale = Math.max(w_mm / photo.width, h_mm / photo.height);
-      const w = photo.width * scale;
-      const h = photo.height * scale;
-      return { ...e, asset_id: photo.assetId, x_mm: x_mm + (w_mm - w) / 2, y_mm: y_mm + (h_mm - h) / 2, w_mm: w, h_mm: h, ...(photo.src ? { src: photo.src } : {}) };
+      const { colorOverride: _old, ...rest } = e;
+      void _old;
+      return { ...rest, asset_id: photo.assetId, ...coverBox(e.photoBox, photo.width, photo.height), ...(photo.src ? { src: photo.src } : {}) };
     }),
   };
 }

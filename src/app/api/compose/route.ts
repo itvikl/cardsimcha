@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { formatById, formatOfPage } from '@/lib/adFormats';
 import { backedByFacts, composeAds } from '@/lib/agent/compose';
 import { requireUser } from '@/lib/auth';
+import { brandCategory } from '@/lib/brand';
 import { businessBrief } from '@/lib/businessBrief';
 import { AGENT_ENABLED, COMPOSE_DAILY_LIMIT } from '@/lib/config';
 import { findRows, getRow, setRow } from '@/lib/db';
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 /**
- * "Make me an ad": one sentence in, three ads back, each on a different layout of the profession and in the chosen size.
+ * "Make me an ad": one sentence in, three wordings back, and the layouts of the profession in the chosen size to draw the approved one on.
  * Nothing is saved: the page draws them, and the one the business picks is created through POST /api/projects like any design.
  * It's free for now, and every request costs a model call, so each user has a daily limit.
  */
@@ -42,9 +43,14 @@ export async function POST(req: Request) {
   if (used >= COMPOSE_DAILY_LIMIT) return NextResponse.json({ error: 'הגעתם למספר הבקשות להיום. אפשר לבחור מודעה מהגלריה, או לחזור מחר.' }, { status: 429 });
   await setRow('usage', { id: useId, count: used + 1 });
 
-  const [kit, items, library] = await Promise.all([getRow('brands', user.id), findRows('catalog', { ownerId: user.id }), findRows('images', { sticker: true })]);
+  const [kit, items, library, mine] = await Promise.all([
+    getRow('brands', user.id),
+    findRows('catalog', { ownerId: user.id }),
+    findRows('images', { sticker: true }),
+    findRows('images', { categoryId: brandCategory(user.id), ownSticker: true }),
+  ]);
   const brief = businessBrief(profession.topic, kit, items);
-  const stickers = stickersFor(library, profession.topic);
+  const stickers = [...mine.filter((s) => !s.removed), ...stickersFor(library, profession.topic)];
   try {
     const result = await composeAds(request, brief, stickers.map((s) => ({ id: s.id, name: s.name, tags: s.tags ?? [] })));
     if ('question' in result) return NextResponse.json({ question: result.question });
@@ -52,8 +58,8 @@ export async function POST(req: Request) {
     const ads = result.ads.filter((ad) => backedByFacts(ad, facts));
     if (!ads.length) return NextResponse.json({ error: 'לא הצלחנו לכתוב מודעה רק מהעובדות שנמסרו. נסו להוסיף פרטים.' }, { status: 422 });
     return NextResponse.json({
-      options: ads.map((ad, i) => ({
-        templateId: templates[i].id,
+      layouts: templates.map((t) => t.id),
+      options: ads.map((ad) => ({
         direction: ad.direction,
         itemId: items.some((x) => x.id === ad.itemId) ? ad.itemId : null,
         sticker: stickers.flatMap((s) => (s.id === ad.stickerId ? [{ id: s.id, file: s.file, width: s.width, height: s.height }] : []))[0] ?? null,

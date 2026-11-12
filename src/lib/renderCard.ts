@@ -1,10 +1,12 @@
+import type KonvaNs from 'konva';
+import { arcBox, drawArc, hasArc } from './arcText';
+import { cropOf, maskPath, pageLook, shapeLook, textLook } from './nodeStyle';
+import { loadUploadedFonts } from './fontsClient';
 import type { CanvasDoc, CanvasElement } from './types';
 
 /** an image element as GET /api/templates/canvas sends it: with the URL of its picture */
 export type DrawableElement = CanvasElement & { src?: string | null };
 export type DrawableDoc = Omit<CanvasDoc, 'elements'> & { elements: DrawableElement[] };
-
-const PT_TO_MM = 25.4 / 72;
 
 const loadImage = (src: string) =>
   new Promise<HTMLImageElement | null>((resolve) => {
@@ -35,6 +37,7 @@ export async function cardPixels(doc: DrawableDoc, width = 240): Promise<ImageDa
 
 async function drawCard(doc: DrawableDoc, width: number) {
   const { default: Konva } = await import('konva');
+  await loadUploadedFonts();
   const px = width / doc.page.width_mm;
   const fonts = new Set(doc.elements.flatMap((e) => (e.type === 'text' ? [`${e.font.weight} 16px "${e.font.family}"`] : [])));
   const [images] = await Promise.all([
@@ -45,15 +48,28 @@ async function drawCard(doc: DrawableDoc, width: number) {
   const stage = new Konva.Stage({ container: document.createElement('div'), width, height: doc.page.height_mm * px });
   const layer = new Konva.Layer();
   stage.add(layer);
-  layer.add(new Konva.Rect({ x: 0, y: 0, width, height: doc.page.height_mm * px, fill: doc.page.background }));
+  const pageH = doc.page.height_mm * px;
+  layer.add(new Konva.Rect({ x: 0, y: 0, width, height: pageH, fill: doc.page.background, ...pageLook(doc.page, width, pageH) }));
   doc.elements.forEach((e, i) => {
+    if (e.hidden) return;
     const box = { x: e.x_mm * px, y: e.y_mm * px, width: e.w_mm * px, rotation: e.rotation };
     if (e.type === 'image') {
       const img = images[i];
-      if (e.colorOverride) layer.add(new Konva.Rect({ ...box, height: e.h_mm * px, fill: e.colorOverride }));
-      else if (img) layer.add(new Konva.Image({ ...box, height: e.h_mm * px, image: img }));
+      const h = e.h_mm * px;
+      const node = e.colorOverride
+        ? new Konva.Rect({ width: box.width, height: h, fill: e.colorOverride })
+        : img
+          ? new Konva.Image({ width: box.width, height: h, image: img, crop: cropOf(e, img.naturalWidth, img.naturalHeight) })
+          : null;
+      if (!node) return;
+      const mask = e.mask;
+      const group = new Konva.Group({ ...box, ...(mask ? { clipFunc: (ctx: KonvaNs.Context) => maskPath(ctx._context, mask, box.width, h) } : {}) });
+      group.add(node);
+      layer.add(group);
     } else if (e.type === 'rect') {
-      layer.add(new Konva.Rect({ ...box, height: e.h_mm * px, fill: e.fill, cornerRadius: (e.cornerRadius_mm ?? 0) * px, opacity: e.opacity ?? 1 }));
+      layer.add(new Konva.Rect({ ...box, height: e.h_mm * px, fill: e.fill, cornerRadius: (e.cornerRadius_mm ?? 0) * px, opacity: e.opacity ?? 1, ...shapeLook(e, px) }));
+    } else if (hasArc(e)) {
+      layer.add(new Konva.Shape({ ...box, height: arcBox(e, px).height, sceneFunc: (ctx) => drawArc(ctx._context, e, px) }));
     } else {
       layer.add(
         new Konva.Text({
@@ -63,9 +79,8 @@ async function drawCard(doc: DrawableDoc, width: number) {
           direction: 'rtl', // same as the editor; this stage is off the page, so it would not inherit it
           fontFamily: e.font.family,
           fontStyle: e.font.weight === 700 ? 'bold' : 'normal',
-          fontSize: e.font.size_pt * PT_TO_MM * px,
           fill: e.font.color,
-          lineHeight: 1.25,
+          ...textLook(e, px),
           wrap: 'word',
         }),
       );

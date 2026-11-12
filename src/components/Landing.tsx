@@ -39,7 +39,7 @@ const CAT_ICON: Record<string, string> = {
 const COPY = {
   private: {
     title: 'עיצוב לכל שמחה',
-    lead: 'בחרו הזמנות, איחולים או אירועים, ובפנים את סוג הכרטיס שלכם.',
+    lead: 'בוחרים הזמנה או ברכה, ממלאים את הפרטים ומורידים את הכרטיס. בלי הרשמה ובלי גרפיקאי.',
   },
   business: {
     title: 'עיצוב לעסק שלכם',
@@ -56,8 +56,7 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // the private door's ring is fixed; its designs load behind each group (GroupView)
-    if (audience !== 'business') return;
+    // the private door's ring is fixed; its designs feed the strip under it
     Promise.all([
       api<Published[]>('/api/templates'),
       api<CarouselSetting[]>('/api/carousel').catch(() => []),
@@ -66,9 +65,29 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
       .catch((e) => setError(e.message));
   }, [audience]);
 
+  /** a few of the private door's real designs, one topic after another so the strip isn't all one kind */
+  const showcase = useMemo(() => {
+    if (!loaded || audience !== 'private') return [];
+    const mine = templates.filter((t) => t.thumbnail && topicAudience(t.topic || GENERAL_TOPIC, carousel) === 'private');
+    // cards first, one topic after another; the event pieces (a roll-up reads as a blank form out of context) only fill the end
+    const order = PRIVATE_GROUPS.flatMap((g) => g.topics);
+    const rank = (topic: string) => (order.includes(topic) ? order.indexOf(topic) : order.length);
+    const eventTopics = PRIVATE_GROUPS.find((g) => g.id === 'events')?.topics ?? [];
+    const roundRobin = (list: Published[]) => {
+      const byTopic = new Map<string, Published[]>();
+      for (const t of [...list].sort((a, b) => rank(a.topic || GENERAL_TOPIC) - rank(b.topic || GENERAL_TOPIC)))
+        byTopic.set(t.topic || GENERAL_TOPIC, [...(byTopic.get(t.topic || GENERAL_TOPIC) ?? []), t]);
+      const out: Published[] = [];
+      for (let i = 0; out.length < list.length; i++) for (const l of byTopic.values()) if (l[i]) out.push(l[i]);
+      return out;
+    };
+    const isEvent = (t: Published) => eventTopics.includes(t.topic ?? '');
+    return [...roundRobin(mine.filter((t) => !isEvent(t))), ...roundRobin(mine.filter(isEvent))].slice(0, 8);
+  }, [loaded, templates, carousel, audience]);
+
   /** Categories for this door, in admin order, with their image and templates */
   const groups = useMemo(() => {
-    if (!loaded) return [];
+    if (!loaded || audience !== 'business') return [];
     const cards = applyCarousel(defaultCards(templates), carousel)
       .filter((c) => !c.hidden && topicAudience(c.name, carousel) === audience);
     return cards.map((cat) => ({
@@ -134,6 +153,33 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
         )}
       </section>
 
+      {/* ── real designs and how it works (private door) ── */}
+      {showcase.length > 0 && (
+        <section id="cats" className={`${s.wrap} ${s.catSection}`}>
+          <h2 className={s.sectionTitle}>עיצובים שאפשר להתחיל מהם עכשיו</h2>
+          <div className={s.cardStrip}>
+            {showcase.map((t) => (
+              <Link key={t.id} href={`/t/${t.id}`} className={s.cardTile}>
+                <img src={t.thumbnail!} alt={t.name} className={s.cardTileImg} loading="lazy" decoding="async" />
+                <div className={s.cardTileMeta}>
+                  <span className={s.cardTileName}>{t.name}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+      {audience === 'private' && (
+        <section id="how" className={`${s.wrap} ${s.catSection}`}>
+          <h2 className={s.sectionTitle}>איך זה עובד</h2>
+          <ol className={s.howSteps}>
+            <li><strong>בוחרים עיצוב</strong><span>הזמנה, ברכה או תעודה, לפי סוג השמחה.</span></li>
+            <li><strong>ממלאים את הפרטים</strong><span>שמות, תאריך ומקום. הכרטיס מתעדכן מולכם.</span></li>
+            <li><strong>מורידים את הכרטיס</strong><span>קובץ תמונה, מוכן לשליחה בוואטסאפ או להדפסה.</span></li>
+          </ol>
+        </section>
+      )}
+
       {/* ── category grid ──────────────────────────── */}
       {audience === 'business' && (
         <section className={`${s.wrap} ${s.catGridSection}`}>
@@ -168,7 +214,7 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
             {g.items.map((t) => (
               <Link key={t.id} href={categoryHref(g.name, audience)} className={s.cardTile}>
                 {t.thumbnail
-                  ? <img src={t.thumbnail} alt={t.name} className={s.cardTileImg} />
+                  ? <img src={t.thumbnail} alt={t.name} className={s.cardTileImg} loading="lazy" decoding="async" />
                   : <div className={s.cardTilePlaceholder} />
                 }
                 <div className={s.cardTileMeta}>
