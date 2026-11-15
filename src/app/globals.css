@@ -707,6 +707,91 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
   .agent-send::after, .agent-send::before, .stage-frame, .ai-scan, .ai-pill, .ai-pill-dot, .field-card.ai-touched, .field-card.ai-touched::after, .save-state::before { animation: none !important; }
 }
 
+/* ------------------------------------------------ editor: the studio (the editor mockup)
+   White panels on a cool grey ground, near-black type, brand green for actions, blue for the
+   assistant. The tokens replace the festive theme's, so every editor rule above follows. */
+.editor-wrap.studio {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --text: #0f1d18;
+  --muted: #5b6a64;
+  --line: #e3e8e5;
+  --brand-1: #0f1d18;
+  --brand-2: #12664a;
+  --brand-text: #3c4a44;
+  --mint: #3ad29f;
+  --mint-soft: #e6f3ec;
+  --w-ground: #f4f6f5; --w-line: #e3e8e5; --w-field: #dfe5e2; --w-green: #12664a; --w-green-soft: #e6f3ec; --w-ink: #0f1d18; --w-muted: #5b6a64;
+  --ai: #2f56c4; --ai-soft: #e8eefc;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Heebo', system-ui, sans-serif;
+}
+.editor-wrap.studio.author { grid-template-rows: auto auto minmax(0, 1fr); }
+.editor-wrap.studio .editor-bar { min-height: 52px; padding: 6px 16px; background: #fff; backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 1px solid var(--line); }
+.editor-wrap.studio .editor-bar input.title { border-color: transparent; background: transparent; font-size: 15px; }
+.editor-wrap.studio .editor-bar input.title:hover { border-color: var(--line); }
+.editor-wrap.studio .btn.primary { background: #0f1d18; color: #fff; box-shadow: none; }
+.editor-wrap.studio .btn.primary.download { background: var(--w-green); color: #fff; box-shadow: 0 6px 16px -8px rgba(18, 102, 74, 0.7); }
+.editor-wrap.studio .btn.primary.download:hover:not(:disabled) { background: #0e563e; }
+.editor-wrap.studio input:focus, .editor-wrap.studio textarea:focus, .editor-wrap.studio select:focus { border-color: var(--w-green); box-shadow: 0 0 0 3px var(--w-green-soft); }
+
+/* the context toolbar */
+.editor-wrap.studio .ctx-strip { gap: 6px; }
+.tb-btn { display: inline-grid; place-items: center; min-width: 32px; height: 32px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.tb-btn:hover { background: #f1f3f2; }
+.tb-btn[aria-pressed='true'] { background: var(--w-green-soft); color: var(--w-green); }
+.tb-btn.danger { color: #a3261c; }
+.tb-glyph b { font-size: 15px; }
+.tb-font { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; width: 190px; height: 34px; padding: 0 10px; border: 1px solid var(--w-field); border-radius: 8px; background: #fff; font-size: 15px; cursor: pointer; }
+.tb-font span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tb-size { display: inline-flex; align-items: center; height: 34px; border: 1px solid var(--w-field); border-radius: 8px; overflow: hidden; }
+.tb-size button { width: 30px; height: 100%; border: 0; background: #f6f8f7; font-size: 16px; cursor: pointer; }
+.tb-size input { width: 50px; height: 100%; padding: 0; border: 0; border-inline: 1px solid var(--w-field); border-radius: 0; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.tb-size input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.editor-wrap.studio .tb-size input:focus { box-shadow: none; }
+.tb-color { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--w-field); border-radius: 8px; background: #fff; font-weight: 800; font-size: 14px; line-height: 1; cursor: pointer; }
+.tb-color-bar { width: 18px; height: 4px; margin-top: 2px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+.tb-color input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.tb-arc { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 7px; background: #f6f8f7; }
+.tb-arc input { width: 90px; accent-color: var(--w-green); }
+.tb-arc output { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* the author's library: icon rail and the open panel */
+.editor.studio:not(.customer) { grid-template-columns: auto minmax(0, 1fr) 300px; background: var(--bg); }
+.editor-wrap .editor.studio aside { background: #fff; padding: 16px; gap: 14px; }
+.editor.studio aside.studio-lib { display: flex; flex-direction: row; align-items: stretch; min-height: 0; padding: 0; gap: 0; overflow: hidden; border-inline-end: 1px solid var(--line); }
+.studio-lib .lib-rail { border-inline-start: 0; border-inline-end: 1px solid var(--line); }
+.studio-lib .lib-rail button { cursor: pointer; }
+.studio-lib .lib-rail button.ai[aria-pressed='true'] { background: var(--ai-soft); color: var(--ai); }
+.studio-lib .lib-panel { align-content: start; grid-auto-rows: max-content; }
+.lib-title { margin: 0; font-size: 16px; font-weight: 800; }
+.lib-add { display: grid; gap: 4px; padding: 14px; border: 1px dashed #b9cfc4; border-radius: 12px; background: #fbfcfb; text-align: start; font: inherit; cursor: pointer; }
+.lib-add:hover { border-color: var(--w-green); background: var(--w-green-soft); }
+.lib-add-big { font-size: 18px; font-weight: 800; }
+
+/* the work surface */
+.editor-wrap .editor.studio .work-stage .stage-wrap { background: none; padding: 32px 32px 76px; }
+.zoom-page { padding: 0 8px; color: var(--muted); }
+.zoom-pill svg { width: 16px; height: 16px; }
+
+/* the inspector */
+.editor.studio aside.right { border-inline-start: 1px solid var(--line); }
+.insp-head { display: grid; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #eef1ef; }
+.insp-head strong { font-size: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.insp-head span { color: var(--muted); font-size: 12px; }
+.editor.studio aside.right .panel-title { margin: 6px 0 0; padding-top: 12px; border-top: 1px solid #eef1ef; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
+.editor.studio aside.right .insp-empty .panel-title { border-top: 0; padding-top: 0; font-size: 15px; color: var(--text); }
+.insp-empty { display: grid; gap: 10px; }
+.keys { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 4px 0 0; font-size: 13px; }
+.keys dt { font-weight: 600; white-space: nowrap; }
+.keys dd { margin: 0; color: var(--muted); }
+.insp-font { width: 100%; }
+.editor.studio aside.right > .panel-title:first-child { border-top: 0; padding-top: 0; margin-top: 0; font-size: 15px; color: var(--text); }
+
+/* the customer's screen takes the same surface and colours */
+.editor.studio.customer { background: var(--bg); }
+
 /* ------------------------------------------------ editor on phones/tablets */
 @media (max-width: 860px) {
   .editor-wrap { display: block; height: auto; }
@@ -728,6 +813,13 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
   .editor.work aside.work-lib { border: 0; overflow: visible; }
   .lib-panel { width: auto; flex: 1; }
   .lib-rail { display: none; }
+  .editor.studio .work-stage { order: -2; }
+  .editor.studio .work-stage .stage-wrap { height: min(62vh, 600px); min-height: 320px; padding: 16px 16px 64px; }
+  .editor.studio aside.studio-lib { flex-direction: column; border: 0; overflow: visible; }
+  .studio-lib .lib-rail { display: flex; flex-direction: row; overflow-x: auto; border: 0; border-bottom: 1px solid var(--line); }
+  .studio-lib .lib-rail button { flex: 0 0 72px; }
+  .editor-wrap.studio .ctx-strip { position: sticky; top: calc(var(--header-h) + 52px); z-index: 19; overflow-x: auto; flex-wrap: nowrap; }
+  .tb-font { width: 140px; }
 }
 
 /* ---------------------------------------------- editor tools: rulers, guides, layers, fonts, history */

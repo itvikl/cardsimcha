@@ -20,7 +20,7 @@ import {
 } from '@/lib/canvas';
 import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
 import { arcBox, drawArc, hasArc } from '@/lib/arcText';
-import { describeChange } from '@/lib/historyLabel';
+import { describeChange, nameOf } from '@/lib/historyLabel';
 import { cropOf, fillLook, LINE_HEIGHT, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
 import { intersects, linesOf, snapBox, unionOf, type Box, type Mark } from '@/lib/snap';
 import { EditorRulers } from './EditorRulers';
@@ -51,6 +51,17 @@ import type {
 const PX = 3; // canvas pixels per mm at zoom 1
 /** how far inside the page's edge the safe area line runs, in mm: a print shop's cut can wander this much */
 const SAFE_MM = 4;
+type Panel = 'text' | 'fonts' | 'shapes' | 'images' | 'bg' | 'layers' | 'ai';
+/** the author's icon rail (24-unit stroke paths), as in the editor mockup */
+const RAIL: [Panel, string, string][] = [
+  ['text', 'טקסט', 'M5 6h14M12 6v13M9 19h6'],
+  ['fonts', 'פונטים', 'M3 19l5.5-13L14 19M5.2 14h6.6M18 10.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6M21 10v9'],
+  ['shapes', 'צורות', 'M3 5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM17 11a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9'],
+  ['images', 'תמונות', 'M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM21 16l-5-5-8 8M9 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3'],
+  ['bg', 'רקע ועמוד', 'M4 4h16v16H4zM4 12h8v8M12 4v8h8'],
+  ['layers', 'שכבות', 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5'],
+  ['ai', 'עוזר AI', 'M12 3c.8 4.6 3.4 7.2 8 8-4.6.8-7.2 3.4-8 8-.8-4.6-3.4-7.2-8-8 4.6-.8 7.2-3.4 8-8z'],
+];
 const PT_TO_MM = 25.4 / 72;
 const HISTORY_LIMIT = 100;
 /** Quick colour choices for customers (the site palette plus black and white). */
@@ -264,6 +275,8 @@ export default function Editor({ id }: { id: string }) {
   /** an author looking at the card as a customer will */
   const [preview, setPreview] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  /** the library panel open beside the rail */
+  const [panel, setPanel] = useState<Panel>('text');
   const [library, setLibrary] = useState<{ categories: Category[]; images: ImageAsset[] }>({ categories: [], images: [] });
   const [libCat, setLibCat] = useState<string>('');
   const [zoomOverride, setZoomOverride] = useState<number | null>(null);
@@ -346,8 +359,10 @@ export default function Editor({ id }: { id: string }) {
     const el = wrapRef.current;
     if (!el || !doc) return;
     const calc = () => {
-      const w = el.clientWidth - 48;
-      const h = el.clientHeight - 48;
+      // inside the stage's own padding (the studio leaves room under the card for the zoom pill)
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 8;
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 8;
       setFit(clamp(Math.min(w / (doc.page.width_mm * PX), h / (doc.page.height_mm * PX)), 0.1, 3));
     };
     calc();
@@ -1059,6 +1074,125 @@ export default function Editor({ id }: { id: string }) {
     return at?.el.type === 'text' ? at.el : undefined;
   })();
 
+  /** a new family keeps the nearest weight it has */
+  const setFamily = (t: TextElement, family: string) => {
+    const fam = families.find((f) => f.family === family);
+    const weight = fam ? nearestWeight(fam.weights, t.font.weight) : t.font.weight;
+    patchElement(t.id, { font: { ...t.font, family, weight } });
+  };
+  /** bold: the family's heaviest weight from 600 up, or back to its regular */
+  const toggleBold = (t: TextElement) => {
+    const weights = families.find((f) => f.family === t.font.family)?.weights ?? [400, 700];
+    const weight = t.font.weight >= 600 ? nearestWeight(weights, 400) : nearestWeight(weights, 700);
+    patchElement(t.id, { font: { ...t.font, weight } });
+  };
+  const preset = PAGE_PRESETS.find((x) => x.width_mm === doc.page.width_mm && x.height_mm === doc.page.height_mm);
+  const pageLabel = `${preset ? preset.label.split(' ')[0] + ' · ' : ''}${Math.round(doc.page.width_mm)}×${Math.round(doc.page.height_mm)} מ״מ`;
+  const kindLabel = (e: CanvasElement) => (e.type === 'text' ? 'טקסט' : e.type === 'image' ? 'תמונה' : 'צורה');
+
+  /** the toolbar under the document bar: what the selection can do right now */
+  const contextBar = () => (
+    <div className="ctx-strip" role="toolbar" aria-label="כלים לבחירה">
+      {selIds.length > 1 ? (
+        <>
+          <span className="ctx-now">
+            <b>{selIds.length} אלמנטים נבחרו</b>
+          </span>
+          <span className="ctx-sep" />
+          {alignButtons('יישור זה לזה')}
+          <span className="ctx-sep" />
+          <button type="button" className="tb-btn" onClick={groupSelected} title="Ctrl+G">
+            קיבוץ
+          </button>
+          <button type="button" className="tb-btn" onClick={duplicateSelected} title="Ctrl+D">
+            שכפול
+          </button>
+        </>
+      ) : textEl ? (
+        <>
+          <button type="button" className="tb-font" onClick={() => setPanel('fonts')} title="בחירת פונט" style={{ fontFamily: `"${textEl.font.family}"` }}>
+            <span>{textEl.font.family}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <span className="tb-size">
+            <button type="button" aria-label="הקטנת גודל" onClick={() => updateText({ font: { ...textEl.font, size_pt: clamp(textEl.font.size_pt - 1, 4, 400) } }, 'size:' + textEl.id)}>
+              −
+            </button>
+            <input
+              type="number"
+              aria-label="גודל בנקודות"
+              min={4}
+              max={400}
+              value={Math.round(textEl.font.size_pt * 10) / 10}
+              onChange={(e) => {
+                const v = num(e.target.value);
+                if (v !== null) updateText({ font: { ...textEl.font, size_pt: clamp(v, 4, 400) } }, 'size:' + textEl.id);
+              }}
+            />
+            <button type="button" aria-label="הגדלת גודל" onClick={() => updateText({ font: { ...textEl.font, size_pt: clamp(textEl.font.size_pt + 1, 4, 400) } }, 'size:' + textEl.id)}>
+              +
+            </button>
+          </span>
+          <label className="tb-color" title="צבע הטקסט">
+            <span aria-hidden="true">A</span>
+            <span className="tb-color-bar" style={{ background: textEl.font.color }} />
+            <input type="color" aria-label="צבע הטקסט" value={textEl.font.color} onChange={(e) => updateText({ font: { ...textEl.font, color: e.target.value } }, 'color:' + textEl.id)} />
+          </label>
+          <span className="ctx-sep" />
+          <button type="button" className="tb-btn tb-glyph" aria-pressed={textEl.font.weight >= 600} aria-label="מודגש" title="מודגש" onClick={() => toggleBold(textEl)}>
+            <b>B</b>
+          </button>
+          {(
+            [
+              ['right', 'ימין', 'M20 6H4M20 10h-9M20 14H4M20 18h-9'],
+              ['center', 'מרכז', 'M20 6H4M16 10H8M20 14H4M16 18H8'],
+              ['left', 'שמאל', 'M20 6H4M13 10H4M20 14H4M13 18H4'],
+            ] as const
+          ).map(([a, name, d]) => (
+            <button key={a} type="button" className="tb-btn" aria-pressed={textEl.align === a} aria-label={`יישור ל${name}`} title={`יישור ל${name}`} onClick={() => updateText({ align: a })}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d={d} />
+              </svg>
+            </button>
+          ))}
+          <span className="ctx-sep" />
+          <label className="tb-arc" title="קשת: מינוס לחיוך, פלוס לקשת בענן">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 17c4-9 12-9 16 0" />
+            </svg>
+            קשת
+            <input type="range" min={-100} max={100} step={1} value={textEl.arc ?? 0} aria-label="קשת" onChange={(e) => updateText({ arc: Number(e.target.value) || undefined }, 'arc:' + textEl.id)} />
+            <output>{textEl.arc ?? 0}</output>
+          </label>
+          <span className="ctx-label ctx-count">טקסט · {textEl.field?.label || 'ללא שם שדה'}</span>
+        </>
+      ) : selected ? (
+        <>
+          <span className="ctx-now">
+            <b>{kindLabel(selected)}</b> · {found ? LAYER_LABEL[found.layer] : ''}
+          </span>
+          <span className="ctx-sep" />
+          <button type="button" className="tb-btn" onClick={() => moveZ('front')}>
+            לחזית
+          </button>
+          <button type="button" className="tb-btn" onClick={() => moveZ('back')}>
+            לתחתית
+          </button>
+          <button type="button" className="tb-btn" onClick={duplicateSelected}>
+            שכפול
+          </button>
+          <button type="button" className="tb-btn danger" onClick={removeSelected}>
+            מחיקה
+          </button>
+        </>
+      ) : (
+        <span className="ctx-idle">בחרו אלמנט בכרטיס, או הוסיפו טקסט, צורה ותמונה מהפס שבצד.</span>
+      )}
+    </div>
+  );
+
   /** a labelled range with its value; consecutive moves merge into one undo step through `onChange`'s key */
   const slider = (label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void) => (
     <label className="field slider-field">
@@ -1153,7 +1287,7 @@ export default function Editor({ id }: { id: string }) {
   };
 
   return (
-    <div className="editor-wrap">
+    <div className={'editor-wrap studio' + (full ? ' author' : '')}>
       <div className="editor-bar">
         <input
           className="title"
@@ -1219,18 +1353,6 @@ export default function Editor({ id }: { id: string }) {
           </button>
         )}
         <span className="spacer" />
-        <span className="bar-group zoom-controls">
-          <button className="icon-btn" onClick={() => setZoomOverride(clamp(zoom - 0.1, 0.1, 3))} aria-label="הקטנה">
-            −
-          </button>
-          <span className="zoom-val">{Math.round(zoom * 100)}%</span>
-          <button className="icon-btn" onClick={() => setZoomOverride(clamp(zoom + 0.1, 0.1, 3))} aria-label="הגדלה">
-            +
-          </button>
-          <button className="icon-btn" onClick={() => setZoomOverride(null)} aria-label="התאמה למסך" title="התאמה למסך">
-            <FitIcon />
-          </button>
-        </span>
         <span className={'save-state ' + save} role="status">
           {saveLabel}
         </span>
@@ -1248,13 +1370,14 @@ export default function Editor({ id }: { id: string }) {
             )}
           </>
         )}
-        <button className="btn primary small shine" onClick={exportPng} disabled={exporting}>
+        <button className="btn primary small download" onClick={exportPng} disabled={exporting} title={full ? 'PNG ב-300dpi' : undefined}>
           <DownloadIcon size={16} />
-          {exporting ? 'מכין קובץ…' : full ? 'הורדת PNG (300dpi)' : 'הורדת הכרטיס'}
+          {exporting ? 'מכין קובץ…' : full ? 'הורדה' : 'הורדת הכרטיס'}
         </button>
       </div>
+      {full && contextBar()}
 
-      <div className={'editor' + (full ? '' : ' customer')}>
+      <div className={'editor studio' + (full ? '' : ' customer')}>
         {!full && (
           <aside className="left" aria-label="פרטי הכרטיס">
             <header className="panel-head" style={{ order: -3 }}>
@@ -1361,20 +1484,48 @@ export default function Editor({ id }: { id: string }) {
           </aside>
         )}
         {full && (
-          <aside className="left" aria-label="הוספת אלמנטים">
-            <div>
-              <h2 className="panel-title">הוספה</h2>
-              <div className="row">
-                <button className="btn small" onClick={addText}>
-                  טקסט
+          <aside className="studio-lib" aria-label="ספריות">
+            <nav className="lib-rail" aria-label="ספריות">
+              {RAIL.filter(([key]) => key !== 'ai' || canAgent).map(([key, label, d]) => (
+                <button key={key} type="button" aria-pressed={panel === key} className={key === 'ai' ? 'ai' : undefined} onClick={() => setPanel(key)}>
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d={d} />
+                  </svg>
+                  {label}
                 </button>
-                <button className="btn small" onClick={addRect}>
-                  מלבן
-                </button>
-              </div>
-            </div>
+              ))}
+            </nav>
+            <div className="lib-panel">
+              <h2 className="lib-title">{RAIL.find(([key]) => key === panel)?.[1]}</h2>
+              {panel === 'text' && (
+                <>
+                  <button type="button" className="lib-add" onClick={addText}>
+                    <span className="lib-add-big">טקסט חדש</span>
+                    <span className="status">שדה שהלקוח יכול לערוך. לחיצה כפולה כותבת עליו.</span>
+                  </button>
+                  <p className="status">סגנונות שמורים, קשת ואפקטים נמצאים בחלונית המאפיינים כשטקסט נבחר.</p>
+                </>
+              )}
+              {panel === 'fonts' &&
+                (textEl ? (
+                  <FontPicker
+                    value={textEl.font.family}
+                    sample={textEl.text}
+                    builtIn={families.filter((f) => f.builtin).map((f) => f.family)}
+                    uploaded={families.filter((f) => !f.builtin).map((f) => f.family)}
+                    bold={textEl.font.weight >= 600}
+                    onPick={(family) => setFamily(textEl, family)}
+                  />
+                ) : (
+                  <p className="status">בחרו טקסט בכרטיס, והפונטים יוצגו כתובים במילים שלו.</p>
+                ))}
+              {panel === 'shapes' && (
+                <>
+                  <button type="button" className="btn small" onClick={addRect}>
+                    מלבן
+                  </button>
+                  <h3 className="panel-title">קווים מפרידים</h3>
             <div>
-              <h2 className="panel-title">קווים מפרידים</h2>
               <div className="row" style={{ flexWrap: 'wrap' }}>
                 {DIVIDERS.map((d) => (
                   <button key={d.id} className="btn small" onClick={() => addDivider(d.id)}>
@@ -1383,8 +1534,11 @@ export default function Editor({ id }: { id: string }) {
                 ))}
               </div>
             </div>
+                </>
+              )}
+              {panel === 'images' && (
+                <>
             <div>
-              <h2 className="panel-title">תמונות מהקטגוריות</h2>
               {library.categories.length === 0 ? (
                 <p className="status">
                   אין עדיין קטגוריות. <Link href="/categories" style={{ textDecoration: 'underline' }}>צרו קטגוריה והוסיפו תמונות</Link>.
@@ -1416,8 +1570,102 @@ export default function Editor({ id }: { id: string }) {
                 </div>
               )}
             </div>
+                </>
+              )}
+              {panel === 'bg' && (
+                <>
+                <label className="field">
+                  גודל
+                  <select
+                    value={PAGE_PRESETS.find((p) => p.width_mm === doc.page.width_mm && p.height_mm === doc.page.height_mm)?.id ?? 'custom'}
+                    onChange={(e) => {
+                      const p = PAGE_PRESETS.find((x) => x.id === e.target.value);
+                      if (p) change((d) => ({ ...d, page: { width_mm: p.width_mm, height_mm: p.height_mm } }));
+                    }}
+                  >
+                    <option value="custom" disabled>
+                      מותאם אישית
+                    </option>
+                    {PAGE_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="row" style={{ gap: 8 }}>
+                  <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} />
+                  <span>קו אזור בטוח להדפסה ({SAFE_MM} מ״מ מהקצה). לא מופיע בהורדה.</span>
+                </label>
+                <p className="status">גוררים מהסרגלים כדי להוסיף קו עזר, וגוררים אותו אל מחוץ לדף כדי להסיר. Ctrl עם הגלגלת מגדיל, רווח עם גרירה מזיז את התצוגה.</p>
+
+                <h2 className="panel-title">רקע</h2>
+                {fillEditor(bg.fill, (fill, key) => patchBackground({ fill }, key && 'bg-' + key))}
+                <div className="field">
+                  <span>תמונת רקע: {bg.image ? (assetById.get(bg.image.asset_id)?.name ?? 'התמונה נמחקה') : 'אין'}</span>
+                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל ההוספה:</span>
+                  {libImages.length > 0 &&
+                    imagePicker(libCat, bg.image?.asset_id, (img) => patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }))}
+                  {bg.image && (
+                    <div className="row">
+                      <div className="seg" role="group" aria-label="התאמת התמונה">
+                        {(['cover', 'contain'] as const).map((f) => (
+                          <button key={f} aria-pressed={bg.image?.fit === f} onClick={() => bg.image && patchBackground({ image: { ...bg.image, fit: f } })}>
+                            {f === 'cover' ? 'ממלאת את הדף' : 'כולה בתוך הדף'}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        className="btn small"
+                        onClick={() =>
+                          change((d) => {
+                            const { image: _i, ...rest } = d.layers.background;
+                            void _i;
+                            return { ...d, layers: { ...d.layers, background: rest } };
+                          })
+                        }
+                      >
+                        הסרת התמונה
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <LockInspector
+                  locks={bg.locks}
+                  field={bg.field}
+                  allowed={['content', 'style']}
+                  onChange={(p, key) =>
+                    change((d) => {
+                      const next = { ...d.layers.background, ...p };
+                      if (next.locks.content && !next.swap_collection_id && bg.image) {
+                        const cat = assetById.get(bg.image.asset_id)?.categoryId;
+                        if (cat) next.swap_collection_id = cat;
+                      }
+                      if (!next.field) delete next.field;
+                      return { ...d, layers: { ...d.layers, background: next } };
+                    }, key && `bg-${key}`)
+                  }
+                >
+                  {bg.locks.content && (
+                    <label className="field">
+                      הלקוח בוחר מהקטגוריה
+                      <select value={bg.swap_collection_id ?? ''} onChange={(e) => patchBackground({ swap_collection_id: e.target.value || undefined })}>
+                        <option value="">כל התמונות</option>
+                        {library.categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </LockInspector>
+                </>
+              )}
+              {panel === 'layers' && (
+                <>
             <div>
-              <h2 className="panel-title">שכבות</h2>
               <LayersPanel
                 doc={doc}
                 selected={selIds}
@@ -1433,6 +1681,10 @@ export default function Editor({ id }: { id: string }) {
                 onSelectBackground={() => setSelectedId(null)}
               />
             </div>
+                </>
+              )}
+              {panel === 'ai' && (
+                <>
             {canAgent && (
               <AgentPanel
                 projectId={id}
@@ -1443,9 +1695,13 @@ export default function Editor({ id }: { id: string }) {
                 suggestions={['הוסף שדות לשמות, תאריך ומקום', 'סדר את הטקסטים במרכז']}
               />
             )}
+                </>
+              )}
+            </div>
           </aside>
         )}
 
+        <div className="work-stage">
         <div className="stage-wrap" ref={wrapRef} onMouseDown={(e) => e.target === e.currentTarget && setSelectedId(null)}>
           <div
             className={'stage-frame' + (aiBusy ? ' ai-working' : '') + (aiTouched.size ? ' ai-done' : '')}
@@ -1605,100 +1861,39 @@ export default function Editor({ id }: { id: string }) {
             )}
           </div>
         </div>
+          <div className="zoom-pill" role="group" aria-label="תצוגה">
+            <button type="button" onClick={() => setZoomOverride(clamp(zoom - 0.1, 0.1, 3))} aria-label="הקטנה">
+              −
+            </button>
+            <span className="zoom-pct">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoomOverride(clamp(zoom + 0.1, 0.1, 3))} aria-label="הגדלה">
+              +
+            </button>
+            <button type="button" onClick={() => setZoomOverride(null)} aria-label="התאמה למסך" title="התאמה למסך">
+              <FitIcon />
+            </button>
+            <span className="ctx-sep" />
+            <span className="zoom-page">{pageLabel}</span>
+          </div>
+        </div>
 
         {full && (
           <aside className="right" aria-label="מאפיינים">
             {!selected ? (
               <>
-                <h2 className="panel-title">הגדרות עמוד</h2>
-                <label className="field">
-                  גודל
-                  <select
-                    value={PAGE_PRESETS.find((p) => p.width_mm === doc.page.width_mm && p.height_mm === doc.page.height_mm)?.id ?? 'custom'}
-                    onChange={(e) => {
-                      const p = PAGE_PRESETS.find((x) => x.id === e.target.value);
-                      if (p) change((d) => ({ ...d, page: { width_mm: p.width_mm, height_mm: p.height_mm } }));
-                    }}
-                  >
-                    <option value="custom" disabled>
-                      מותאם אישית
-                    </option>
-                    {PAGE_PRESETS.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="row" style={{ gap: 8 }}>
-                  <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} />
-                  <span>קו אזור בטוח להדפסה ({SAFE_MM} מ״מ מהקצה). לא מופיע בהורדה.</span>
-                </label>
-                <p className="status">גוררים מהסרגלים כדי להוסיף קו עזר, וגוררים אותו אל מחוץ לדף כדי להסיר. Ctrl עם הגלגלת מגדיל, רווח עם גרירה מזיז את התצוגה.</p>
-
-                <h2 className="panel-title">רקע</h2>
-                {fillEditor(bg.fill, (fill, key) => patchBackground({ fill }, key && 'bg-' + key))}
-                <div className="field">
-                  <span>תמונת רקע: {bg.image ? (assetById.get(bg.image.asset_id)?.name ?? 'התמונה נמחקה') : 'אין'}</span>
-                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל ההוספה:</span>
-                  {libImages.length > 0 &&
-                    imagePicker(libCat, bg.image?.asset_id, (img) => patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }))}
-                  {bg.image && (
-                    <div className="row">
-                      <div className="seg" role="group" aria-label="התאמת התמונה">
-                        {(['cover', 'contain'] as const).map((f) => (
-                          <button key={f} aria-pressed={bg.image?.fit === f} onClick={() => bg.image && patchBackground({ image: { ...bg.image, fit: f } })}>
-                            {f === 'cover' ? 'ממלאת את הדף' : 'כולה בתוך הדף'}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        className="btn small"
-                        onClick={() =>
-                          change((d) => {
-                            const { image: _i, ...rest } = d.layers.background;
-                            void _i;
-                            return { ...d, layers: { ...d.layers, background: rest } };
-                          })
-                        }
-                      >
-                        הסרת התמונה
-                      </button>
-                    </div>
-                  )}
+                <div className="insp-empty">
+                  <h2 className="panel-title">לא נבחר אלמנט</h2>
+                  <p className="status">לחצו על אלמנט בכרטיס, או גררו מסגרת סביב כמה אלמנטים. הגדרות העמוד והרקע נמצאות בפס הצד, תחת "רקע".</p>
+                  <dl className="keys">
+                    <dt>Shift + לחיצה</dt><dd>הוספה לבחירה</dd>
+                    <dt>לחיצה כפולה</dt><dd>כתיבה על הכרטיס</dd>
+                    <dt>Ctrl+G</dt><dd>קיבוץ</dd>
+                    <dt>חיצים</dt><dd>הזזה במילימטר (Shift: עשרה)</dd>
+                    <dt>Alt בגרירה</dt><dd>בלי הצמדה</dd>
+                    <dt>Ctrl + גלגלת</dt><dd>הגדלה</dd>
+                    <dt>רווח + גרירה</dt><dd>הזזת התצוגה</dd>
+                  </dl>
                 </div>
-                <LockInspector
-                  locks={bg.locks}
-                  field={bg.field}
-                  allowed={['content', 'style']}
-                  onChange={(p, key) =>
-                    change((d) => {
-                      const next = { ...d.layers.background, ...p };
-                      if (next.locks.content && !next.swap_collection_id && bg.image) {
-                        const cat = assetById.get(bg.image.asset_id)?.categoryId;
-                        if (cat) next.swap_collection_id = cat;
-                      }
-                      if (!next.field) delete next.field;
-                      return { ...d, layers: { ...d.layers, background: next } };
-                    }, key && `bg-${key}`)
-                  }
-                >
-                  {bg.locks.content && (
-                    <label className="field">
-                      הלקוח בוחר מהקטגוריה
-                      <select value={bg.swap_collection_id ?? ''} onChange={(e) => patchBackground({ swap_collection_id: e.target.value || undefined })}>
-                        <option value="">כל התמונות</option>
-                        {library.categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </LockInspector>
-                <p className="status">בחרו אלמנט על הדף כדי לערוך אותו. מקשי החיצים מזיזים, Delete מוחק, Ctrl+Z מבטל.</p>
               </>
             ) : selIds.length > 1 ? (
               <>
@@ -1732,9 +1927,12 @@ export default function Editor({ id }: { id: string }) {
               </>
             ) : (
               <>
-                <h2 className="panel-title">
-                  {selected.type === 'text' ? 'טקסט' : selected.type === 'image' ? 'תמונה' : 'מלבן'} · {LAYER_LABEL[found!.layer]}
-                </h2>
+                <header className="insp-head">
+                  <strong>{nameOf(selected)}</strong>
+                  <span>
+                    {kindLabel(selected)} · {LAYER_LABEL[found!.layer]}
+                  </span>
+                </header>
                 {alignButtons('יישור לדף')}
 
                 {textEl && (
@@ -1745,19 +1943,11 @@ export default function Editor({ id }: { id: string }) {
                     </label>
                     <div className="field">
                       <span>פונט</span>
+                      <button type="button" className="tb-font insp-font" style={{ fontFamily: `"${textEl.font.family}"` }} onClick={() => setPanel('fonts')}>
+                        <span>{textEl.font.family}</span>
+                        <span className="status">שינוי</span>
+                      </button>
                       {!textFamily && <p className="status">{textEl.font.family}: הפונט לא זמין, ומוצג במקומו פונט אחר.</p>}
-                      <FontPicker
-                        value={textEl.font.family}
-                        sample={textEl.text}
-                        builtIn={families.filter((f) => f.builtin).map((f) => f.family)}
-                        uploaded={families.filter((f) => !f.builtin).map((f) => f.family)}
-                        bold={textEl.font.weight >= 600}
-                        onPick={(family) => {
-                          const fam = families.find((f) => f.family === family);
-                          const weight = fam ? nearestWeight(fam.weights, textEl.font.weight) : textEl.font.weight;
-                          updateText({ font: { ...textEl.font, family, weight } });
-                        }}
-                      />
                     </div>
                     <div className="row" style={{ alignItems: 'end' }}>
                       <label className="field" style={{ width: 90 }}>
@@ -1791,13 +1981,6 @@ export default function Editor({ id }: { id: string }) {
                           ))}
                         </select>
                       </label>
-                    </div>
-                    <div className="seg" role="group" aria-label="יישור">
-                      {(['right', 'center', 'left'] as const).map((a) => (
-                        <button key={a} aria-pressed={textEl.align === a} onClick={() => updateText({ align: a })}>
-                          {a === 'right' ? 'ימין' : a === 'center' ? 'מרכז' : 'שמאל'}
-                        </button>
-                      ))}
                     </div>
 
                     <h3 className="panel-title">סגנונות שמורים</h3>
