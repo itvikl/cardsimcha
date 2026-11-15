@@ -81,6 +81,7 @@ model Workspace {
   assets      Asset[]
   collections Collection[]
   fonts       Font[]
+  textStyles  TextStyle[]
   brandKits   BrandKit[]
 
   @@map("workspaces")
@@ -274,4 +275,21 @@ model Export {
 
   @@index([creativeId])
   @@map("exports")
+}
+
+/// A text look an author saves (font, size, colour, spacing, effects, arc) and lays on another
+/// text in one click. Platform styles (workspace_id null) are shared by every admin; workspace
+/// styles come with the business workspaces. `look` is validated by canvas.validateTextLook.
+model TextStyle {
+  id          String   @id @default(uuid())
+  workspaceId String?  @map("workspace_id")
+  name        String
+  look        Json
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("text_styles")
 }

@@ -3,7 +3,7 @@
  *   npm run test:canvas
  */
 import assert from 'node:assert/strict';
-import { applyEdits, emptyDoc, FIELD_LOCKS, findElement, LOCKED, moveInLayer, moveTo, validateDoc } from '../src/lib/canvas';
+import { applyEdits, emptyDoc, FIELD_LOCKS, findElement, LOCKED, moveInLayer, moveTo, validateDoc, validateTextLook } from '../src/lib/canvas';
 import { migrateV1, toV2, type CanvasDocV1 } from '../src/lib/canvas-v1';
 import { DIVIDERS, newDivider } from '../src/lib/elements';
 import type { CanvasDoc, ImageElement, TextElement } from '../src/lib/types';
@@ -181,6 +181,21 @@ test('moveTo: puts an element at a place in either layer, and nowhere else', () 
   assert.deepEqual(moveTo(d, 'box', 'content', 0).layers.content.map((e) => e.id), ['box', 'sig', 'title', 'groom']);
   assert.deepEqual(moveTo(d, 'sig', 'content', 99).layers.content.map((e) => e.id), ['title', 'groom', 'box', 'sig']);
   assert.equal(moveTo(d, 'nope', 'content', 0), d);
+});
+
+test('validateTextLook: keeps a look, drops words, place and customer rules, refuses a bad value', () => {
+  const look = {
+    font: { family: 'Heebo', weight: 700, size_pt: 24, color: '#14342C', letter_spacing: 2 },
+    align: 'center',
+    arc: 30,
+    foil: 'gold',
+    stroke: { color: '#FFFFFF', width_mm: 0.2 },
+  };
+  assert.deepEqual(validateTextLook({ ...look, text: 'שלום', x_mm: 9, locks: FIELD_LOCKS, field: { label: 'x' } }), look);
+  assert.equal(validateTextLook({ ...look, arc: 500 }), null);
+  assert.equal(validateTextLook({ ...look, font: { ...look.font, color: 'red' } }), null);
+  assert.equal(validateTextLook({ align: 'center' }), null);
+  assert.equal(validateTextLook(null), null);
 });
 
 test('emptyDoc is valid', () => {

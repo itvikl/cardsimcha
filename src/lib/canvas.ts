@@ -1,4 +1,4 @@
-import type { BackgroundLayer, CanvasDoc, CanvasElement, Field, Fill, LayerName, Locks, WordingPart } from './types';
+import type { BackgroundLayer, CanvasDoc, CanvasElement, Field, Fill, LayerName, Locks, TextElement, WordingPart } from './types';
 
 export const PAGE_PRESETS = [
   { id: 'a4', label: 'A4 לאורך', width_mm: 210, height_mm: 297 },
@@ -278,6 +278,21 @@ function background(v: unknown): BackgroundLayer | null {
     ...(b.swap_collection_id !== undefined && { swap_collection_id: b.swap_collection_id as string }),
   };
 }
+
+/** what a saved text style carries: the look of a text, not its words, place or customer rules */
+export type TextLook = Pick<TextElement, 'font' | 'align' | 'arc' | 'fit' | 'shadow' | 'stroke' | 'foil'>;
+const LOOK_KEYS = ['font', 'align', 'arc', 'fit', 'shadow', 'stroke', 'foil'] as const;
+
+/** A sanitized text look, or null: checked exactly as a text element's own fields are. */
+export function validateTextLook(input: unknown): TextLook | null {
+  const l = input as Record<string, unknown> | null;
+  if (!l || typeof l !== 'object') return null;
+  const probe = element({ id: 'look', type: 'text', x_mm: 0, y_mm: 0, w_mm: 100, rotation: 0, text: '', locks: LOCKED, ...pick(l, LOOK_KEYS) });
+  if (!probe || probe.type !== 'text') return null;
+  return pick(probe as unknown as Record<string, unknown>, LOOK_KEYS) as unknown as TextLook;
+}
+
+const pick = (o: Record<string, unknown>, keys: readonly string[]) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 
 /** Returns a sanitized v2 doc (unknown properties dropped), or null when the input is not valid. */
 export function validateDoc(input: unknown): CanvasDoc | null {

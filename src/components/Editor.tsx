@@ -26,6 +26,7 @@ import { intersects, linesOf, snapBox, unionOf, type Box, type Mark } from '@/li
 import { EditorRulers } from './EditorRulers';
 import { FontPicker } from './FontPicker';
 import { LayersPanel } from './LayersPanel';
+import { TextStylesPicker } from './TextStylesPicker';
 import { InlineTextEditor } from './InlineTextEditor';
 import { fontFamilies, nearestWeight, WEIGHT_NAMES, type FontFamily } from '@/lib/fonts';
 import { loadFont, registerUploadedFonts } from '@/lib/fonts-client';
@@ -37,6 +38,7 @@ import type {
   CanvasDoc,
   CanvasElement,
   Category,
+  Field,
   Fill,
   ImageAsset,
   ImageElement,
@@ -151,13 +153,16 @@ function LockInspector({
   locks,
   field,
   allowed,
+  detailOption,
   onChange,
   children,
 }: {
   locks: Locks;
-  field?: { label: string; variable?: string };
+  field?: Field;
   allowed: (keyof Locks)[];
-  onChange: (patch: { locks?: Locks; field?: { label: string; variable?: string } | undefined }, key?: string) => void;
+  /** a text can be the customer's own detail, kept when they swap a wording */
+  detailOption?: boolean;
+  onChange: (patch: { locks?: Locks; field?: Field | undefined }, key?: string) => void;
   children?: React.ReactNode;
 }) {
   const customer = locks.content || locks.style || locks.transform || locks.delete;
@@ -206,6 +211,20 @@ function LockInspector({
               }}
             />
           </label>
+          {detailOption && (
+            <label className="row" style={{ gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={!!field?.detail}
+                onChange={(e) => {
+                  const { detail: _old, ...rest } = field ?? { label: '' };
+                  void _old;
+                  onChange({ field: e.target.checked ? { ...rest, detail: true } : rest });
+                }}
+              />
+              <span>פרט אישי של הלקוח (שם, תאריך, מקום): נשאר כשמחליפים נוסח</span>
+            </label>
+          )}
         </>
       )}
       {children}
@@ -1781,6 +1800,9 @@ export default function Editor({ id }: { id: string }) {
                       ))}
                     </div>
 
+                    <h3 className="panel-title">סגנונות שמורים</h3>
+                    <TextStylesPicker text={textEl} onApply={(patch) => updateText(patch)} onError={(m) => push(m, 'error')} />
+
                     <h3 className="panel-title">ריווח וקשת</h3>
                     {slider('בין אותיות (pt)', textEl.font.letter_spacing ?? 0, -5, 30, 0.5, (v) => updateText({ font: { ...textEl.font, letter_spacing: v || undefined } }, 'ls:' + textEl.id))}
                     {slider('בין שורות', textEl.font.line_height ?? LINE_HEIGHT, 0.8, 2.5, 0.05, (v) => updateText({ font: { ...textEl.font, line_height: v } }, 'lh:' + textEl.id))}
@@ -1874,6 +1896,7 @@ export default function Editor({ id }: { id: string }) {
                   locks={selected.locks}
                   field={selected.field}
                   allowed={['content', 'style', 'transform', 'delete'].filter((k) => !(k === 'style' && selected.type === 'image')) as (keyof Locks)[]}
+                  detailOption={selected.type === 'text'}
                   onChange={(p, key) => {
                     const next = { ...p };
                     // a swappable image offers its own category by default
