@@ -8,7 +8,7 @@ import { listFonts } from '@/lib/data/fonts';
 import { newId } from '@/lib/data/ids';
 import { addImage, assetFileKey, createCategory, listCategories } from '@/lib/data/library';
 import { createTemplate, topicConflictFor } from '@/lib/data/projects';
-import { eraseTexts } from '@/lib/eraseTexts';
+import { cleanDesign } from '@/lib/importClean';
 import { files } from '@/lib/files';
 import { BUILTIN_FONTS } from '@/lib/fonts';
 import { parseAudience } from '@/lib/topics';
@@ -91,7 +91,8 @@ export async function POST(req: Request) {
   }
 
   const kept = await sharp(original).rotate().resize({ width: KEEP_SIDE, height: KEEP_SIDE, fit: 'inside', withoutEnlargement: true }).toBuffer();
-  const { data, rough } = await eraseTexts(kept, texts);
+  // each box snaps to its ink and only the ink is repainted (the ad-import tool's steps, lib/importClean)
+  const { data, refined, rough } = await cleanDesign(kept, texts);
   const { width, height } = await sharp(data).metadata();
   if (!width || !height) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
   const page = pageFor(width / height);
@@ -101,12 +102,26 @@ export async function POST(req: Request) {
     let label = t.label.trim() || 'טקסט';
     if (seen.has(label)) label = `${label} ${i + 1}`;
     seen.add(label);
+    const fit = refined[i];
+    const lines = Math.max(1, t.text.split('\n').length);
+    // the model's line height, checked against the ink: Hebrew letters stand about 0.78 of the font size tall
+    const fromModel = ((t.lineHeight / 100) * page.height_mm) / 1.25;
+    const fromInk = ((fit.h / 100) * page.height_mm) / lines / 0.78;
+    const size_mm = Math.abs(fromModel / fromInk - 1) <= 0.25 ? fromModel : fromInk;
+    // the text box: a little wider than the ink so the line never wraps, anchored where its alignment holds it
+    const inkX = (fit.x / 100) * page.width_mm;
+    const inkW = (fit.w / 100) * page.width_mm;
+    const w_mm = Math.max(5, inkW * 1.08 + size_mm * 0.3);
+    const x_mm = t.align === 'right' ? inkX + inkW - w_mm : t.align === 'left' ? inkX : inkX + inkW / 2 - w_mm / 2;
+    // centred on the ink: the drawn block is `lines` lines of 1.25 × the size
+    const y_mm = ((fit.y + fit.h / 2) / 100) * page.height_mm - (lines * size_mm * 1.25) / 2;
+    const color = (fit.color ?? t.color).toUpperCase();
     return {
       id: newId(),
       type: 'text',
-      x_mm: (t.x / 100) * page.width_mm,
-      y_mm: (t.y / 100) * page.height_mm,
-      w_mm: Math.max(5, (t.w / 100) * page.width_mm),
+      x_mm: Math.max(0, x_mm),
+      y_mm: Math.max(0, y_mm),
+      w_mm: Math.min(w_mm, page.width_mm),
       rotation: 0,
       text: t.text,
       align: t.align,
@@ -116,10 +131,10 @@ export async function POST(req: Request) {
       font: {
         family: fonts.includes(t.font) ? t.font : 'Heebo',
         weight: t.bold ? 700 : 400,
-        size_pt: Math.min(400, Math.max(4, ((t.lineHeight / 100) * page.height_mm) / 1.25 / PT_TO_MM)),
-        color: t.color.toUpperCase(),
+        size_pt: Math.min(400, Math.max(4, size_mm / PT_TO_MM)),
+        color,
       },
-      design_color: t.color.toUpperCase(),
+      design_color: color,
     };
   });
 
