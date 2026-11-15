@@ -9,3 +9,4 @@ examples/ad-import/fonts
 service-account*.json
 *-firebase-adminsdk-*.json
 tsconfig.tsbuildinfo
+infra
