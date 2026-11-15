@@ -10,6 +10,7 @@ import {
   allElements,
   findElement,
   moveInLayer,
+  moveTo,
   moveToLayer,
   PAGE_PRESETS,
   removeElement,
@@ -19,9 +20,12 @@ import {
 } from '@/lib/canvas';
 import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
 import { arcBox, drawArc, hasArc } from '@/lib/arcText';
+import { describeChange } from '@/lib/historyLabel';
 import { cropOf, fillLook, LINE_HEIGHT, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
 import { intersects, linesOf, snapBox, unionOf, type Box, type Mark } from '@/lib/snap';
 import { EditorRulers } from './EditorRulers';
+import { FontPicker } from './FontPicker';
+import { LayersPanel } from './LayersPanel';
 import { InlineTextEditor } from './InlineTextEditor';
 import { fontFamilies, nearestWeight, WEIGHT_NAMES, type FontFamily } from '@/lib/fonts';
 import { loadFont, registerUploadedFonts } from '@/lib/fonts-client';
@@ -33,6 +37,7 @@ import type {
   CanvasDoc,
   CanvasElement,
   Category,
+  Fill,
   ImageAsset,
   ImageElement,
   LayerName,
@@ -237,6 +242,9 @@ export default function Editor({ id }: { id: string }) {
   const [showSafe, setShowSafe] = useState(true);
   /** the text being written straight on the card */
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** an author looking at the card as a customer will */
+  const [preview, setPreview] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [library, setLibrary] = useState<{ categories: Category[]; images: ImageAsset[] }>({ categories: [], images: [] });
   const [libCat, setLibCat] = useState<string>('');
   const [zoomOverride, setZoomOverride] = useState<number | null>(null);
@@ -339,8 +347,10 @@ export default function Editor({ id }: { id: string }) {
   // The current doc and the undo/redo stacks live in refs so updates stay free of
   // side effects inside state updaters; `setDoc` just triggers the re-render.
   const docRef = useRef<CanvasDoc | null>(null);
-  const pastRef = useRef<CanvasDoc[]>([]);
-  const futureRef = useRef<CanvasDoc[]>([]);
+  /** each card kept for undo, with how it was reached ("הזזה: כותרת"); the current card's is in `labelRef` */
+  const pastRef = useRef<{ doc: CanvasDoc; label: string }[]>([]);
+  const futureRef = useRef<{ doc: CanvasDoc; label: string }[]>([]);
+  const labelRef = useRef('פתיחת העיצוב');
   const [, bump] = useState(0);
   docRef.current = doc;
 
@@ -350,7 +360,13 @@ export default function Editor({ id }: { id: string }) {
       const now = Date.now();
       const merge = !!mergeKey && lastMerge.current?.key === mergeKey && now - lastMerge.current.at < 1000;
       lastMerge.current = mergeKey ? { key: mergeKey, at: now } : null;
-      if (!merge) pastRef.current = [...pastRef.current.slice(-(HISTORY_LIMIT - 1)), cur];
+      if (!merge) {
+        pastRef.current = [...pastRef.current.slice(-(HISTORY_LIMIT - 1)), { doc: cur, label: labelRef.current }];
+        labelRef.current = describeChange(cur, next);
+      } else {
+        // a merged step (typing, a slider) is named after everything it changed since it began
+        labelRef.current = describeChange(pastRef.current[pastRef.current.length - 1]?.doc ?? cur, next);
+      }
       futureRef.current = [];
     }
     docRef.current = next;
@@ -393,31 +409,24 @@ export default function Editor({ id }: { id: string }) {
     [change],
   );
 
-  const undo = useCallback(() => {
+  /** goes straight to a step of the history: `index` counts the kept steps, then the current card, then those undone */
+  const jumpTo = useCallback((index: number) => {
     const cur = docRef.current;
-    const prev = pastRef.current[pastRef.current.length - 1];
-    if (!cur || !prev) return;
-    pastRef.current = pastRef.current.slice(0, -1);
-    futureRef.current = [cur, ...futureRef.current];
+    if (!cur) return;
+    const steps = [...pastRef.current, { doc: cur, label: labelRef.current }, ...futureRef.current];
+    const step = steps[index];
+    if (!step || index === pastRef.current.length) return;
+    pastRef.current = steps.slice(0, index);
+    futureRef.current = steps.slice(index + 1);
+    labelRef.current = step.label;
     lastMerge.current = null;
-    docRef.current = prev;
-    setDoc(prev);
+    docRef.current = step.doc;
+    setDoc(step.doc);
     setSave('dirty');
     bump((n) => n + 1);
   }, []);
-
-  const redo = useCallback(() => {
-    const cur = docRef.current;
-    const next = futureRef.current[0];
-    if (!cur || !next) return;
-    futureRef.current = futureRef.current.slice(1);
-    pastRef.current = [...pastRef.current, cur];
-    lastMerge.current = null;
-    docRef.current = next;
-    setDoc(next);
-    setSave('dirty');
-    bump((n) => n + 1);
-  }, []);
+  const undo = useCallback(() => jumpTo(pastRef.current.length - 1), [jumpTo]);
+  const redo = useCallback(() => jumpTo(pastRef.current.length + 1), [jumpTo]);
 
   // ---- autosave --------------------------------------------------------------
   const nameRef = useRef(name);
@@ -666,14 +675,14 @@ export default function Editor({ id }: { id: string }) {
     const stage = stageRef.current;
     if (!tr || !stage) return;
     // the author's whole selection; a customer's frame marks the field they are on
-    const targets = canManage ? selIds : [activeField].filter((x): x is string => !!x);
+    const targets = canManage && !preview ? selIds : [activeField].filter((x): x is string => !!x);
     const nodes = targets.flatMap((t) => {
       const n = t !== editingId ? stage.findOne('#' + t) : null;
       return n ? [n] : [];
     });
     tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
-  }, [selIds, activeField, canManage, doc, fontsTick, editingId]);
+  }, [selIds, activeField, canManage, preview, doc, fontsTick, editingId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -681,7 +690,7 @@ export default function Editor({ id }: { id: string }) {
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (!canManage && !(mod && (key === 'z' || key === 'y'))) return;
+      if ((!canManage || preview) && !(mod && (key === 'z' || key === 'y'))) return;
       if (mod && key === 'z') {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
@@ -704,6 +713,7 @@ export default function Editor({ id }: { id: string }) {
         removeSelected();
       } else if (e.key === 'Escape') {
         setSelectedId(null);
+        setHistoryOpen(false);
       } else if (selIds.length && e.key.startsWith('Arrow')) {
         e.preventDefault();
         // a millimetre a press, ten with Shift; held down, it is one undo step
@@ -728,7 +738,7 @@ export default function Editor({ id }: { id: string }) {
       window.removeEventListener('keydown', onSpace);
       window.removeEventListener('keyup', onSpace);
     };
-  }, [undo, redo, duplicateSelected, removeSelected, selIds, patchMany, canManage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [undo, redo, duplicateSelected, removeSelected, selIds, patchMany, canManage, preview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- zoom with Ctrl + the wheel or two fingers, and moving the view with Space or the middle button ----
   useEffect(() => {
@@ -811,7 +821,7 @@ export default function Editor({ id }: { id: string }) {
   const libImages = library.images.filter((i) => i.categoryId === libCat);
   const saveLabel = { saved: 'נשמר', saving: 'שומר…', dirty: 'שינויים לא שמורים', error: 'השמירה נכשלה, מנסה שוב בעריכה הבאה' }[save];
 
-  const full = canManage;
+  const full = canManage && !preview;
   const bg = doc.layers.background;
   const elements = allElements(doc);
   const swappables = elements.filter((e): e is ImageElement => e.type === 'image' && e.locks.content);
@@ -1030,6 +1040,44 @@ export default function Editor({ id }: { id: string }) {
     return at?.el.type === 'text' ? at.el : undefined;
   })();
 
+  /** a labelled range with its value; consecutive moves merge into one undo step through `onChange`'s key */
+  const slider = (label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void) => (
+    <label className="field slider-field">
+      <span className="row" style={{ justifyContent: 'space-between' }}>
+        <span>{label}</span>
+        <output>{Math.round(value * 100) / 100}</output>
+      </span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  );
+
+  /** a flat colour, or a gradient from it to a second colour at an angle */
+  const fillEditor = (f: Fill, set: (f: Fill, key?: string) => void) => (
+    <div className="field">
+      <div className="row" style={{ alignItems: 'end' }}>
+        <label className="field">
+          {f.type === 'linear' ? 'צבע התחלה' : 'צבע'}
+          <input type="color" value={f.color} onChange={(e) => set({ ...f, color: e.target.value }, 'fill')} />
+        </label>
+        {f.type === 'linear' && (
+          <label className="field">
+            צבע סיום
+            <input type="color" value={f.color2} onChange={(e) => set({ ...f, color2: e.target.value }, 'fill')} />
+          </label>
+        )}
+      </div>
+      <label className="row" style={{ gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={f.type === 'linear'}
+          onChange={(e) => set(e.target.checked ? { type: 'linear', color: f.color, color2: '#FFFFFF', angle: 90 } : { type: 'solid', color: f.color })}
+        />
+        <span>מעבר צבע</span>
+      </label>
+      {f.type === 'linear' && slider('זווית (°)', f.angle, 0, 360, 5, (v) => set({ ...f, angle: v }, 'angle'))}
+    </div>
+  );
+
   /** six alignment buttons: to the page for one element, to each other for several */
   const alignButtons = (label: string) => (
     <div role="group" aria-label={label} className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
@@ -1106,7 +1154,51 @@ export default function Editor({ id }: { id: string }) {
           <button className="icon-btn" onClick={redo} disabled={!futureRef.current.length} aria-label="חזרה" title="חזרה (Ctrl+Y)">
             <RedoIcon />
           </button>
+          <span className="history-wrap">
+            <button className="icon-btn" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen} aria-label="היסטוריית שינויים" title="היסטוריית שינויים">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" />
+              </svg>
+            </button>
+            {historyOpen && (
+              <div className="history-list" role="list" aria-label="היסטוריית שינויים">
+                {[...pastRef.current, { doc, label: labelRef.current }, ...futureRef.current]
+                  .map((step, i) => ({ step, i }))
+                  .reverse()
+                  .map(({ step, i }) => (
+                    <button
+                      key={i}
+                      type="button"
+                      role="listitem"
+                      className={'history-step' + (i === pastRef.current.length ? ' now' : i > pastRef.current.length ? ' undone' : '')}
+                      aria-current={i === pastRef.current.length}
+                      onClick={() => {
+                        jumpTo(i);
+                        setHistoryOpen(false);
+                      }}
+                    >
+                      {step.label}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </span>
         </span>
+        {canManage && (
+          <button
+            className="btn small"
+            aria-pressed={preview}
+            onClick={() => {
+              setPreview((v) => !v);
+              setHistoryOpen(false);
+              setSelectedId(null);
+              setActiveField(null);
+              setZoomOverride(null);
+            }}
+          >
+            {preview ? 'חזרה לעריכה' : 'תצוגת לקוח'}
+          </button>
+        )}
         <span className="spacer" />
         <span className="bar-group zoom-controls">
           <button className="icon-btn" onClick={() => setZoomOverride(clamp(zoom - 0.1, 0.1, 3))} aria-label="הקטנה">
@@ -1304,6 +1396,23 @@ export default function Editor({ id }: { id: string }) {
                   )}
                 </div>
               )}
+            </div>
+            <div>
+              <h2 className="panel-title">שכבות</h2>
+              <LayersPanel
+                doc={doc}
+                selected={selIds}
+                onSelect={selectEl}
+                onToggle={(elId, key) => {
+                  const el = findElement(doc, elId)?.el;
+                  if (!el) return;
+                  patchElement(elId, { [key]: el[key] ? undefined : true } as Partial<CanvasElement>);
+                  // what is hidden or pinned can't stay selected on the card
+                  if (!el[key] && selIds.includes(elId)) setSelectedId(null);
+                }}
+                onMove={(elId, layer, index) => change((d) => moveTo(d, elId, layer, index))}
+                onSelectBackground={() => setSelectedId(null)}
+              />
             </div>
             {canAgent && (
               <AgentPanel
@@ -1510,10 +1619,7 @@ export default function Editor({ id }: { id: string }) {
                 <p className="status">גוררים מהסרגלים כדי להוסיף קו עזר, וגוררים אותו אל מחוץ לדף כדי להסיר. Ctrl עם הגלגלת מגדיל, רווח עם גרירה מזיז את התצוגה.</p>
 
                 <h2 className="panel-title">רקע</h2>
-                <label className="field">
-                  צבע רקע
-                  <input type="color" value={bg.fill.color} onChange={(e) => patchBackground({ fill: { type: 'solid', color: e.target.value } }, 'bg')} />
-                </label>
+                {fillEditor(bg.fill, (fill, key) => patchBackground({ fill }, key && 'bg-' + key))}
                 <div className="field">
                   <span>תמונת רקע: {bg.image ? (assetById.get(bg.image.asset_id)?.name ?? 'התמונה נמחקה') : 'אין'}</span>
                   <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל ההוספה:</span>
@@ -1618,26 +1724,22 @@ export default function Editor({ id }: { id: string }) {
                       תוכן
                       <textarea rows={3} dir="auto" value={textEl.text} onChange={(e) => updateText({ text: e.target.value }, 'text:' + textEl.id)} />
                     </label>
-                    <label className="field">
-                      פונט
-                      <select
+                    <div className="field">
+                      <span>פונט</span>
+                      {!textFamily && <p className="status">{textEl.font.family}: הפונט לא זמין, ומוצג במקומו פונט אחר.</p>}
+                      <FontPicker
                         value={textEl.font.family}
-                        onChange={(e) => {
-                          const fam = families.find((f) => f.family === e.target.value);
+                        sample={textEl.text}
+                        builtIn={families.filter((f) => f.builtin).map((f) => f.family)}
+                        uploaded={families.filter((f) => !f.builtin).map((f) => f.family)}
+                        bold={textEl.font.weight >= 600}
+                        onPick={(family) => {
+                          const fam = families.find((f) => f.family === family);
                           const weight = fam ? nearestWeight(fam.weights, textEl.font.weight) : textEl.font.weight;
-                          updateText({ font: { ...textEl.font, family: e.target.value, weight } });
+                          updateText({ font: { ...textEl.font, family, weight } });
                         }}
-                      >
-                        {!textFamily && <option value={textEl.font.family}>{textEl.font.family} (לא זמין)</option>}
-                        {families.map((f) => (
-                          <option key={f.family} value={f.family}>
-                            {f.family}
-                            {f.builtin ? '' : ' · הועלה'}
-                            {f.hebrew ? '' : ' · ללא עברית'}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                      />
+                    </div>
                     <div className="row" style={{ alignItems: 'end' }}>
                       <label className="field" style={{ width: 90 }}>
                         גודל (pt)
@@ -1678,21 +1780,95 @@ export default function Editor({ id }: { id: string }) {
                         </button>
                       ))}
                     </div>
+
+                    <h3 className="panel-title">ריווח וקשת</h3>
+                    {slider('בין אותיות (pt)', textEl.font.letter_spacing ?? 0, -5, 30, 0.5, (v) => updateText({ font: { ...textEl.font, letter_spacing: v || undefined } }, 'ls:' + textEl.id))}
+                    {slider('בין שורות', textEl.font.line_height ?? LINE_HEIGHT, 0.8, 2.5, 0.05, (v) => updateText({ font: { ...textEl.font, line_height: v } }, 'lh:' + textEl.id))}
+                    {slider('קשת (מינוס: חיוך)', textEl.arc ?? 0, -100, 100, 1, (v) => updateText({ arc: v || undefined }, 'arc:' + textEl.id))}
+                    <label className="row" style={{ gap: 8 }}>
+                      <input type="checkbox" checked={textEl.fit === 'shrink'} onChange={(e) => updateText({ fit: e.target.checked ? 'shrink' : undefined })} />
+                      <span>להקטין עד שכל שורה נכנסת ברוחב</span>
+                    </label>
+
+                    <h3 className="panel-title">אפקטים</h3>
+                    <div className="seg" role="group" aria-label="מילוי">
+                      {([undefined, 'gold', 'silver'] as const).map((f) => (
+                        <button key={f ?? 'flat'} aria-pressed={textEl.foil === f} onClick={() => updateText({ foil: f })}>
+                          {f === 'gold' ? 'רדיד זהב' : f === 'silver' ? 'רדיד כסף' : 'צבע רגיל'}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="row" style={{ gap: 8 }}>
+                      <input type="checkbox" checked={!!textEl.shadow} onChange={(e) => updateText({ shadow: e.target.checked || undefined })} />
+                      <span>צל</span>
+                    </label>
+                    <label className="row" style={{ gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!textEl.stroke}
+                        onChange={(e) => updateText({ stroke: e.target.checked ? { color: '#FFFFFF', width_mm: 0.3 } : undefined })}
+                      />
+                      <span>קו מתאר</span>
+                    </label>
+                    {textEl.stroke && (
+                      <div className="row" style={{ alignItems: 'end' }}>
+                        <label className="field">
+                          צבע הקו
+                          <input type="color" value={textEl.stroke.color} onChange={(e) => updateText({ stroke: { ...textEl.stroke!, color: e.target.value } }, 'stroke:' + textEl.id)} />
+                        </label>
+                        {slider('עובי (מ״מ)', textEl.stroke.width_mm, 0.05, 2, 0.05, (v) => updateText({ stroke: { ...textEl.stroke!, width_mm: v } }, 'stroke:' + textEl.id))}
+                      </div>
+                    )}
+
+                    <label className="field">
+                      חלק בנוסח
+                      <select value={textEl.part ?? ''} onChange={(e) => updateText({ part: (e.target.value || undefined) as TextElement['part'] })}>
+                        <option value="">לא חלק מנוסח</option>
+                        <option value="header">כותרת</option>
+                        <option value="body">גוף</option>
+                        <option value="footer">סיום</option>
+                      </select>
+                    </label>
                   </>
                 )}
 
                 {selected.type === 'shape' && (
-                  <label className="field">
-                    צבע מילוי
-                    <input
-                      type="color"
-                      value={selected.fill.color}
-                      onChange={(e) => patchElement(selected.id, { fill: { type: 'solid', color: e.target.value } }, 'fill:' + selected.id)}
-                    />
-                  </label>
+                  <>
+                    {fillEditor(selected.fill, (fill, key) => patchElement(selected.id, { fill }, key && key + ':' + selected.id))}
+                    {slider('פינות מעוגלות (מ״מ)', selected.corner_radius_mm ?? 0, 0, Math.min(selected.w_mm, selected.h_mm) / 2, 0.5, (v) =>
+                      patchElement(selected.id, { corner_radius_mm: v || undefined }, 'radius:' + selected.id),
+                    )}
+                    {slider('אטימות', selected.opacity ?? 1, 0.05, 1, 0.05, (v) => patchElement(selected.id, { opacity: v === 1 ? undefined : v }, 'opacity:' + selected.id))}
+                  </>
                 )}
 
-                {selected.type === 'image' && <p className="status">{assetById.get(selected.asset_id)?.name ?? 'התמונה נמחקה מהקטגוריה'}</p>}
+                {selected.type === 'image' && (
+                  <>
+                    <p className="status">{assetById.get(selected.asset_id)?.name ?? 'התמונה נמחקה מהקטגוריה'}</p>
+                    <div className="seg" role="group" aria-label="מסכה">
+                      {([undefined, 'circle', 'rounded', 'arch'] as const).map((m) => (
+                        <button key={m ?? 'none'} aria-pressed={selected.mask === m} onClick={() => patchElement(selected.id, { mask: m })}>
+                          {m === 'circle' ? 'עיגול' : m === 'rounded' ? 'פינות' : m === 'arch' ? 'קשת' : 'מלבן'}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="row" style={{ gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!selected.crop}
+                        onChange={(e) => patchElement(selected.id, { crop: e.target.checked ? { zoom: 1, x: 0, y: 0 } : undefined })}
+                      />
+                      <span>חיתוך: התמונה ממלאת את המסגרת בלי להימתח</span>
+                    </label>
+                    {selected.crop && (
+                      <>
+                        {slider('קירוב', selected.crop.zoom, 1, 4, 0.05, (v) => patchElement(selected.id, { crop: { ...selected.crop!, zoom: v } }, 'crop:' + selected.id))}
+                        {slider('ימינה ושמאלה', selected.crop.x, -1, 1, 0.02, (v) => patchElement(selected.id, { crop: { ...selected.crop!, x: v } }, 'crop:' + selected.id))}
+                        {slider('למעלה ולמטה', selected.crop.y, -1, 1, 0.02, (v) => patchElement(selected.id, { crop: { ...selected.crop!, y: v } }, 'crop:' + selected.id))}
+                      </>
+                    )}
+                  </>
+                )}
 
                 <LockInspector
                   locks={selected.locks}

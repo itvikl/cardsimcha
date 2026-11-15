@@ -357,7 +357,7 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .work-tabs { display: none; }
 .arc-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 8px; align-items: center; }
 .arc-row input[type='range'] { width: 100%; }
-.editor aside { background: var(--surface); overflow-y: auto; overflow-x: hidden; padding: 20px; display: grid; gap: 18px; align-content: start; }
+.editor aside { background: var(--surface); overflow-y: auto; overflow-x: hidden; padding: 20px; display: grid; gap: 18px; align-content: start; grid-auto-rows: max-content; }
 .editor aside.left { border-inline-end: 1px solid var(--line); }
 .editor aside.right { border-inline-start: 1px solid var(--line); }
 .editor aside .field, .editor aside .pick, .editor aside > * { min-width: 0; }
@@ -755,6 +755,9 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .layer-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .layer-group { color: var(--brand-2); font-size: 12px; }
 .layer-toggle { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+.layer-head { padding: 8px 8px 2px; font-size: 12px; font-weight: 700; color: var(--muted); border-top: 2px solid transparent; }
+.layer-head.over { border-top-color: var(--brand-2); }
+.layer-empty { padding: 2px 8px 6px; font-size: 12px; }
 .layer-toggle[aria-pressed='true'] { color: var(--brand-2); background: rgba(0, 0, 0, 0.05); }
 
 .divider-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }

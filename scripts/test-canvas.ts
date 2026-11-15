@@ -3,7 +3,7 @@
  *   npm run test:canvas
  */
 import assert from 'node:assert/strict';
-import { applyEdits, emptyDoc, FIELD_LOCKS, findElement, LOCKED, moveInLayer, validateDoc } from '../src/lib/canvas';
+import { applyEdits, emptyDoc, FIELD_LOCKS, findElement, LOCKED, moveInLayer, moveTo, validateDoc } from '../src/lib/canvas';
 import { migrateV1, toV2, type CanvasDocV1 } from '../src/lib/canvas-v1';
 import { DIVIDERS, newDivider } from '../src/lib/elements';
 import type { CanvasDoc, ImageElement, TextElement } from '../src/lib/types';
@@ -171,6 +171,16 @@ test('moveInLayer: reordering never leaves the layer', () => {
   const out = moveInLayer(d, 'top', 'back');
   assert.deepEqual(out.layers.overlay.map((e) => e.id), ['top']);
   assert.deepEqual(moveInLayer(d, 'box', 'back').layers.content.map((e) => e.id), ['box', 'sig', 'title', 'groom']);
+});
+
+test('moveTo: puts an element at a place in either layer, and nowhere else', () => {
+  const d = clone(doc);
+  const into = moveTo(d, 'title', 'overlay', 0);
+  assert.deepEqual(into.layers.overlay.map((e) => e.id), ['title']);
+  assert.ok(!into.layers.content.some((e) => e.id === 'title'));
+  assert.deepEqual(moveTo(d, 'box', 'content', 0).layers.content.map((e) => e.id), ['box', 'sig', 'title', 'groom']);
+  assert.deepEqual(moveTo(d, 'sig', 'content', 99).layers.content.map((e) => e.id), ['title', 'groom', 'box', 'sig']);
+  assert.equal(moveTo(d, 'nope', 'content', 0), d);
 });
 
 test('emptyDoc is valid', () => {

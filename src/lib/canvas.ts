@@ -69,6 +69,16 @@ export function moveInLayer(d: CanvasDoc, id: string, dir: 'front' | 'back' | 'u
   return { ...d, layers: { ...d.layers, [at.layer]: els } };
 }
 
+/** puts an element at `index` of `layer`'s drawing order (0 is the bottom), from whichever layer it is in */
+export function moveTo(d: CanvasDoc, id: string, layer: LayerName, index: number): CanvasDoc {
+  const at = findElement(d, id);
+  if (!at) return d;
+  const without = removeElement(d, id);
+  const els = [...without.layers[layer]];
+  els.splice(Math.max(0, Math.min(els.length, index)), 0, at.el);
+  return { ...without, layers: { ...without.layers, [layer]: els } };
+}
+
 /** moves an element to the top of the other layer */
 export function moveToLayer(d: CanvasDoc, id: string, layer: LayerName): CanvasDoc {
   const at = findElement(d, id);
