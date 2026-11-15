@@ -40,8 +40,8 @@ export type Locks = {
 export type Field = { label: string; variable?: string; detail?: boolean };
 
 /**
- * A flat colour, or a linear gradient from `color` to `color2` at `angle` degrees (0 runs left to
- * right, 90 top to bottom). Both have `color`, so code that only knows flat colours still draws
+ * A flat colour, or a linear gradient from `color` to `color2` at `angle` degrees (0 runs from
+ * right to left, 90 from top to bottom; nodeStyle.ts draws it). Both have `color`, so code that only knows flat colours still draws
  * something sensible.
  */
 export type Fill = { type: 'solid'; color: string } | { type: 'linear'; color: string; color2: string; angle: number };
