@@ -18,6 +18,7 @@ import {
   setBackground,
   updateElement,
 } from '@/lib/canvas';
+import { uid } from '@/lib/uid';
 import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
 import { arcBox, drawArc, hasArc } from '@/lib/arcText';
 import { describeChange, nameOf } from '@/lib/historyLabel';
@@ -80,6 +81,8 @@ type SaveState = 'saved' | 'saving' | 'dirty' | 'error';
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 const fontStyle = (w: number) => (w === 400 ? 'normal' : String(w));
 const uploadUrl = (a: ImageAsset | undefined) => (a ? `/api/uploads/${a.file}` : '');
+/** a drag is saved by the layer (onLayerDragEnd), which moves the whole selection; nodes name it so react-konva knows */
+const VIA_LAYER = () => {};
 
 /** A picture: drawn through its mask, showing its crop. The group carries the id, place and size. */
 function ImageNode({
@@ -120,6 +123,7 @@ function ImageNode({
       onTap={onSelect}
       clipFunc={mask ? (ctx) => maskPath(ctx._context, mask, w, h) : undefined}
       // a drag ends in the layer, which also moves the rest of the selection (onLayerDragEnd)
+      onDragEnd={VIA_LAYER}
       onTransformEnd={(e) => {
         const n = e.target;
         const nw = n.width() * n.scaleX();
@@ -565,8 +569,8 @@ export default function Editor({ id }: { id: string }) {
       const at = findElement(d, x);
       if (!at) continue;
       const g = at.el.group;
-      const group = g ? (groups.get(g) ?? groups.set(g, crypto.randomUUID()).get(g)) : undefined;
-      copies.push({ el: { ...at.el, id: crypto.randomUUID(), x_mm: at.el.x_mm + 5, y_mm: at.el.y_mm + 5, ...(group && { group }) }, layer: at.layer });
+      const group = g ? (groups.get(g) ?? groups.set(g, uid()).get(g)) : undefined;
+      copies.push({ el: { ...at.el, id: uid(), x_mm: at.el.x_mm + 5, y_mm: at.el.y_mm + 5, ...(group && { group }) }, layer: at.layer });
     }
     change((doc0) => copies.reduce((acc, c) => addTo(acc, c.el, c.layer), doc0));
     selectMany(copies.map((c) => c.el.id));
@@ -574,7 +578,7 @@ export default function Editor({ id }: { id: string }) {
 
   const groupSelected = () => {
     if (selIds.length < 2) return;
-    const g = crypto.randomUUID();
+    const g = uid();
     patchMany(selIds, () => ({ group: g }));
   };
   const ungroupSelected = () => patchMany(selIds, () => ({ group: undefined }));
@@ -925,6 +929,7 @@ export default function Editor({ id }: { id: string }) {
           listening={!pinned}
           onMouseDown={onSelect}
           onTap={onSelect}
+          onDragEnd={VIA_LAYER}
           onTransformEnd={(e) => transformEnd(e, true)}
         />
       );
@@ -963,6 +968,7 @@ export default function Editor({ id }: { id: string }) {
       onDblClick: () => (full || el.locks.content) && setEditingId(el.id),
       onDblTap: () => (full || el.locks.content) && setEditingId(el.id),
       opacity: editingId === el.id ? 0 : 1,
+      onDragEnd: VIA_LAYER,
       onTransformEnd: (e: Konva.KonvaEventObject<Event>) => transformEnd(e, false),
     };
     if (hasArc(el)) {
@@ -1604,7 +1610,7 @@ export default function Editor({ id }: { id: string }) {
                 {fillEditor(bg.fill, (fill, key) => patchBackground({ fill }, key && 'bg-' + key))}
                 <div className="field">
                   <span>תמונת רקע: {bg.image ? (assetById.get(bg.image.asset_id)?.name ?? 'התמונה נמחקה') : 'אין'}</span>
-                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל ההוספה:</span>
+                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל התמונות:</span>
                   {libImages.length > 0 &&
                     imagePicker(libCat, bg.image?.asset_id, (img) => patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }))}
                   {bg.image && (

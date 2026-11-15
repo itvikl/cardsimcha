@@ -1,3 +1,4 @@
+import { uid } from './uid';
 import { FIELD_LOCKS, LOCKED } from './canvas';
 import type { CanvasDoc, ImageAsset, ImageElement, ShapeElement, TextElement } from './types';
 
@@ -9,7 +10,7 @@ import type { CanvasDoc, ImageAsset, ImageElement, ShapeElement, TextElement } f
 export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט'): TextElement {
   const w = Math.min(120, doc.page.width_mm - 20);
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'text',
     x_mm: (doc.page.width_mm - w) / 2,
     y_mm: doc.page.height_mm / 3,
@@ -25,7 +26,7 @@ export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט
 
 export function newRect(doc: CanvasDoc): ShapeElement {
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'shape',
     shape: 'rect',
     x_mm: doc.page.width_mm / 4,
@@ -47,7 +48,7 @@ export function newImage(doc: CanvasDoc, asset: ImageAsset): ImageElement {
     w = (h * asset.width) / asset.height;
   }
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'image',
     x_mm: (doc.page.width_mm - w) / 2,
     y_mm: (doc.page.height_mm - h) / 2,
@@ -72,14 +73,14 @@ export const DIVIDERS: { id: DividerKind; label: string }[] = [
  * They go in the content layer, in this order. Ported from feature/business-ads (Vitol).
  */
 export function newDivider(doc: CanvasDoc, kind: DividerKind, color = '#B8892F'): ShapeElement[] {
-  const group = crypto.randomUUID();
+  const group = uid();
   const W = doc.page.width_mm;
   const w = Math.min(70, W * 0.42);
   const x = (W - w) / 2;
   const y = doc.page.height_mm / 2;
   const t = Math.max(0.35, W / 300);
   const shape = (s: Partial<ShapeElement> & Pick<ShapeElement, 'x_mm' | 'y_mm' | 'w_mm' | 'h_mm'>): ShapeElement => ({
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'shape',
     shape: 'rect',
     rotation: 0,
