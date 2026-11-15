@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Text, Shape, Group, Image as KImage, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Text, Shape, Group, Line, Image as KImage, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import type Konva from 'konva';
 import {
@@ -17,9 +17,12 @@ import {
   setBackground,
   updateElement,
 } from '@/lib/canvas';
-import { newImage, newRect, newText } from '@/lib/elements';
+import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
 import { arcBox, drawArc, hasArc } from '@/lib/arcText';
-import { cropOf, fillLook, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
+import { cropOf, fillLook, LINE_HEIGHT, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
+import { intersects, linesOf, snapBox, unionOf, type Box, type Mark } from '@/lib/snap';
+import { EditorRulers } from './EditorRulers';
+import { InlineTextEditor } from './InlineTextEditor';
 import { fontFamilies, nearestWeight, WEIGHT_NAMES, type FontFamily } from '@/lib/fonts';
 import { loadFont, registerUploadedFonts } from '@/lib/fonts-client';
 import { useToast } from './Toast';
@@ -39,6 +42,8 @@ import type {
 } from '@/lib/types';
 
 const PX = 3; // canvas pixels per mm at zoom 1
+/** how far inside the page's edge the safe area line runs, in mm: a print shop's cut can wander this much */
+const SAFE_MM = 4;
 const PT_TO_MM = 25.4 / 72;
 const HISTORY_LIMIT = 100;
 /** Quick colour choices for customers (the site palette plus black and white). */
@@ -71,7 +76,7 @@ function ImageNode({
   asset: ImageAsset | undefined;
   draggable: boolean;
   listening: boolean;
-  onSelect?: () => void;
+  onSelect?: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onChange: (patch: Partial<CanvasElement>) => void;
 }) {
   const [img, status] = useImage(uploadUrl(asset));
@@ -96,7 +101,7 @@ function ImageNode({
       onMouseDown={onSelect}
       onTap={onSelect}
       clipFunc={mask ? (ctx) => maskPath(ctx._context, mask, w, h) : undefined}
-      onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
+      // a drag ends in the layer, which also moves the rest of the selection (onLayerDragEnd)
       onTransformEnd={(e) => {
         const n = e.target;
         const nw = n.width() * n.scaleX();
@@ -219,7 +224,19 @@ export default function Editor({ id }: { id: string }) {
   const fieldRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const [doc, setDoc] = useState<CanvasDoc | null>(null);
   const [name, setName] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** the element the side panel shows; `multi` is the rest of a selection of several */
+  const [selectedId, setPrimary] = useState<string | null>(null);
+  const [multi, setMulti] = useState<string[]>([]);
+  const setSelectedId = useCallback((elId: string | null) => {
+    setPrimary(elId);
+    setMulti([]);
+  }, []);
+  /** lines drawn while a dragged element snaps, and the frame of a drag-to-select */
+  const [snapMarks, setSnapMarks] = useState<Mark[]>([]);
+  const [marquee, setMarquee] = useState<Box | null>(null);
+  const [showSafe, setShowSafe] = useState(true);
+  /** the text being written straight on the card */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [library, setLibrary] = useState<{ categories: Category[]; images: ImageAsset[] }>({ categories: [], images: [] });
   const [libCat, setLibCat] = useState<string>('');
   const [zoomOverride, setZoomOverride] = useState<number | null>(null);
@@ -232,6 +249,12 @@ export default function Editor({ id }: { id: string }) {
   const stageRef = useRef<Konva.Stage>(null);
   const trRef = useRef<Konva.Transformer>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  /** the card's content layer (boxes are measured in its coordinates) and the editor's own lines, kept out of every picture */
+  const contentRef = useRef<Konva.Layer>(null);
+  const chromeRef = useRef<Konva.Layer>(null);
+  const dragRef = useRef<{ id: string; start: { x: number; y: number }; others: { node: Konva.Node; x: number; y: number }[]; lines: { x: number[]; y: number[] }; boxes: Box[] } | null>(null);
+  const marqueeStart = useRef<{ x: number; y: number; add: boolean } | null>(null);
+  const spaceDown = useRef(false);
   const lastMerge = useRef<{ key: string; at: number } | null>(null);
   const loadedRef = useRef(false);
 
@@ -307,6 +330,10 @@ export default function Editor({ id }: { id: string }) {
   }, [doc?.page.width_mm, doc?.page.height_mm, !!doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const zoom = zoomOverride ?? fit;
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   // ---- history-aware updates ----------------------------------------------
   // The current doc and the undo/redo stacks live in refs so updates stay free of
@@ -438,27 +465,146 @@ export default function Editor({ id }: { id: string }) {
   const addRect = () => doc && addElement(newRect(doc));
   const addImage = (asset: ImageAsset) => doc && addElement(newImage(doc, asset));
 
+  // ---- selections of several elements (ported from feature/business-ads) -----------------------
+  /** everything selected, the panel's element first */
+  const selIds = useMemo(() => (selectedId ? [selectedId, ...multi.filter((m) => m !== selectedId)] : []), [selectedId, multi]);
+
+  /** the element and the rest of its group: they are selected together */
+  const withGroup = (elId: string) => {
+    const els = docRef.current ? allElements(docRef.current) : [];
+    const g = els.find((e) => e.id === elId)?.group;
+    return g ? els.filter((e) => e.group === g).map((e) => e.id) : [elId];
+  };
+
+  /** A click on an element: it alone (with its group), or added to the selection with Shift. A click on one already selected keeps the selection, so all of it can be dragged. */
+  const selectEl = (elId: string, add: boolean) => {
+    const ids = withGroup(elId);
+    if (add) {
+      const all = ids.every((x) => selIds.includes(x));
+      const next = all ? selIds.filter((x) => !ids.includes(x)) : [...selIds, ...ids.filter((x) => !selIds.includes(x))];
+      setPrimary(next[0] ?? null);
+      setMulti(next.slice(1));
+      return;
+    }
+    if (selIds.includes(elId)) return;
+    setPrimary(elId);
+    setMulti(ids.filter((x) => x !== elId));
+  };
+
+  const selectMany = (ids: string[]) => {
+    setPrimary(ids[0] ?? null);
+    setMulti(ids.slice(1));
+  };
+
+  /** one change to several elements, in their layers, as one undo step */
+  const patchMany = useCallback(
+    (ids: string[], fn: (e: CanvasElement) => Partial<CanvasElement>, mergeKey?: string) => {
+      if (!ids.length) return;
+      const map = (els: CanvasElement[]) => els.map((e) => (ids.includes(e.id) ? ({ ...e, ...fn(e) } as CanvasElement) : e));
+      change((d) => ({ ...d, layers: { ...d.layers, content: map(d.layers.content), overlay: map(d.layers.overlay) } }), mergeKey);
+    },
+    [change],
+  );
+
   const removeSelected = useCallback(() => {
-    if (!selectedId) return;
-    change((d) => removeElement(d, selectedId));
+    if (!selIds.length) return;
+    change((d) => selIds.reduce((acc, x) => removeElement(acc, x), d));
     setSelectedId(null);
-  }, [selectedId, change]);
+  }, [selIds, change, setSelectedId]);
 
   const duplicateSelected = useCallback(() => {
-    if (!found) return;
-    addElement({ ...found.el, id: crypto.randomUUID(), x_mm: found.el.x_mm + 5, y_mm: found.el.y_mm + 5 }, found.layer);
-  }, [found]); // eslint-disable-line react-hooks/exhaustive-deps
+    const d = docRef.current;
+    if (!d || !selIds.length) return;
+    // a copied group is a new group of its own; each copy goes on top of its own layer
+    const groups = new Map<string, string>();
+    const copies: { el: CanvasElement; layer: LayerName }[] = [];
+    for (const x of selIds) {
+      const at = findElement(d, x);
+      if (!at) continue;
+      const g = at.el.group;
+      const group = g ? (groups.get(g) ?? groups.set(g, crypto.randomUUID()).get(g)) : undefined;
+      copies.push({ el: { ...at.el, id: crypto.randomUUID(), x_mm: at.el.x_mm + 5, y_mm: at.el.y_mm + 5, ...(group && { group }) }, layer: at.layer });
+    }
+    change((doc0) => copies.reduce((acc, c) => addTo(acc, c.el, c.layer), doc0));
+    selectMany(copies.map((c) => c.el.id));
+  }, [selIds, change]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const groupSelected = () => {
+    if (selIds.length < 2) return;
+    const g = crypto.randomUUID();
+    patchMany(selIds, () => ({ group: g }));
+  };
+  const ungroupSelected = () => patchMany(selIds, () => ({ group: undefined }));
+
+  /** the boxes of these elements on the page, in canvas pixels, as drawn (a turned one by its outer box) */
+  const boxesOf = (ids: string[]) => {
+    const stage = stageRef.current;
+    const layer = contentRef.current;
+    if (!stage || !layer) return [];
+    return ids.flatMap((i) => {
+      const n = stage.findOne('#' + i);
+      if (!n) return [];
+      const r = n.getClientRect({ relativeTo: layer });
+      return [{ id: i, box: { x: r.x, y: r.y, w: r.width, h: r.height } }];
+    });
+  };
+
+  /** lines up the selection: one element with the page, several with the box around them all */
+  const alignSel = (how: 'right' | 'hcenter' | 'left' | 'top' | 'vmiddle' | 'bottom') => {
+    const items = boxesOf(selIds);
+    const d = docRef.current;
+    if (!items.length || !d) return;
+    const ref = items.length === 1 ? { x: 0, y: 0, w: d.page.width_mm * PX, h: d.page.height_mm * PX } : unionOf(items.map((i) => i.box));
+    const shift = new Map(
+      items.map(({ id: i, box: b }) => {
+        const dx = how === 'left' ? ref.x - b.x : how === 'right' ? ref.x + ref.w - (b.x + b.w) : how === 'hcenter' ? ref.x + ref.w / 2 - (b.x + b.w / 2) : 0;
+        const dy = how === 'top' ? ref.y - b.y : how === 'bottom' ? ref.y + ref.h - (b.y + b.h) : how === 'vmiddle' ? ref.y + ref.h / 2 - (b.y + b.h / 2) : 0;
+        return [i, { dx, dy }];
+      }),
+    );
+    patchMany(selIds, (e) => ({ x_mm: e.x_mm + (shift.get(e.id)?.dx ?? 0) / PX, y_mm: e.y_mm + (shift.get(e.id)?.dy ?? 0) / PX }));
+  };
+
+  /** equal gaps between three or more elements, keeping the first and the last where they are */
+  const distributeSel = (axis: 'x' | 'y') => {
+    const items = boxesOf(selIds);
+    if (items.length < 3) return;
+    const at = (b: Box) => (axis === 'x' ? b.x : b.y);
+    const len = (b: Box) => (axis === 'x' ? b.w : b.h);
+    const sorted = [...items].sort((p, q) => at(p.box) - at(q.box));
+    const first = sorted[0].box;
+    const last = sorted[sorted.length - 1].box;
+    const gap = (at(last) + len(last) - at(first) - sorted.reduce((sum, i) => sum + len(i.box), 0)) / (sorted.length - 1);
+    let run = at(first);
+    const shift = new Map<string, number>();
+    for (const i of sorted) {
+      shift.set(i.id, run - at(i.box));
+      run += len(i.box) + gap;
+    }
+    patchMany(selIds, (e) => (axis === 'x' ? { x_mm: e.x_mm + (shift.get(e.id) ?? 0) / PX } : { y_mm: e.y_mm + (shift.get(e.id) ?? 0) / PX }));
+  };
+
+  /** the author's guides live on the card, so they come back next time (never drawn in a download) */
+  const guides = doc?.guides ?? { x: [], y: [] };
+  const keepGuides = (g: { x: number[]; y: number[] }) => change((d) => ({ ...d, guides: g }));
+
+  const addDivider = (kind: DividerKind) => {
+    const d = docRef.current;
+    if (!d) return;
+    const parts = newDivider(d, kind);
+    change((doc0) => parts.reduce((acc, p) => addTo(acc, p, 'content'), doc0));
+    selectMany(parts.map((x) => x.id));
+  };
 
   const moveZ = (dir: 'front' | 'back' | 'up' | 'down') => selectedId && change((d) => moveInLayer(d, selectedId, dir));
 
   const makeThumb = (): string | undefined => {
     const stage = stageRef.current;
     if (!stage) return undefined;
-    const tr = trRef.current;
-    tr?.visible(false);
+    chromeRef.current?.visible(false);
     stage.draw();
     const url = stage.toDataURL({ pixelRatio: 600 / stage.width(), mimeType: 'image/jpeg', quality: 0.7 });
-    tr?.visible(true);
+    chromeRef.current?.visible(true);
     stage.draw();
     return url;
   };
@@ -495,12 +641,12 @@ export default function Editor({ id }: { id: string }) {
     setExporting(true);
     await new Promise((r) => setTimeout(r, 40)); // let the button show its busy state before the heavy render
     try {
-      const tr = trRef.current;
-      tr?.visible(false);
+      // the selection frame, guides and safe area stay out of the file
+      chromeRef.current?.visible(false);
       stage.draw();
       const ratio = ((doc.page.width_mm / 25.4) * 300) / stage.width();
       const url = stage.toDataURL({ pixelRatio: ratio, mimeType: 'image/png' });
-      tr?.visible(true);
+      chromeRef.current?.visible(true);
       stage.draw();
       const a = document.createElement('a');
       a.href = url;
@@ -519,43 +665,125 @@ export default function Editor({ id }: { id: string }) {
     const tr = trRef.current;
     const stage = stageRef.current;
     if (!tr || !stage) return;
-    const target = canManage ? selectedId : activeField;
-    const node = target ? stage.findOne('#' + target) : null;
-    tr.nodes(node ? [node] : []);
+    // the author's whole selection; a customer's frame marks the field they are on
+    const targets = canManage ? selIds : [activeField].filter((x): x is string => !!x);
+    const nodes = targets.flatMap((t) => {
+      const n = t !== editingId ? stage.findOne('#' + t) : null;
+      return n ? [n] : [];
+    });
+    tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
-  }, [selectedId, activeField, canManage, doc, fontsTick]);
+  }, [selIds, activeField, canManage, doc, fontsTick, editingId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (!canManage && !(mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y'))) return;
-      if (mod && e.key.toLowerCase() === 'z') {
+      const key = e.key.toLowerCase();
+      if (!canManage && !(mod && (key === 'z' || key === 'y'))) return;
+      if (mod && key === 'z') {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
-      } else if (mod && e.key.toLowerCase() === 'y') {
+      } else if (mod && key === 'y') {
         e.preventDefault();
         redo();
-      } else if (mod && e.key.toLowerCase() === 'd') {
+      } else if (mod && key === 'd') {
         e.preventDefault();
         duplicateSelected();
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+      } else if (mod && key === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) ungroupSelected();
+        else groupSelected();
+      } else if (mod && key === 'a') {
+        e.preventDefault();
+        const d = docRef.current;
+        if (d) selectMany(allElements(d).filter((x) => !x.pinned && !x.hidden).map((x) => x.id));
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selIds.length) {
         e.preventDefault();
         removeSelected();
       } else if (e.key === 'Escape') {
         setSelectedId(null);
-      } else if (selected && e.key.startsWith('Arrow')) {
+      } else if (selIds.length && e.key.startsWith('Arrow')) {
         e.preventDefault();
+        // a millimetre a press, ten with Shift; held down, it is one undo step
         const step = e.shiftKey ? 10 : 1;
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
         const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-        patchElement(selected.id, { x_mm: selected.x_mm + dx, y_mm: selected.y_mm + dy }, 'nudge:' + selected.id);
+        patchMany(selIds, (x) => ({ x_mm: x.x_mm + dx, y_mm: x.y_mm + dy }), 'nudge');
       }
     };
+    // Space held down: dragging moves the view instead of the card
+    const onSpace = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || (e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return;
+      spaceDown.current = e.type === 'keydown';
+      if (e.type === 'keydown') e.preventDefault();
+      wrapRef.current?.classList.toggle('panning', spaceDown.current);
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, duplicateSelected, removeSelected, selectedId, selected, patchElement, canManage]);
+    window.addEventListener('keydown', onSpace);
+    window.addEventListener('keyup', onSpace);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onSpace);
+      window.removeEventListener('keyup', onSpace);
+    };
+  }, [undo, redo, duplicateSelected, removeSelected, selIds, patchMany, canManage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- zoom with Ctrl + the wheel or two fingers, and moving the view with Space or the middle button ----
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoomOverride((z) => clamp((z ?? fitRef.current) * Math.exp(-e.deltaY * 0.0015), 0.1, 3));
+    };
+    let pinch: { d: number; z: number } | null = null;
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) pinch = { d: dist(e.touches), z: zoomRef.current };
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      setZoomOverride(clamp((pinch.z * dist(e.touches)) / pinch.d, 0.1, 3));
+    };
+    const onTouchEnd = () => {
+      pinch = null;
+    };
+    let pan: { x: number; y: number; left: number; top: number } | null = null;
+    const onDown = (e: PointerEvent) => {
+      if (!spaceDown.current && e.button !== 1) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pan = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!pan) return;
+      el.scrollLeft = pan.left - (e.clientX - pan.x);
+      el.scrollTop = pan.top - (e.clientY - pan.y);
+    };
+    const onUp = () => {
+      pan = null;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [!!doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- render --------------------------------------------------------------------
   if (loadError) {
@@ -607,7 +835,13 @@ export default function Editor({ id }: { id: string }) {
     if (el.hidden) return null;
     // pinned: the author's own lock; it stays put and clicks go through to what is under it
     const pinned = full && !!el.pinned;
-    const onSelect = full && !pinned ? () => setSelectedId(el.id) : undefined;
+    const onSelect =
+      full && !pinned
+        ? (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+            const ev = e.evt as MouseEvent;
+            selectEl(el.id, !!(ev.shiftKey || ev.ctrlKey || ev.metaKey));
+          }
+        : undefined;
     // customers may drag what its transform lock allows; the server checks it again on save
     const draggable = (full && !pinned) || (!full && el.locks.transform);
     const onChange = (patch: Partial<CanvasElement>) => patchElement(el.id, patch);
@@ -647,7 +881,6 @@ export default function Editor({ id }: { id: string }) {
           listening={!pinned}
           onMouseDown={onSelect}
           onTap={onSelect}
-          onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
           onTransformEnd={(e) => transformEnd(e, true)}
         />
       );
@@ -682,7 +915,10 @@ export default function Editor({ id }: { id: string }) {
       onMouseLeave: (e: Konva.KonvaEventObject<MouseEvent>) => {
         e.target.getStage()!.container().style.cursor = '';
       },
-      onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX }),
+      // writing straight on the card: the author on any text, a customer on a text they may change
+      onDblClick: () => (full || el.locks.content) && setEditingId(el.id),
+      onDblTap: () => (full || el.locks.content) && setEditingId(el.id),
+      opacity: editingId === el.id ? 0 : 1,
       onTransformEnd: (e: Konva.KonvaEventObject<Event>) => transformEnd(e, false),
     };
     if (hasArc(el)) {
@@ -721,6 +957,100 @@ export default function Editor({ id }: { id: string }) {
       />
     );
   };
+
+  // ---- dragging: the selection moves together and snaps (ported from feature/business-ads) ----
+  const cardLayer = (n: Konva.Node) => {
+    const l = n.getLayer();
+    return !!l && l !== chromeRef.current;
+  };
+
+  /** A drag starts: what moves with it (the rest of an author's selection), and what it can snap to. */
+  const onLayerDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const node = e.target;
+    const nodeId = node.id();
+    const stg = stageRef.current;
+    // with several nodes, the Transformer starts a drag on each of the others too: the first one leads
+    if (dragRef.current || !nodeId || !stg || !cardLayer(node)) return;
+    const moving = full && selIds.includes(nodeId) ? selIds : [nodeId];
+    const others = moving
+      .filter((m) => m !== nodeId)
+      .flatMap((m) => {
+        const n = stg.findOne('#' + m);
+        return n ? [{ node: n, x: n.x(), y: n.y() }] : [];
+      });
+    const still = boxesOf(elements.filter((x) => !moving.includes(x.id) && !x.hidden).map((x) => x.id)).map((b) => b.box);
+    dragRef.current = {
+      id: nodeId,
+      start: { x: node.x(), y: node.y() },
+      others,
+      boxes: still,
+      lines: linesOf(still, { w: pageW, h: pageH }, { x: guides.x.map((g) => g * PX), y: guides.y.map((g) => g * PX) }),
+    };
+  };
+
+  /** While dragging: the rest of the selection follows, and the whole of it snaps (Alt lets it move freely). */
+  const onLayerDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const d = dragRef.current;
+    const node = e.target;
+    if (!d || node.id() !== d.id) return;
+    const dx = node.x() - d.start.x;
+    const dy = node.y() - d.start.y;
+    d.others.forEach((o) => o.node.position({ x: o.x + dx, y: o.y + dy }));
+    if (e.evt.altKey) return setSnapMarks([]);
+    const layer = contentRef.current!;
+    const box = unionOf(
+      [node, ...d.others.map((o) => o.node)].map((n) => {
+        const r = n.getClientRect({ relativeTo: layer });
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      }),
+    );
+    const snap = snapBox(box, d.lines, d.boxes, { w: pageW, h: pageH }, 6 / zoom);
+    if (snap.dx || snap.dy) {
+      node.position({ x: node.x() + snap.dx, y: node.y() + snap.dy });
+      d.others.forEach((o) => o.node.position({ x: o.node.x() + snap.dx, y: o.node.y() + snap.dy }));
+    }
+    setSnapMarks(snap.marks);
+  };
+
+  /** A drag ends: every element that moved is saved where it stands, in one undo step. */
+  const onLayerDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setSnapMarks([]);
+    if (!d || e.target.id() !== d.id) return;
+    const at = new Map([[d.id, e.target], ...d.others.map((o) => [o.node.id(), o.node] as const)]);
+    patchMany([...at.keys()], (x) => {
+      const n = at.get(x.id)!;
+      return { x_mm: n.x() / PX, y_mm: n.y() / PX };
+    });
+  };
+
+  const editingEl = (() => {
+    const at = editingId ? findElement(doc, editingId) : null;
+    return at?.el.type === 'text' ? at.el : undefined;
+  })();
+
+  /** six alignment buttons: to the page for one element, to each other for several */
+  const alignButtons = (label: string) => (
+    <div role="group" aria-label={label} className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+      {(
+        [
+          ['right', 'ימין', 'M20 4v16M6 8h10v3H6zM9 13h7v3H9z'],
+          ['hcenter', 'מרכז', 'M12 4v16M6 8h12v3H6zM8 13h8v3H8z'],
+          ['left', 'שמאל', 'M4 4v16M8 8h10v3H8zM8 13h7v3H8z'],
+          ['top', 'למעלה', 'M4 4h16M8 8h3v10H8zM13 8h3v7h-3z'],
+          ['vmiddle', 'אמצע', 'M4 12h16M8 6h3v12H8zM13 8h3v8h-3z'],
+          ['bottom', 'למטה', 'M4 20h16M8 6h3v10H8zM13 9h3v7h-3z'],
+        ] as const
+      ).map(([how, name, d]) => (
+        <button key={how} type="button" className="icon-btn" title={`${label}: ${name}`} aria-label={`${label}: ${name}`} onClick={() => alignSel(how)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <path d={d} />
+          </svg>
+        </button>
+      ))}
+    </div>
+  );
 
   const colorSwatches = (palette: string[], current: string | undefined, label: string, pick: (c: string) => void, key: string) => (
     <div className="swatches" role="group" aria-label={label}>
@@ -933,6 +1263,16 @@ export default function Editor({ id }: { id: string }) {
               </div>
             </div>
             <div>
+              <h2 className="panel-title">קווים מפרידים</h2>
+              <div className="row" style={{ flexWrap: 'wrap' }}>
+                {DIVIDERS.map((d) => (
+                  <button key={d.id} className="btn small" onClick={() => addDivider(d.id)}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
               <h2 className="panel-title">תמונות מהקטגוריות</h2>
               {library.categories.length === 0 ? (
                 <p className="status">
@@ -983,6 +1323,14 @@ export default function Editor({ id }: { id: string }) {
             className={'stage-frame' + (aiBusy ? ' ai-working' : '') + (aiTouched.size ? ' ai-done' : '')}
             style={{ width: pageW * zoom, height: pageH * zoom }}
           >
+            {full && (
+              <EditorRulers
+                widthMm={doc.page.width_mm}
+                heightMm={doc.page.height_mm}
+                scale={PX * zoom}
+                onGuide={(axis, mm) => keepGuides({ ...guides, [axis]: [...guides[axis], mm] })}
+              />
+            )}
             <Stage
               ref={stageRef}
               width={pageW * zoom}
@@ -990,6 +1338,36 @@ export default function Editor({ id }: { id: string }) {
               scaleX={zoom}
               scaleY={zoom}
               onMouseDown={(e) => {
+                if (e.target !== e.target.getStage()) return;
+                setActiveField(null);
+                // an author drags a frame over the page to select what it touches
+                const p = e.target.getStage()!.getPointerPosition();
+                if (full && p) {
+                  marqueeStart.current = { x: p.x / zoom, y: p.y / zoom, add: e.evt.shiftKey };
+                  if (!e.evt.shiftKey) setSelectedId(null);
+                } else {
+                  setSelectedId(null);
+                }
+              }}
+              onMouseMove={(e) => {
+                const st = marqueeStart.current;
+                const p = e.target.getStage()?.getPointerPosition();
+                if (!st || !p) return;
+                const x = p.x / zoom;
+                const y = p.y / zoom;
+                setMarquee({ x: Math.min(x, st.x), y: Math.min(y, st.y), w: Math.abs(x - st.x), h: Math.abs(y - st.y) });
+              }}
+              onMouseUp={() => {
+                const st = marqueeStart.current;
+                marqueeStart.current = null;
+                if (!st || !marquee) return setMarquee(null);
+                const hit = boxesOf(elements.filter((x) => !x.pinned && !x.hidden).map((x) => x.id))
+                  .filter((b) => intersects(b.box, marquee))
+                  .flatMap((b) => withGroup(b.id));
+                selectMany([...new Set([...(st.add ? selIds : []), ...hit])]);
+                setMarquee(null);
+              }}
+              onTap={(e) => {
                 if (e.target === e.target.getStage()) {
                   setSelectedId(null);
                   setActiveField(null);
@@ -1000,9 +1378,58 @@ export default function Editor({ id }: { id: string }) {
               <Layer listening={false}>
                 <BackgroundNode bg={bg} asset={bg.image ? assetById.get(bg.image.asset_id) : undefined} w={pageW} h={pageH} />
               </Layer>
-              <Layer>{doc.layers.content.map(renderElement)}</Layer>
-              <Layer>{doc.layers.overlay.map(renderElement)}</Layer>
-              <Layer>
+              <Layer ref={contentRef} onDragStart={onLayerDragStart} onDragMove={onLayerDragMove} onDragEnd={onLayerDragEnd}>
+                {doc.layers.content.map(renderElement)}
+              </Layer>
+              <Layer onDragStart={onLayerDragStart} onDragMove={onLayerDragMove} onDragEnd={onLayerDragEnd}>
+                {doc.layers.overlay.map(renderElement)}
+              </Layer>
+              {/* the editor's own lines: never in the thumbnail or a download */}
+              <Layer ref={chromeRef}>
+                {full && showSafe && (
+                  <Rect
+                    x={SAFE_MM * PX}
+                    y={SAFE_MM * PX}
+                    width={pageW - SAFE_MM * 2 * PX}
+                    height={pageH - SAFE_MM * 2 * PX}
+                    stroke="#E0457B"
+                    strokeWidth={1 / zoom}
+                    dash={[6 / zoom, 4 / zoom]}
+                    listening={false}
+                  />
+                )}
+                {full &&
+                  (['x', 'y'] as const).flatMap((axis) =>
+                    guides[axis].map((mm, i) => (
+                      <Line
+                        key={axis + i}
+                        points={axis === 'x' ? [mm * PX, 0, mm * PX, pageH] : [0, mm * PX, pageW, mm * PX]}
+                        stroke="#1F9BD1"
+                        strokeWidth={1 / zoom}
+                        hitStrokeWidth={8 / zoom}
+                        draggable
+                        dragBoundFunc={function (this: Konva.Node, pos) {
+                          return axis === 'x' ? { x: pos.x, y: this.getAbsolutePosition().y } : { x: this.getAbsolutePosition().x, y: pos.y };
+                        }}
+                        onMouseEnter={(e) => (e.target.getStage()!.container().style.cursor = axis === 'x' ? 'ew-resize' : 'ns-resize')}
+                        onMouseLeave={(e) => (e.target.getStage()!.container().style.cursor = '')}
+                        onDragEnd={(e) => {
+                          // dragged off the page, the guide goes
+                          const moved = mm + (axis === 'x' ? e.target.x() : e.target.y()) / PX;
+                          e.target.position({ x: 0, y: 0 });
+                          const rest = guides[axis].filter((_, j) => j !== i);
+                          const max = axis === 'x' ? doc.page.width_mm : doc.page.height_mm;
+                          keepGuides({ ...guides, [axis]: moved > 0 && moved < max ? [...rest, Math.round(moved * 2) / 2] : rest });
+                        }}
+                      />
+                    )),
+                  )}
+                {snapMarks.map((m, i) => (
+                  <Line key={'snap' + i} points={[m.x1, m.y1, m.x2, m.y2]} stroke="#E0457B" strokeWidth={1 / zoom} listening={false} />
+                ))}
+                {marquee && (
+                  <Rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="rgba(31,155,209,0.08)" stroke="#1F9BD1" strokeWidth={1 / zoom} listening={false} />
+                )}
                 <Transformer
                   ref={trRef}
                   resizeEnabled={canManage}
@@ -1021,6 +1448,24 @@ export default function Editor({ id }: { id: string }) {
                 />
               </Layer>
             </Stage>
+            {editingEl && (
+              <InlineTextEditor
+                el={editingEl}
+                box={{
+                  x: editingEl.x_mm * PX * zoom,
+                  y: editingEl.y_mm * PX * zoom,
+                  w: (hasArc(editingEl) ? arcBox(editingEl, PX).width : editingEl.w_mm * PX) * zoom,
+                  h: (stageRef.current?.findOne('#' + editingEl.id)?.height() ?? 40) * zoom,
+                  rotation: editingEl.rotation,
+                }}
+                fontSize={textLook(editingEl, PX).fontSize * zoom}
+                lineHeight={editingEl.font.line_height ?? LINE_HEIGHT}
+                onDone={(text) => {
+                  if (text !== null && text !== editingEl.text) patchElement(editingEl.id, { text }, 'text:' + editingEl.id);
+                  setEditingId(null);
+                }}
+              />
+            )}
             {aiBusy && (
               <div className="ai-veil" aria-hidden="true">
                 <span className="ai-scan" />
@@ -1057,6 +1502,12 @@ export default function Editor({ id }: { id: string }) {
                     ))}
                   </select>
                 </label>
+
+                <label className="row" style={{ gap: 8 }}>
+                  <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} />
+                  <span>קו אזור בטוח להדפסה ({SAFE_MM} מ״מ מהקצה). לא מופיע בהורדה.</span>
+                </label>
+                <p className="status">גוררים מהסרגלים כדי להוסיף קו עזר, וגוררים אותו אל מחוץ לדף כדי להסיר. Ctrl עם הגלגלת מגדיל, רווח עם גרירה מזיז את התצוגה.</p>
 
                 <h2 className="panel-title">רקע</h2>
                 <label className="field">
@@ -1124,11 +1575,42 @@ export default function Editor({ id }: { id: string }) {
                 </LockInspector>
                 <p className="status">בחרו אלמנט על הדף כדי לערוך אותו. מקשי החיצים מזיזים, Delete מוחק, Ctrl+Z מבטל.</p>
               </>
+            ) : selIds.length > 1 ? (
+              <>
+                <h2 className="panel-title">{selIds.length} אלמנטים נבחרו</h2>
+                {alignButtons('יישור זה לזה')}
+                <div className="row" style={{ flexWrap: 'wrap' }}>
+                  <button className="btn small" disabled={selIds.length < 3} onClick={() => distributeSel('x')}>
+                    רווחים שווים לרוחב
+                  </button>
+                  <button className="btn small" disabled={selIds.length < 3} onClick={() => distributeSel('y')}>
+                    רווחים שווים לגובה
+                  </button>
+                </div>
+                <div className="row" style={{ flexWrap: 'wrap' }}>
+                  {selIds.some((x) => findElement(doc, x)?.el.group) ? (
+                    <button className="btn small" onClick={ungroupSelected}>
+                      פירוק קבוצה (Ctrl+Shift+G)
+                    </button>
+                  ) : null}
+                  <button className="btn small" onClick={groupSelected}>
+                    קיבוץ (Ctrl+G)
+                  </button>
+                  <button className="btn small" onClick={duplicateSelected}>
+                    שכפול
+                  </button>
+                  <button className="btn small danger" onClick={removeSelected}>
+                    מחיקה
+                  </button>
+                </div>
+                <p className="status">גוררים אחד מהם כדי להזיז את כולם. Shift עם לחיצה מוסיף או מוריד אלמנט מהבחירה.</p>
+              </>
             ) : (
               <>
                 <h2 className="panel-title">
                   {selected.type === 'text' ? 'טקסט' : selected.type === 'image' ? 'תמונה' : 'מלבן'} · {LAYER_LABEL[found!.layer]}
                 </h2>
+                {alignButtons('יישור לדף')}
 
                 {textEl && (
                   <>
