@@ -22,4 +22,8 @@ seed scripts (`npm run seed:*`).
 The editor tools (snapping, rulers, layers, arc text, effects, …) are ported from Vitol's branch
 itself, where they run: `git show origin/feature/business-ads:src/components/Editor.tsx`.
 
+Already ported and moved back to `src/` (editor port, step 3): `lib/nodeStyle.ts`, `lib/arcText.ts`,
+`lib/historyLabel.ts`, the dividers in `lib/elements.ts`, `components/InlineTextEditor.tsx`,
+`components/LayersPanel.tsx` and `components/TextStylesPicker.tsx` (styles now on the server).
+
 Decisions for the port (2026-11-15, Zvi and Vitol): see the decisions board on page 3 of the mockup canvas.
