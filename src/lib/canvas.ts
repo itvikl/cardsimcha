@@ -1,4 +1,4 @@
-import type { BackgroundLayer, CanvasDoc, CanvasElement, Field, Fill, LayerName, Locks } from './types';
+import type { BackgroundLayer, CanvasDoc, CanvasElement, Field, Fill, LayerName, Locks, WordingPart } from './types';
 
 export const PAGE_PRESETS = [
   { id: 'a4', label: 'A4 לאורך', width_mm: 210, height_mm: 297 },
@@ -100,22 +100,80 @@ function field(v: unknown): Field | undefined | null {
   const f = v as Field | null;
   if (!f || typeof f.label !== 'string' || f.label.length > 60) return null;
   if (f.variable !== undefined && (typeof f.variable !== 'string' || !/^[a-z_][a-z0-9_]{0,40}$/.test(f.variable))) return null;
-  return f.variable ? { label: f.label, variable: f.variable } : { label: f.label };
+  if (f.detail !== undefined && !isBool(f.detail)) return null;
+  return { label: f.label, ...(f.variable && { variable: f.variable }), ...(f.detail && { detail: true }) };
 }
 
 function fill(v: unknown): Fill | null {
-  const f = v as Fill | null;
-  return f && f.type === 'solid' && isColor(f.color) ? { type: 'solid', color: f.color } : null;
+  const f = v as Record<string, unknown> | null;
+  if (!f || !isColor(f.color)) return null;
+  if (f.type === 'solid') return { type: 'solid', color: f.color };
+  if (f.type === 'linear' && isColor(f.color2) && isNum(f.angle, -360, 360)) return { type: 'linear', color: f.color, color2: f.color2, angle: f.angle };
+  return null;
 }
 
 const opt = <T,>(v: T | undefined) => (v === undefined ? {} : v);
+const PARTS = ['header', 'body', 'footer'];
+const MASKS = ['circle', 'rounded', 'arch'];
+
+/**
+ * The optional properties every element type may carry. `bad` is set when one is present but invalid,
+ * so the whole doc is refused rather than quietly losing it.
+ */
+function common(e: Record<string, unknown>) {
+  const out: { group?: string; hidden?: true; pinned?: true; part?: WordingPart } = {};
+  const bad =
+    (e.group !== undefined && !isId(e.group)) ||
+    (e.hidden !== undefined && !isBool(e.hidden)) ||
+    (e.pinned !== undefined && !isBool(e.pinned)) ||
+    (e.part !== undefined && !PARTS.includes(e.part as string));
+  if (!bad) {
+    if (e.group !== undefined) out.group = e.group as string;
+    if (e.hidden) out.hidden = true;
+    if (e.pinned) out.pinned = true;
+    if (e.part !== undefined) out.part = e.part as WordingPart;
+  }
+  return { out, bad };
+}
+
+/** the text-only extras (arc, fit, effects); null when one is invalid */
+function textExtras(e: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  if (e.arc !== undefined) {
+    if (!isNum(e.arc, -100, 100)) return null;
+    if (e.arc !== 0) out.arc = e.arc;
+  }
+  if (e.fit !== undefined) {
+    if (e.fit !== 'shrink') return null;
+    out.fit = 'shrink';
+  }
+  if (e.shadow !== undefined) {
+    if (!isBool(e.shadow)) return null;
+    if (e.shadow) out.shadow = true;
+  }
+  if (e.stroke !== undefined) {
+    const s = e.stroke as Record<string, unknown> | null;
+    if (!s || !isColor(s.color) || !isNum(s.width_mm, 0.05, 5)) return null;
+    out.stroke = { color: s.color, width_mm: s.width_mm };
+  }
+  if (e.foil !== undefined) {
+    if (e.foil !== 'gold' && e.foil !== 'silver') return null;
+    out.foil = e.foil;
+  }
+  if (e.design_color !== undefined) {
+    if (!isColor(e.design_color)) return null;
+    out.design_color = e.design_color;
+  }
+  return out;
+}
 
 function element(e: Record<string, unknown> | null): CanvasElement | null {
   if (!e || !isId(e.id) || !isNum(e.x_mm) || !isNum(e.y_mm) || !isNum(e.rotation, -360, 360)) return null;
   const l = locks(e.locks);
   const f = field(e.field);
-  if (!l || f === null) return null;
-  const base = { id: e.id, x_mm: e.x_mm, y_mm: e.y_mm, rotation: e.rotation, locks: l, ...(f && { field: f }) };
+  const c = common(e);
+  if (!l || f === null || c.bad) return null;
+  const base = { id: e.id, x_mm: e.x_mm, y_mm: e.y_mm, rotation: e.rotation, locks: l, ...(f && { field: f }), ...c.out };
 
   if (e.type === 'text') {
     const font = e.font as Record<string, unknown> | null;
@@ -125,8 +183,11 @@ function element(e: Record<string, unknown> | null): CanvasElement | null {
     if (!isNum(font.weight, 100, 900) || font.weight % 100 !== 0 || !isNum(font.size_pt, 4, 400)) return null;
     if (font.line_height !== undefined && !isNum(font.line_height, 0.5, 3)) return null;
     if (font.letter_spacing !== undefined && !isNum(font.letter_spacing, -20, 100)) return null;
+    const extras = textExtras(e);
+    if (!extras) return null;
     return {
       ...base,
+      ...extras,
       type: 'text',
       w_mm: e.w_mm,
       text: e.text,
@@ -145,6 +206,13 @@ function element(e: Record<string, unknown> | null): CanvasElement | null {
     if (!isNum(e.w_mm, 1, 5000) || !isNum(e.h_mm, 1, 5000) || !isId(e.asset_id)) return null;
     if (e.swap_collection_id !== undefined && !isId(e.swap_collection_id)) return null;
     if (e.colorOverride !== undefined && !isColor(e.colorOverride)) return null;
+    if (e.mask !== undefined && !MASKS.includes(e.mask as string)) return null;
+    let crop: { zoom: number; x: number; y: number } | undefined;
+    if (e.crop !== undefined) {
+      const k = e.crop as Record<string, unknown> | null;
+      if (!k || !isNum(k.zoom, 1, 10) || !isNum(k.x, -1, 1) || !isNum(k.y, -1, 1)) return null;
+      crop = { zoom: k.zoom, x: k.x, y: k.y };
+    }
     return {
       ...base,
       type: 'image',
@@ -153,12 +221,25 @@ function element(e: Record<string, unknown> | null): CanvasElement | null {
       asset_id: e.asset_id,
       ...(e.swap_collection_id !== undefined && { swap_collection_id: e.swap_collection_id as string }),
       ...(e.colorOverride !== undefined && { colorOverride: e.colorOverride as string }),
+      ...(e.mask !== undefined && { mask: e.mask as 'circle' | 'rounded' | 'arch' }),
+      ...(crop && { crop }),
     };
   }
   if (e.type === 'shape') {
     const fl = fill(e.fill);
     if (e.shape !== 'rect' || !isNum(e.w_mm, 1, 5000) || !isNum(e.h_mm, 1, 5000) || !fl) return null;
-    return { ...base, type: 'shape', shape: 'rect', w_mm: e.w_mm, h_mm: e.h_mm, fill: fl };
+    if (e.corner_radius_mm !== undefined && !isNum(e.corner_radius_mm, 0, 2500)) return null;
+    if (e.opacity !== undefined && !isNum(e.opacity, 0, 1)) return null;
+    return {
+      ...base,
+      type: 'shape',
+      shape: 'rect',
+      w_mm: e.w_mm,
+      h_mm: e.h_mm,
+      fill: fl,
+      ...(e.corner_radius_mm ? { corner_radius_mm: e.corner_radius_mm as number } : {}),
+      ...(e.opacity !== undefined && e.opacity !== 1 && { opacity: e.opacity as number }),
+    };
   }
   return null;
 }
@@ -189,7 +270,7 @@ function background(v: unknown): BackgroundLayer | null {
 
 /** Returns a sanitized v2 doc (unknown properties dropped), or null when the input is not valid. */
 export function validateDoc(input: unknown): CanvasDoc | null {
-  const d = input as { schema_version?: unknown; page?: Record<string, unknown>; layers?: Record<string, unknown> } | null;
+  const d = input as { schema_version?: unknown; page?: Record<string, unknown>; layers?: Record<string, unknown>; guides?: unknown } | null;
   if (!d || d.schema_version !== 2 || !d.page || !d.layers) return null;
   const { width_mm, height_mm } = d.page;
   if (!isNum(width_mm, 20, 2000) || !isNum(height_mm, 20, 2000)) return null;
@@ -212,7 +293,20 @@ export function validateDoc(input: unknown): CanvasDoc | null {
   const c = layer(content);
   const o = c && layer(overlay);
   if (!c || !o) return null;
-  return { schema_version: 2, page: { width_mm, height_mm }, layers: { background: bg, content: c, overlay: o } };
+  const g = guides(d.guides, width_mm, height_mm);
+  if (g === null) return null;
+  return { schema_version: 2, page: { width_mm, height_mm }, layers: { background: bg, content: c, overlay: o }, ...(g && { guides: g }) };
+}
+
+const MAX_GUIDES = 50;
+
+/** undefined: none (or both lists empty); null: invalid */
+function guides(v: unknown, W: number, H: number): { x: number[]; y: number[] } | undefined | null {
+  if (v === undefined) return undefined;
+  const g = v as { x?: unknown; y?: unknown } | null;
+  if (!g || !Array.isArray(g.x) || !Array.isArray(g.y) || g.x.length > MAX_GUIDES || g.y.length > MAX_GUIDES) return null;
+  if (!g.x.every((n) => isNum(n, 0, W)) || !g.y.every((n) => isNum(n, 0, H))) return null;
+  return g.x.length || g.y.length ? { x: [...(g.x as number[])], y: [...(g.y as number[])] } : undefined;
 }
 
 // ---- edits by actor (design doc §4.3) ---------------------------------------------------------

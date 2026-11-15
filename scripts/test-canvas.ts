@@ -176,4 +176,111 @@ test('emptyDoc is valid', () => {
   assert.ok(validateDoc(emptyDoc(148, 210)));
 });
 
+// ---- the editor-tool fields (editor port, step 2) ----
+
+const toolDoc = (): CanvasDoc => {
+  const d = clone(doc);
+  const t = text(d, 'groom');
+  Object.assign(t, {
+    arc: 40, fit: 'shrink', shadow: true, stroke: { color: '#FFFFFF', width_mm: 0.3 }, foil: 'gold', design_color: '#1F3A2E',
+    group: 'g1', part: 'header', field: { label: 'שם החתן', detail: true },
+  });
+  t.font = { ...t.font, line_height: 1.4, letter_spacing: 2 };
+  const box = findElement(d, 'box')!.el;
+  Object.assign(box, { fill: { type: 'linear', color: '#14342C', color2: '#2F5D46', angle: 90 }, corner_radius_mm: 4, opacity: 0.6, hidden: true, pinned: true });
+  d.layers.overlay.push({ id: 'pic', type: 'image', x_mm: 10, y_mm: 10, w_mm: 30, h_mm: 30, rotation: 0, asset_id: 'a-bg1', locks: LOCKED, mask: 'circle', crop: { zoom: 1.5, x: 0.2, y: -0.4 } });
+  d.layers.background.fill = { type: 'linear', color: '#FBF4E4', color2: '#EAD8B6', angle: 135 };
+  d.guides = { x: [74], y: [10, 200] };
+  return d;
+};
+
+test('validateDoc: keeps every editor-tool field as it is', () => {
+  const d = toolDoc();
+  assert.deepEqual(validateDoc(d), d);
+});
+
+test('validateDoc: a bad editor-tool value refuses the whole doc', () => {
+  const bad: [string, (d: CanvasDoc) => void][] = [
+    ['arc past 100', (d) => Object.assign(text(d, 'groom'), { arc: 140 })],
+    ['unknown foil', (d) => Object.assign(text(d, 'groom'), { foil: 'bronze' })],
+    ['stroke without colour', (d) => Object.assign(text(d, 'groom'), { stroke: { width_mm: 1 } })],
+    ['unknown part', (d) => Object.assign(text(d, 'groom'), { part: 'middle' })],
+    ['gradient without a second colour', (d) => Object.assign(findElement(d, 'box')!.el, { fill: { type: 'linear', color: '#000000', angle: 0 } })],
+    ['opacity above 1', (d) => Object.assign(findElement(d, 'box')!.el, { opacity: 2 })],
+    ['crop off the picture', (d) => Object.assign(findElement(d, 'pic')!.el, { crop: { zoom: 1, x: 3, y: 0 } })],
+    ['unknown mask', (d) => Object.assign(findElement(d, 'pic')!.el, { mask: 'star' })],
+    ['guide off the page', (d) => (d.guides = { x: [500], y: [] })],
+  ];
+  for (const [name, spoil] of bad) {
+    const d = toolDoc();
+    spoil(d);
+    assert.equal(validateDoc(d), null, name);
+  }
+});
+
+test('validateDoc: defaults are dropped (arc 0, opacity 1, false flags, empty guides)', () => {
+  const d = toolDoc();
+  Object.assign(text(d, 'groom'), { arc: 0, shadow: false });
+  Object.assign(findElement(d, 'box')!.el, { opacity: 1, hidden: false });
+  d.guides = { x: [], y: [] };
+  const out = validateDoc(d)!;
+  assert.equal(text(out, 'groom').arc, undefined);
+  assert.equal(text(out, 'groom').shadow, undefined);
+  assert.equal((findElement(out, 'box')!.el as { opacity?: number }).opacity, undefined);
+  assert.equal(findElement(out, 'box')!.el.hidden, undefined);
+  assert.equal(out.guides, undefined);
+});
+
+test('customer: cannot change the author-only fields, even on a field they may edit', () => {
+  const d = toolDoc();
+  const sent = clone(d);
+  Object.assign(text(sent, 'groom'), { arc: -80, foil: 'silver', part: 'footer', group: 'mine', hidden: true, text: 'נועם' });
+  sent.guides = { x: [1], y: [1] };
+  const out = applyEdits(d, sent, 'customer', assets)!;
+  const g = text(out, 'groom');
+  assert.equal(g.text, 'נועם');
+  assert.equal(g.arc, 40);
+  assert.equal(g.foil, 'gold');
+  assert.equal(g.part, 'header');
+  assert.equal(g.group, 'g1');
+  assert.equal(g.hidden, undefined);
+  assert.deepEqual(out.guides, { x: [74], y: [10, 200] });
+});
+
+test('migrateV1: the business-ads tool fields map onto v2', () => {
+  const src: CanvasDocV1 = {
+    schema_version: 1,
+    page: { width_mm: 148, height_mm: 210, background: '#FBF4E4', background2: '#EAD8B6', backgroundAngle: 135 },
+    elements: [
+      {
+        id: 't', type: 'text', x_mm: 10, y_mm: 20, w_mm: 120, rotation: 0, z: 1, text: 'בשעה טובה', align: 'center', editable: true, label: 'שמות', detail: true,
+        font: { family: 'Heebo', weight: 700, size_pt: 20, color: '#7A5A1E' },
+        arc: 50, letterSpacing: 3, lineHeight: 1.3, fit: 'shrink', shadow: true, stroke: { color: '#FFFFFF', width_mm: 0.2 }, foil: 'gold', designColor: '#7A5A1E', group: 'g', locked: true,
+      },
+      { id: 'r', type: 'rect', x_mm: 20, y_mm: 100, w_mm: 50, h_mm: 20, rotation: 0, z: 2, fill: '#14342C', fill2: '#2F5D46', angle: 90, cornerRadius_mm: 3, opacity: 0.5, hidden: true },
+      { id: 'p', type: 'image', x_mm: 30, y_mm: 140, w_mm: 30, h_mm: 30, rotation: 0, z: 3, asset_id: 'a-bg1', mask: 'arch', crop: { zoom: 2, x: 0, y: 0.5 } },
+    ],
+  };
+  const out = migrateV1(src)!;
+  assert.deepEqual(out.layers.background.fill, { type: 'linear', color: '#FBF4E4', color2: '#EAD8B6', angle: 135 });
+  const t = text(out, 't');
+  assert.deepEqual(t.font, { family: 'Heebo', weight: 700, size_pt: 20, color: '#7A5A1E', line_height: 1.3, letter_spacing: 3 });
+  assert.deepEqual(t.field, { label: 'שמות', detail: true });
+  assert.equal(t.arc, 50);
+  assert.equal(t.fit, 'shrink');
+  assert.equal(t.shadow, true);
+  assert.equal(t.foil, 'gold');
+  assert.equal(t.design_color, '#7A5A1E');
+  assert.equal(t.group, 'g');
+  assert.equal(t.pinned, true);
+  const r = findElement(out, 'r')!.el as { fill: unknown; corner_radius_mm?: number; opacity?: number; hidden?: boolean };
+  assert.deepEqual(r.fill, { type: 'linear', color: '#14342C', color2: '#2F5D46', angle: 90 });
+  assert.equal(r.corner_radius_mm, 3);
+  assert.equal(r.opacity, 0.5);
+  assert.equal(r.hidden, true);
+  const p = findElement(out, 'p')!.el as ImageElement;
+  assert.equal(p.mask, 'arch');
+  assert.deepEqual(p.crop, { zoom: 2, x: 0, y: 0.5 });
+});
+
 console.log(`\n${n} passed`);
