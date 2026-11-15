@@ -227,7 +227,8 @@ function element(e: Record<string, unknown> | null): CanvasElement | null {
   }
   if (e.type === 'shape') {
     const fl = fill(e.fill);
-    if (e.shape !== 'rect' || !isNum(e.w_mm, 1, 5000) || !isNum(e.h_mm, 1, 5000) || !fl) return null;
+    // a divider's line is thinner than a millimetre
+    if (e.shape !== 'rect' || !isNum(e.w_mm, 0.1, 5000) || !isNum(e.h_mm, 0.1, 5000) || !fl) return null;
     if (e.corner_radius_mm !== undefined && !isNum(e.corner_radius_mm, 0, 2500)) return null;
     if (e.opacity !== undefined && !isNum(e.opacity, 0, 1)) return null;
     return {

@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { applyEdits, emptyDoc, FIELD_LOCKS, findElement, LOCKED, moveInLayer, validateDoc } from '../src/lib/canvas';
 import { migrateV1, toV2, type CanvasDocV1 } from '../src/lib/canvas-v1';
+import { DIVIDERS, newDivider } from '../src/lib/elements';
 import type { CanvasDoc, ImageElement, TextElement } from '../src/lib/types';
 
 let n = 0;
@@ -245,6 +246,14 @@ test('customer: cannot change the author-only fields, even on a field they may e
   assert.equal(g.group, 'g1');
   assert.equal(g.hidden, undefined);
   assert.deepEqual(out.guides, { x: [74], y: [10, 200] });
+});
+
+test('validateDoc: every divider kind is valid (their lines are thinner than 1 mm)', () => {
+  for (const kind of DIVIDERS) {
+    const d = emptyDoc(148, 210);
+    d.layers.content.push(...newDivider(d, kind.id));
+    assert.ok(validateDoc(d), kind.id);
+  }
 });
 
 test('migrateV1: the business-ads tool fields map onto v2', () => {

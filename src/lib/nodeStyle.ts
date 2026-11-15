@@ -28,7 +28,8 @@ export function fittedSize(e: TextElement, px: number): number {
   const ctx = measure();
   if (!ctx) return e.font.size_pt;
   const lines = e.text.split('\n');
-  const box = e.w_mm * px;
+  // a little short of the box: shrunk to its exact width, rounding and the outline made Konva wrap the line anyway
+  const box = e.w_mm * px * 0.97;
   let size = e.font.size_pt;
   // width grows with the size, so two rounds land close enough; letter spacing doesn't scale, hence the third
   for (let round = 0; round < 3; round++) {
