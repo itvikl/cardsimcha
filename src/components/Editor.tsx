@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Text, Image as KImage, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Text, Shape, Group, Image as KImage, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import type Konva from 'konva';
 import {
@@ -18,6 +18,8 @@ import {
   updateElement,
 } from '@/lib/canvas';
 import { newImage, newRect, newText } from '@/lib/elements';
+import { arcBox, drawArc, hasArc } from '@/lib/arcText';
+import { cropOf, fillLook, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
 import { fontFamilies, nearestWeight, WEIGHT_NAMES, type FontFamily } from '@/lib/fonts';
 import { loadFont, registerUploadedFonts } from '@/lib/fonts-client';
 import { useToast } from './Toast';
@@ -56,52 +58,63 @@ const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 const fontStyle = (w: number) => (w === 400 ? 'normal' : String(w));
 const uploadUrl = (a: ImageAsset | undefined) => (a ? `/api/uploads/${a.file}` : '');
 
+/** A picture: drawn through its mask, showing its crop. The group carries the id, place and size. */
 function ImageNode({
   el,
   asset,
   draggable,
+  listening,
   onSelect,
   onChange,
 }: {
   el: ImageElement;
   asset: ImageAsset | undefined;
   draggable: boolean;
+  listening: boolean;
   onSelect?: () => void;
   onChange: (patch: Partial<CanvasElement>) => void;
 }) {
   const [img, status] = useImage(uploadUrl(asset));
-  const common = {
-    id: el.id,
-    x: el.x_mm * PX,
-    y: el.y_mm * PX,
-    width: el.w_mm * PX,
-    height: el.h_mm * PX,
-    rotation: el.rotation,
-    draggable,
-    onMouseDown: onSelect,
-    onTap: onSelect,
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX }),
-    onTransformEnd: (e: Konva.KonvaEventObject<Event>) => {
-      const n = e.target;
-      const w = n.width() * n.scaleX();
-      const h = n.height() * n.scaleY();
-      n.scaleX(1);
-      n.scaleY(1);
-      onChange({ x_mm: n.x() / PX, y_mm: n.y() / PX, w_mm: w / PX, h_mm: h / PX, rotation: n.rotation() });
-    },
-  };
-  if (el.colorOverride) return <Rect {...common} fill={el.colorOverride} />;
-  if (!asset || status === 'failed') {
-    return <Rect {...common} fill="#f0e6e4" stroke="#a33a2e" strokeWidth={2} dash={[10, 6]} />;
-  }
-  if (!img) return <Rect {...common} fill="rgba(0,0,0,0)" listening={false} />;
-  return <KImage {...common} image={img} />;
+  const w = el.w_mm * PX;
+  const h = el.h_mm * PX;
+  let face: React.ReactNode;
+  if (el.colorOverride) face = <Rect width={w} height={h} fill={el.colorOverride} />;
+  else if (!asset || status === 'failed') face = <Rect width={w} height={h} fill="#f0e6e4" stroke="#a33a2e" strokeWidth={2} dash={[10, 6]} />;
+  else if (!img) face = <Rect width={w} height={h} fill="rgba(0,0,0,0)" />;
+  else face = <KImage width={w} height={h} image={img} crop={cropOf(el, img.naturalWidth, img.naturalHeight)} />;
+  const mask = el.mask;
+  return (
+    <Group
+      id={el.id}
+      x={el.x_mm * PX}
+      y={el.y_mm * PX}
+      width={w}
+      height={h}
+      rotation={el.rotation}
+      draggable={draggable}
+      listening={listening}
+      onMouseDown={onSelect}
+      onTap={onSelect}
+      clipFunc={mask ? (ctx) => maskPath(ctx._context, mask, w, h) : undefined}
+      onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
+      onTransformEnd={(e) => {
+        const n = e.target;
+        const nw = n.width() * n.scaleX();
+        const nh = n.height() * n.scaleY();
+        n.scaleX(1);
+        n.scaleY(1);
+        onChange({ x_mm: n.x() / PX, y_mm: n.y() / PX, w_mm: nw / PX, h_mm: nh / PX, rotation: n.rotation() });
+      }}
+    >
+      {face}
+    </Group>
+  );
 }
 
-/** The background layer: its fill, and its image filling the page (cover or contain). Never takes clicks. */
+/** The background layer: its fill (flat or gradient), and its image filling the page (cover or contain). Never takes clicks. */
 function BackgroundNode({ bg, asset, w, h }: { bg: BackgroundLayer; asset: ImageAsset | undefined; w: number; h: number }) {
   const [img] = useImage(bg.image && !bg.image.colorOverride ? uploadUrl(asset) : '');
-  const fill = <Rect x={0} y={0} width={w} height={h} fill={bg.fill.color} />;
+  const fill = <Rect x={0} y={0} width={w} height={h} {...fillLook(bg.fill, w, h)} />;
   if (!bg.image) return fill;
   if (bg.image.colorOverride) return <Rect x={0} y={0} width={w} height={h} fill={bg.image.colorOverride} />;
   if (!img) return fill;
@@ -590,9 +603,13 @@ export default function Editor({ id }: { id: string }) {
 
   /** one card element on its Konva layer */
   const renderElement = (el: CanvasElement) => {
-    const onSelect = full ? () => setSelectedId(el.id) : undefined;
+    // hidden: left out of the card, its previews and downloads (the layers panel still lists it)
+    if (el.hidden) return null;
+    // pinned: the author's own lock; it stays put and clicks go through to what is under it
+    const pinned = full && !!el.pinned;
+    const onSelect = full && !pinned ? () => setSelectedId(el.id) : undefined;
     // customers may drag what its transform lock allows; the server checks it again on save
-    const draggable = full || el.locks.transform;
+    const draggable = (full && !pinned) || (!full && el.locks.transform);
     const onChange = (patch: Partial<CanvasElement>) => patchElement(el.id, patch);
     const transformEnd = (e: Konva.KonvaEventObject<Event>, withHeight: boolean) => {
       const n = e.target;
@@ -603,7 +620,17 @@ export default function Editor({ id }: { id: string }) {
       onChange({ x_mm: n.x() / PX, y_mm: n.y() / PX, w_mm: w / PX, ...(withHeight && { h_mm: h / PX }), rotation: n.rotation() });
     };
     if (el.type === 'image') {
-      return <ImageNode key={el.id} el={el} asset={assetById.get(el.asset_id)} draggable={draggable} onSelect={onSelect} onChange={onChange} />;
+      return (
+        <ImageNode
+          key={el.id}
+          el={el}
+          asset={assetById.get(el.asset_id)}
+          draggable={draggable}
+          listening={!pinned}
+          onSelect={onSelect}
+          onChange={onChange}
+        />
+      );
     }
     if (el.type === 'shape') {
       return (
@@ -615,8 +642,9 @@ export default function Editor({ id }: { id: string }) {
           width={el.w_mm * PX}
           height={el.h_mm * PX}
           rotation={el.rotation}
-          fill={el.fill.color}
+          {...shapeLook(el, PX)}
           draggable={draggable}
+          listening={!pinned}
           onMouseDown={onSelect}
           onTap={onSelect}
           onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
@@ -629,43 +657,67 @@ export default function Editor({ id }: { id: string }) {
       setActiveField(el.id);
       fieldRefs.current[el.id]?.focus({ preventScroll: false });
     };
+    // what a text takes the same, straight or on an arc
+    const textNode = {
+      id: el.id,
+      x: el.x_mm * PX,
+      y: el.y_mm * PX,
+      rotation: el.rotation,
+      draggable,
+      listening: !pinned,
+      dragBoundFunc: function (this: Konva.Node, pos: Konva.Vector2d) {
+        // keep the text box inside the page while dragging (pos is in screen pixels)
+        const w = this.width() * zoom;
+        const h = this.height() * zoom;
+        return {
+          x: clamp(pos.x, 0, Math.max(0, pageW * zoom - w)),
+          y: clamp(pos.y, 0, Math.max(0, pageH * zoom - h)),
+        };
+      },
+      onMouseDown: onSelect ?? focusField,
+      onTap: onSelect ?? focusField,
+      onMouseEnter: (e: Konva.KonvaEventObject<MouseEvent>) => {
+        if (draggable) e.target.getStage()!.container().style.cursor = 'move';
+      },
+      onMouseLeave: (e: Konva.KonvaEventObject<MouseEvent>) => {
+        e.target.getStage()!.container().style.cursor = '';
+      },
+      onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX }),
+      onTransformEnd: (e: Konva.KonvaEventObject<Event>) => transformEnd(e, false),
+    };
+    if (hasArc(el)) {
+      const box = arcBox(el, PX);
+      return (
+        <Shape
+          key={`${el.id}-${fontsTick}`}
+          {...textNode}
+          width={box.width}
+          height={box.height}
+          sceneFunc={(ctx) => drawArc(ctx._context, el, PX)}
+          // the whole box takes clicks, not only the letters
+          hitFunc={(ctx, shape) => {
+            ctx.beginPath();
+            ctx.rect(0, 0, shape.width(), shape.height());
+            ctx.closePath();
+            ctx.fillStrokeShape(shape);
+          }}
+        />
+      );
+    }
     return (
       <Text
         key={`${el.id}-${fontsTick}`}
-        id={el.id}
-        x={el.x_mm * PX}
-        y={el.y_mm * PX}
+        {...textNode}
         width={el.w_mm * PX}
-        rotation={el.rotation}
         text={el.text}
         align={el.align}
+        // explicit, not inherited: exports and previews are drawn on a canvas off the page, which is left-to-right
+        direction="rtl"
         fontFamily={el.font.family}
         fontStyle={fontStyle(el.font.weight)}
-        fontSize={el.font.size_pt * PT_TO_MM * PX}
         fill={el.font.color}
-        lineHeight={el.font.line_height ?? 1.25}
-        letterSpacing={(el.font.letter_spacing ?? 0) * PT_TO_MM * PX}
+        {...textLook(el, PX)}
         wrap="word"
-        draggable={draggable}
-        dragBoundFunc={function (this: Konva.Node, pos) {
-          // keep the text box inside the page while dragging (pos is in screen pixels)
-          const w = this.width() * zoom;
-          const h = this.height() * zoom;
-          return {
-            x: clamp(pos.x, 0, Math.max(0, pageW * zoom - w)),
-            y: clamp(pos.y, 0, Math.max(0, pageH * zoom - h)),
-          };
-        }}
-        onMouseDown={onSelect ?? focusField}
-        onTap={onSelect ?? focusField}
-        onMouseEnter={(e) => {
-          if (draggable) e.target.getStage()!.container().style.cursor = 'move';
-        }}
-        onMouseLeave={(e) => {
-          e.target.getStage()!.container().style.cursor = '';
-        }}
-        onDragEnd={(e) => onChange({ x_mm: e.target.x() / PX, y_mm: e.target.y() / PX })}
-        onTransformEnd={(e) => transformEnd(e, false)}
       />
     );
   };
