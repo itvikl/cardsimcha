@@ -7,7 +7,7 @@ import { SiteFooter } from './SiteFooter';
 import { AdHistory } from './AdHistory';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
-import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, groupHref, PRIVATE_GROUPS, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
+import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, groupHref, PRIVATE_GROUPS, quickName, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null; price: number | null };
 
@@ -159,12 +159,16 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
           <h2 className={s.sectionTitle}>עיצובים שאפשר להתחיל מהם עכשיו</h2>
           <div className={s.cardStrip}>
             {showcase.map((t) => (
-              <Link key={t.id} href={`/t/${t.id}`} className={s.cardTile}>
-                <img src={t.thumbnail!} alt={t.name} className={s.cardTileImg} loading="lazy" decoding="async" />
-                <div className={s.cardTileMeta}>
-                  <span className={s.cardTileName}>{t.name}</span>
-                </div>
-              </Link>
+              // each design under the name its kind has in the shortcuts at the top
+              <div key={t.id} className={s.cardTileWrap}>
+                <span className={s.cardTileKind}>{quickName(t.topic || GENERAL_TOPIC)}</span>
+                <Link href={`/t/${t.id}`} className={s.cardTile}>
+                  <img src={t.thumbnail!} alt={t.name} className={s.cardTileImg} loading="lazy" decoding="async" />
+                  <div className={s.cardTileMeta}>
+                    <span className={s.cardTileName}>{t.name}</span>
+                  </div>
+                </Link>
+              </div>
             ))}
           </div>
         </section>
