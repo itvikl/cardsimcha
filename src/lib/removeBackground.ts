@@ -8,12 +8,7 @@ const TOLERANCE = 30;
 const EDGE_SHARE = 0.6;
 
 export function removeFlatBackground(img: ImageData): ImageData | null {
-  const out = clearFlatBackground(img.data, img.width, img.height);
-  return out && new ImageData(new Uint8ClampedArray(out), img.width, img.height);
-}
-
-/** The same on bare RGBA pixels, for the server (which has no ImageData): the pixels with the background clear, or null. */
-export function clearFlatBackground(data: ArrayLike<number>, w: number, h: number): Uint8ClampedArray<ArrayBuffer> | null {
+  const { width: w, height: h, data } = img;
   const at = (x: number, y: number) => (y * w + x) * 4;
   const edge: number[] = [];
   for (let x = 0; x < w; x++) edge.push(at(x, 0), at(x, h - 1));
@@ -82,5 +77,5 @@ export function clearFlatBackground(data: ArrayLike<number>, w: number, h: numbe
       if (touches) out[p * 4 + 3] = Math.min(out[p * 4 + 3], Math.round(255 * Math.min(1, Math.max(0.15, (distance(p * 4) - TOLERANCE) / TOLERANCE))));
     }
   }
-  return out;
+  return new ImageData(out, w, h);
 }

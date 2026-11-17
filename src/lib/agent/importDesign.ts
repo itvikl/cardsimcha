@@ -4,7 +4,7 @@ import { z } from 'zod';
 /** One text the model read off a finished design; places and sizes are in percent of the picture. */
 export type ReadText = { text: string; label: string; x: number; y: number; w: number; h: number; lineHeight: number; color: string; align: 'right' | 'center' | 'left'; bold: boolean; font: string; rotation: 0 | 90 | -90 };
 
-/** One object the model found on a finished design (a logo, a box, a badge…), to become a picture of its own that moves. */
+/** One object the model found on a finished design (a logo, a box, a badge…): it stays in the picture, and the texts on it are wiped inside its outline. */
 export type ReadObject = {
   label: string;
   kind: 'logo' | 'box' | 'badge' | 'button' | 'decoration' | 'photo';
@@ -37,7 +37,7 @@ Rules for texts:
 Rules for objects:
 - An object is a separate element laid on top of the design with an outline of its own: a logo, a box or panel with a fill or a frame (such as a box holding times or prices), a capsule or pill, a button, a badge or seal, a ribbon, a sticker, a picture inside its own round or rounded frame.
 - Not an object: the background, the photograph behind everything or anything in it (a product, a person or candles standing in a photographed scene stay part of the background, even when they are the main subject), a bare text with nothing around it, thin lines.
-- x, y, w, h are the object's tight box in percent, as for texts, including its frame and its shadow edge. Measure carefully: it is cut out from exactly there.
+- x, y, w, h are the object's tight box in percent, as for texts, including its frame and its shadow edge. Measure carefully: the texts on it are wiped inside exactly that outline.
 - shape is its outline: rect, rounded (a box with round corners; corner is the radius in percent of its shorter side), pill (fully round ends), ellipse.
 - Texts lying on an object are still listed under texts, each by itself. A logo's own lettering is part of the logo, not a text.
 - label is a short Hebrew name, such as "לוגו", "תיבת הזמנים", "כפתור".

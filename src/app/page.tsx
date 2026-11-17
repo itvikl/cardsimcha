@@ -136,8 +136,8 @@ function AdminHome() {
       form.set('name', name || file.name.replace(/\.[^.]+$/, ''));
       form.set('topic', topic);
       form.set('audience', door);
-      const r = await api<{ id: string; texts: number; objects?: number; rough: number }>('/api/templates/import', { method: 'POST', body: form });
-      if (r.rough > 0) window.alert(`זוהו ${r.texts} טקסטים ו-${r.objects ?? 0} אובייקטים שאפשר להזיז. ב-${r.rough} מקומות הרקע לא אחיד, אז כדאי לבדוק שם את המקום שנמחק או שמולא.`);
+      const r = await api<{ id: string; texts: number; rough: number }>('/api/templates/import', { method: 'POST', body: form });
+      if (r.rough > 0) window.alert(`זוהו ${r.texts} טקסטים. ב-${r.rough} מהם הרקע לא אחיד, אז כדאי לבדוק שם את המקום שנמחק.`);
       router.push(`/editor/${r.id}`);
     } catch (err) {
       setError((err as Error).message);
@@ -318,7 +318,7 @@ function AdminHome() {
         <button className="btn primary" type="submit" disabled={busy}>
           {busy && bgFile ? 'מעלה…' : !business && isWording ? 'נוסח חדש' : 'תבנית חדשה'}
         </button>
-        <label className="btn sticker-upload" title="הטקסטים נקראים מהתמונה והופכים לשדות, ואובייקטים כמו לוגו, תיבות וכפתורים הופכים לאלמנטים שאפשר להזיז. התוצאה נפתחת כטיוטה לבדיקה.">
+        <label className="btn sticker-upload" title="הטקסטים נקראים מהתמונה והופכים לשדות. התוצאה נפתחת כטיוטה לבדיקה.">
           {importing ? 'קורא את העיצוב… (עד 2 דקות)' : 'מעיצוב מוכן (תמונה)'}
           <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-file" aria-label="תבנית מעיצוב מוכן" onChange={importDesign} disabled={importing || busy} />
         </label>

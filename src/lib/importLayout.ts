@@ -1,8 +1,7 @@
 import type { ReadText } from './agent/importDesign';
-import { FIELD_LOCKS, LOCKED } from './canvas';
-import type { CutObject } from './cutObjects';
+import { FIELD_LOCKS } from './canvas';
 import type { Refined } from './importClean';
-import type { CanvasDoc, CanvasElement, TextElement } from './types';
+import type { CanvasDoc, TextElement } from './types';
 
 const PT_TO_MM = 25.4 / 72;
 
@@ -31,11 +30,9 @@ const inside = (t: Refined, o: { x: number; y: number; w: number; h: number }) =
 };
 
 /**
- * The content layer of a template made from a finished design: each object a picture of its own (locked for
- * customers, the author moves it), and each text a live customer field on top. A text whose middle lies on an object
- * (the smallest, when objects sit inside one another) shares its group, so moving the object moves its texts. Places
- * are in percent of the picture: `refined` is each text's box fitted to its ink (importClean); `imgW`, `imgH` are the
- * cleaned picture's pixels, to size the cut-outs.
+ * The content layer of a template made from a finished design: each text a live customer field, over the cleaned
+ * picture. The objects the model found (a pill, a badge) stay in the picture; a text on one stays inside it. Places
+ * are in percent of the picture: `refined` is each text's box fitted to its ink (importClean).
  */
 export function importedContent(opts: {
   page: CanvasDoc['page'];
@@ -43,43 +40,14 @@ export function importedContent(opts: {
   refined: Refined[];
   /** the colour each text stands on once wiped, by the same order */
   under: (string | null)[];
-  pieces: CutObject[];
-  /** every object the model found, cut out or left in the picture (percent of it): a text on one stays inside it */
+  /** the objects the model found (percent of the picture): a text on one stays inside it */
   frames: { x: number; y: number; w: number; h: number }[];
-  imgW: number;
-  imgH: number;
-  /** the uploaded picture of each piece, in order */
-  pieceIds: string[];
   fonts: string[];
   newId: () => string;
-}): CanvasElement[] {
-  const { page, texts, refined, pieces, imgW, imgH, fonts, newId } = opts;
-  const groups = pieces.map((p) => (refined.some((r) => inside(r, p.object)) ? newId() : undefined));
-  const groupOf = (r: Refined) => {
-    const at = pieces
-      .map((p, i) => ({ p, i }))
-      .filter(({ p }) => inside(r, p.object))
-      .sort((a, b) => a.p.object.w * a.p.object.h - b.p.object.w * b.p.object.h)[0];
-    return at ? groups[at.i] : undefined;
-  };
-
-  const objects = pieces.map(
-    (p, i): CanvasElement => ({
-      id: newId(),
-      type: 'image',
-      x_mm: (p.object.x / 100) * page.width_mm,
-      y_mm: (p.object.y / 100) * page.height_mm,
-      w_mm: (p.width / imgW) * page.width_mm,
-      h_mm: (p.height / imgH) * page.height_mm,
-      rotation: 0,
-      locks: LOCKED,
-      asset_id: opts.pieceIds[i],
-      ...(groups[i] && { group: groups[i] }),
-    }),
-  );
-
+}): TextElement[] {
+  const { page, texts, refined, fonts, newId } = opts;
   const seen = new Set<string>();
-  const words = texts.map((t, i): TextElement => {
+  return texts.map((t, i): TextElement => {
     let label = t.label.trim() || 'טקסט';
     if (seen.has(label)) label = `${label} ${i + 1}`;
     seen.add(label);
@@ -137,7 +105,6 @@ export function importedContent(opts: {
       }
     }
     const color = readable(fit.color?.toUpperCase() ?? null, t.color.toUpperCase(), opts.under[i]);
-    const group = groupOf(fit);
     return {
       id: newId(),
       type: 'text',
@@ -150,7 +117,6 @@ export function importedContent(opts: {
       align: t.align,
       locks: FIELD_LOCKS,
       field: { label: label.slice(0, 60) },
-      ...(group && { group }),
       // the line height is what was measured; a text's size is that over the 1.25 it is drawn at
       font: {
         family: fonts.includes(t.font) ? t.font : 'Heebo',
@@ -161,6 +127,4 @@ export function importedContent(opts: {
       design_color: color,
     };
   });
-
-  return [...objects, ...words];
 }

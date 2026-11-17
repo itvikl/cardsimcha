@@ -10,8 +10,7 @@ import { addImage, assetFileKey, createCategory, listCategories } from '@/lib/da
 import { createTemplate, topicConflictFor } from '@/lib/data/projects';
 import { cleanDesign } from '@/lib/importClean';
 import { importedContent } from '@/lib/importLayout';
-import { cutObjects, keepCovered } from '@/lib/cutObjects';
-import { fillPlaces } from '@/lib/fillPlaces';
+import { wipeOnObjects } from '@/lib/objectTexts';
 import { files } from '@/lib/files';
 import { BUILTIN_FONTS } from '@/lib/fonts';
 import { parseAudience } from '@/lib/topics';
@@ -66,11 +65,11 @@ async function importCategoryId(): Promise<string> {
 
 /**
  * Admin: a finished design as a picture ({ file, name, topic, audience }) in, a draft template out. The model reads
- * its texts and its objects (a logo, a box, a badge…). The texts are wiped from the picture and come back as live
- * text: each a customer field in the content layer. Each object is cut out along its outline into a picture of its
- * own that the author can move, grouped with the texts lying on it, and its place in the picture is filled. The clean
- * picture is the background layer. It is a first draft for the admin to fix in the editor: the fonts are the closest
- * it found, and over a photograph a wiped or filled place shows.
+ * its texts, and the objects they stand on (a pill, a badge, a box). The texts are wiped from the picture and come
+ * back as live text over it: the clean picture is the background layer, each text a customer field in the content
+ * layer. The objects stay in the picture; they are found so the texts on them come off cleanly and stay inside them.
+ * It is a first draft for the admin to fix in the editor: the fonts are the closest it found, and over a photograph a
+ * wiped place shows.
  * Ported from feature/business-ads (Vitol) onto Postgres and card format v2.
  */
 export async function POST(req: Request) {
@@ -118,23 +117,17 @@ export async function POST(req: Request) {
   // each box snaps to its ink (the ad-import tool's steps, lib/importClean)
   const { refined } = await cleanDesign(kept, texts);
   const fitted = texts.map((t, i) => ({ ...t, x: refined[i].x, y: refined[i].y, w: refined[i].w, h: refined[i].h }));
-  // a flat object something lies over stays in the picture, and the texts on it are wiped by their letters only
-  const stays = await keepCovered(kept, objects, fitted);
+  // the texts on a flat object are wiped by their letters only, in its colour (lib/objectTexts)
+  const onObjects = await wipeOnObjects(kept, objects, fitted);
   // the other texts: only their ink is repainted (lib/importClean)
-  const { data: textless, rough: roughTexts } = await cleanDesign(stays.picture, texts.filter((_, i) => !stays.texts.has(i)));
-  // the other objects are cut from the picture without its texts (each text where its ink is), and their places filled
-  const pieces = await cutObjects(kept, textless, objects.filter((o) => !stays.objects.includes(o)), fitted);
-  const { data, rough: roughObjects } = pieces.length ? await fillPlaces(textless, pieces.map((p) => p.object)) : { data: textless, rough: 0 };
-  const rough = roughTexts + roughObjects;
+  const { data, rough } = await cleanDesign(onObjects.picture, texts.filter((_, i) => !onObjects.texts.has(i)));
   const { width, height } = await sharp(data).metadata();
   if (!width || !height) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
   const page = pageFor(width / height);
 
-  // each object a picture of its own, its texts grouped with it (importLayout.ts)
-  const pieceIds = pieces.map(() => newId());
   // what each text stands on once it is wiped: its colour must read on that
-  const under = await meanColors(textless, refined);
-  const content = importedContent({ page, texts, refined, under, pieces, frames: objects, imgW: width, imgH: height, pieceIds, fonts, newId });
+  const under = await meanColors(data, refined);
+  const content = importedContent({ page, texts, refined, under, frames: objects, fonts, newId });
 
   const assetId = newId();
   const fileName = `${assetId}.jpg`;
@@ -145,19 +138,13 @@ export async function POST(req: Request) {
   });
   if (!canvas) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
 
-  const categoryId = await importCategoryId();
-  const pieceFiles = pieceIds.map((id) => `${id}.png`);
   await files.put(assetFileKey(fileName), data, 'image/jpeg');
-  await Promise.all(pieces.map((p, i) => files.put(assetFileKey(pieceFiles[i]), p.png, 'image/png')));
-  const saved = await Promise.all([
-    addImage({ id: assetId, categoryId, name, file: fileName, width, height }),
-    ...pieces.map((p, i) => addImage({ id: pieceIds[i], categoryId, name: `${name} · ${p.object.label.trim() || 'אובייקט'}`, file: pieceFiles[i], width: p.width, height: p.height })),
-  ]);
-  if (saved.some((a) => !a)) {
-    await files.remove([fileName, ...pieceFiles].map(assetFileKey));
+  const asset = await addImage({ id: assetId, categoryId: await importCategoryId(), name, file: fileName, width, height });
+  if (!asset) {
+    await files.remove([assetFileKey(fileName)]);
     return NextResponse.json({ error: 'שמירת התמונה נכשלה. נסו שוב.' }, { status: 500 });
   }
   const result = await createTemplate({ name, topic, canvas, ...(audience && { audience }) });
   if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
-  return NextResponse.json({ id: result.id, texts: texts.length, objects: pieces.length, rough }, { status: 201 });
+  return NextResponse.json({ id: result.id, texts: texts.length, rough }, { status: 201 });
 }
