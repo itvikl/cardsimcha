@@ -4,11 +4,12 @@ import { LINE_HEIGHT } from './nodeStyle';
 import type { CanvasDoc, CanvasElement, TextElement } from './types';
 
 /**
- * Keeping a customer's texts on the card when the design changes under them: longer words of their own, and later
- * another wording or backdrop. Each text stays where the designer put it and gets smaller (never below MIN of its
- * designed size) until no word is wider than its box, it doesn't run into the text below it, and it ends inside the
- * page's safe area. A text that has room again grows back to its designed size. A text moves only where its transform
- * lock lets the customer move it (the server keeps it in place otherwise). Browser only (texts are measured).
+ * Keeping texts on the card when the AI assistant rewrites them (and later, when a wording or backdrop changes under
+ * them). Only the texts named are fitted; a card as imported or as an author left it keeps its sizes. Each stays where
+ * it is and gets smaller (never below MIN of its designed size) until no word is wider than its box, it doesn't run
+ * into the text below it, and it ends inside the page's safe area. A text that has room again grows back to its
+ * designed size. A text moves only for an author or where its transform lock lets the customer move it (the server
+ * keeps it in place otherwise). Browser only (texts are measured).
  */
 
 const PT_TO_MM = 25.4 / 72;
@@ -69,20 +70,22 @@ function limitsOf(doc: CanvasDoc, texts: TextElement[], e: TextElement) {
   return { bottom: Math.min(doc.page.height_mm - SAFE_MM, below) };
 }
 
-/** the texts a customer writes in; a turned text is left as designed (its limits run across the page, not down it) */
-const editableTexts = (doc: CanvasDoc) => allElements(doc).filter((e): e is TextElement => e.type === 'text' && e.locks.content && !e.hidden && !e.rotation);
+/** the texts on the card, which limit one another */
+const shownTexts = (doc: CanvasDoc) => allElements(doc).filter((e): e is TextElement => e.type === 'text' && !e.hidden);
+/** the texts to fit: those named; a turned text is left as it is (its limits run across the page, not down it) */
+const chosen = (texts: TextElement[], only: Set<string>) => texts.filter((e) => only.has(e.id) && !e.rotation);
 
 /**
  * How far each text of a card as designed already goes past its limits, at its designed size: a design that sets two
  * lines close, or a word a little wider than its box, is the designer's choice and is never "fixed". Measured on the
  * card with its designed words, before a customer changes them.
  */
-export function allowanceOf(doc: CanvasDoc): Allowance {
+export function allowanceOf(doc: CanvasDoc, only: Set<string>): Allowance {
   const c = ctx();
   const out: Allowance = new Map();
   if (!c) return out;
-  const texts = editableTexts(doc);
-  for (const e of texts) {
+  const texts = shownTexts(doc);
+  for (const e of chosen(texts, only)) {
     const l = layoutAt(c, e, designedSize(e));
     const { bottom } = limitsOf(doc, texts, e);
     out.set(e.id, { down: Math.max(0, e.y_mm + l.height - bottom), wide: Math.max(0, l.widest - l.box) });
@@ -96,19 +99,19 @@ const fitsAt = (c: CanvasRenderingContext2D, e: TextElement, sizePt: number, bot
 };
 
 /**
- * The card with every text the customer can edit fitted onto it, as above. `allow` is what each text's design already
- * takes (allowanceOf); a text the design never measured gets none. Unchanged texts keep their identity.
+ * The card with the texts in `only` fitted onto it, as above. `allow` is what each text's design already takes
+ * (allowanceOf); a text the design never measured gets none. Unchanged texts keep their identity.
  */
-export function fitDocTexts<D extends CanvasDoc>(doc: D, allow: Allowance = new Map()): D {
+export function fitDocTexts<D extends CanvasDoc>(doc: D, only: Set<string>, allow: Allowance = new Map(), author = false): D {
   const c = ctx();
-  if (!c) return doc;
+  if (!c || !only.size) return doc;
   const { width_mm: W, height_mm: H } = doc.page;
-  const texts = editableTexts(doc);
+  const texts = shownTexts(doc);
   let changed = false;
   const fitted = new Map<string, TextElement>();
-  for (const e of texts) {
+  for (const e of chosen(texts, only)) {
     // a box past the side of the page comes back onto it (the safe area is the designer's to use)
-    const moves = e.locks.transform;
+    const moves = author || e.locks.transform;
     let x = e.x_mm;
     if (moves && x + e.w_mm > W) x = Math.max(0, W - e.w_mm);
     if (moves && x < 0) x = 0;

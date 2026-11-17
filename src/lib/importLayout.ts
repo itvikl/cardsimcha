@@ -61,20 +61,28 @@ export function importedContent(opts: {
     let label = t.label.trim() || 'טקסט';
     if (seen.has(label)) label = `${label} ${i + 1}`;
     seen.add(label);
-    const fit = refined[i];
     const lines = Math.max(1, t.text.split('\n').length);
     const turned = t.rotation !== 0;
     // a turned line runs down the page: its thickness is measured across the width, its length down the height
     const across = turned ? page.width_mm : page.height_mm;
     const along = turned ? page.height_mm : page.width_mm;
-    const inkThick = ((turned ? fit.w : fit.h) / 100) * across;
+    const thick = (b: { w: number; h: number }) => ((turned ? b.w : b.h) / 100) * across;
+    // the box fitted to the ink, unless fitting it grew into something next to the text (a candle, a glow), which
+    // would make the text far too big: then the box the model measured
+    const fit = thick(refined[i]) <= thick(t) * 1.3 ? refined[i] : { ...t, color: refined[i].color };
+    const inkThick = thick(fit);
     const inkLong = ((turned ? fit.h : fit.w) / 100) * along;
-    // the model's line height, checked against the ink: Hebrew letters stand about 0.78 of the font size tall
+    // The size: the model's line height, never larger than the ink allows (Hebrew letters stand about 0.78 of the
+    // font size tall) and never below 60% of it. The ink only ever makes a text smaller, so the text keeps the size it
+    // has in the picture rather than growing into what stands beside it.
     const fromModel = ((t.lineHeight / 100) * across) / 1.25;
-    const fromInk = inkThick / lines / 0.78;
-    const size_mm = Math.abs(fromModel / fromInk - 1) <= 0.25 ? fromModel : fromInk;
-    // the text box: a little longer than the ink so the line never wraps; the drawn block is `lines` lines of 1.25 × the size
-    const w_mm = Math.max(5, inkLong * 1.08 + size_mm * 0.3);
+    const fromInk = (inkThick / lines / 0.78) * 1.1;
+    const size_mm = Math.min(fromModel, Math.max(fromModel * 0.6, fromInk));
+    // When the picture shows no more lines than the text has, its lines must not break: the box takes the longest
+    // line (about half a size per letter) besides the ink. Otherwise the picture wraps it, and the ink's width does too.
+    const wraps = inkThick > lines * size_mm * 1.25 * 1.5;
+    const longest = Math.max(...t.text.split('\n').map((l) => l.length)) * size_mm * 0.55;
+    const w_mm = Math.min(along, Math.max(5, inkLong * 1.08 + size_mm * 0.3, wraps ? 0 : longest));
     const block = lines * size_mm * 1.25;
     const inkX = (fit.x / 100) * page.width_mm;
     const inkY = (fit.y / 100) * page.height_mm;
@@ -100,9 +108,10 @@ export function importedContent(opts: {
     return {
       id: newId(),
       type: 'text',
-      x_mm: Math.max(0, x_mm),
+      // an upright box that came out wider than the ink stays on the page
+      x_mm: Math.max(0, turned ? x_mm : Math.min(x_mm, page.width_mm - w_mm)),
       y_mm: Math.max(0, y_mm),
-      w_mm: Math.min(w_mm, turned ? page.height_mm : page.width_mm),
+      w_mm,
       rotation: t.rotation,
       text: t.text,
       align: t.align,

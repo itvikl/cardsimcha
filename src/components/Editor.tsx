@@ -22,7 +22,7 @@ import { uid } from '@/lib/uid';
 import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
 import { arcBox, drawArc, hasArc } from '@/lib/arcText';
 import { describeChange, nameOf } from '@/lib/historyLabel';
-import { allowanceOf, fitDocTexts, type Allowance } from '@/lib/fitText';
+import { allowanceOf, fitDocTexts } from '@/lib/fitText';
 import { cropOf, fillLook, LINE_HEIGHT, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
 import { intersects, linesOf, snapBox, unionOf, type Box, type Mark } from '@/lib/snap';
 import { EditorRulers } from './EditorRulers';
@@ -393,14 +393,7 @@ export default function Editor({ id }: { id: string }) {
   const [, bump] = useState(0);
   docRef.current = doc;
 
-  /** a customer's card keeps its texts on it whatever they write (fitText.ts); an author places texts themselves */
-  const fitsTexts = useRef(false);
-  fitsTexts.current = !canManage || preview;
-  /** what each text's own design already takes past its limits, so a fit never "fixes" the designer (allowanceOf) */
-  const allowRef = useRef<Allowance>(new Map());
-
-  const commit = useCallback((change: CanvasDoc, mergeKey?: string) => {
-    const next = fitsTexts.current ? fitDocTexts(change, allowRef.current) : change;
+  const commit = useCallback((next: CanvasDoc, mergeKey?: string) => {
     const cur = docRef.current;
     if (cur) {
       const now = Date.now();
@@ -421,19 +414,6 @@ export default function Editor({ id }: { id: string }) {
     bump((n) => n + 1);
   }, []);
 
-  // the design's own allowances, measured once its fonts are in, and the card fitted to them (a card saved too long, or
-  // an author switching to the customer's view)
-  useEffect(() => {
-    const cur = docRef.current;
-    if (!cur || !fitsTexts.current || !fontsTick) return;
-    if (!allowRef.current.size) allowRef.current = allowanceOf(cur);
-    const next = fitDocTexts(cur, allowRef.current);
-    if (next === cur) return;
-    docRef.current = next;
-    setDoc(next);
-    setSave('dirty');
-  }, [fontsTick, !!doc, preview]); // eslint-disable-line react-hooks/exhaustive-deps
-
   /** a change to the current doc, recorded in the history */
   const change = useCallback(
     (fn: (d: CanvasDoc) => CanvasDoc, mergeKey?: string) => {
@@ -443,10 +423,28 @@ export default function Editor({ id }: { id: string }) {
     [commit],
   );
 
-  /** Applies the assistant's card and briefly marks every element it touched. */
+  const authorRef = useRef(false);
+  authorRef.current = canManage && !preview;
+
+  /**
+   * Applies the assistant's card and briefly marks every element it touched. Each text whose words it rewrote is fitted
+   * onto the card (fitText.ts), which is the only time sizes are checked: an imported or hand-made card keeps its own.
+   */
   const applyAgent = useCallback(
-    (next: CanvasDoc) => {
+    (proposed: CanvasDoc) => {
       const cur = docRef.current;
+      const old = new Map(cur ? allElements(cur).map((e) => [e.id, e]) : []);
+      const rewritten = new Set<string>();
+      let draft = proposed;
+      for (const e of allElements(proposed)) {
+        if (e.type !== 'text') continue;
+        const was = old.get(e.id);
+        if (was?.type === 'text' && was.text === e.text) continue;
+        rewritten.add(e.id);
+        // a size the assistant chose itself is the size to fit from
+        if (was?.type === 'text' && was.font.size_pt !== e.font.size_pt && e.design_size !== undefined) draft = updateElement(draft, e.id, { design_size: undefined });
+      }
+      const next = cur ? fitDocTexts(draft, rewritten, allowanceOf(cur, rewritten), authorRef.current) : draft;
       const before = new Map(cur ? allElements(cur).map((e) => [e.id, JSON.stringify(e)]) : []);
       const changed = new Set<string>(allElements(next).filter((e) => before.get(e.id) !== JSON.stringify(e)).map((e) => e.id));
       if (cur && JSON.stringify(cur.layers.background) !== JSON.stringify(next.layers.background)) changed.add('background');
