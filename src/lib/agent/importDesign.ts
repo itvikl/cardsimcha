@@ -2,7 +2,7 @@ import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic
 import { z } from 'zod';
 
 /** One text the model read off a finished design; places and sizes are in percent of the picture. */
-export type ReadText = { text: string; label: string; x: number; y: number; w: number; h: number; lineHeight: number; color: string; align: 'right' | 'center' | 'left'; bold: boolean; font: string; rotation: 0 | 90 | -90 };
+export type ReadText = { text: string; label: string; x: number; y: number; w: number; h: number; lineHeight: number; color: string; align: 'right' | 'center' | 'left'; bold: boolean; font: string; rotation: number; arc: number };
 
 /** One object the model found on a finished design (a logo, a box, a badge…): it stays in the picture, and the texts on it are wiped inside its outline. */
 export type ReadObject = {
@@ -29,7 +29,8 @@ Rules for texts:
 - Copy the words exactly, keeping their line breaks with \\n. Do not correct or translate them.
 - x, y, w, h are the block's tight box, in percent of the picture's width (x, w) and height (y, h). Measure carefully: the text will be erased from exactly there.
 - line_height is the height of ONE line of the block, in percent of the picture's height.
-- rotation is 0 for an ordinary line, -90 for a text turned to read from bottom to top, 90 for one reading from top to bottom. Designs often run a title up the side of the page: its letters then stand one above the other, each lying on its side. That is ONE turned line: write it as ordinary text in reading order, never letter by letter with line breaks, and give its rotation. For a turned text x, y, w, h are still its box as it stands in the picture (tall and narrow), and line_height is the thickness of one line in percent of the picture's WIDTH.
+- rotation is how far the line is turned, in degrees clockwise: 0 for an ordinary line, -90 for a text turned to read from bottom to top, 90 for one reading from top to bottom, and any angle between for a slanted line (a line rising to the left is about -15). Designs often run a title up the side of the page: its letters then stand one above the other, each lying on its side. That is ONE turned line: write it as ordinary text in reading order, never letter by letter with line breaks, and give its rotation. For a turned or slanted text x, y, w, h are still its box as it stands in the picture, and for a turned one (beyond 45 degrees) line_height is the thickness of one line in percent of the picture's WIDTH.
+- arc is how much a line set along a curve bends: 0 for a straight line, up to 100 for a half circle with its middle at the top (a rainbow), down to -100 for one with its middle at the bottom (a smile). A curved line is one line: x, y, w, h are the box around all of it, and rotation is the turn of the curve as a whole (its middle's tilt).
 - color is the text's colour as #RRGGBB.
 - font is the closest of: ${fonts.join(', ')}. The exact font usually isn't among them; pick by look: serif or sans, heavy or light.
 - label is a short Hebrew name for the field, the kind a customer would fill in, such as "כותרת", "טלפון", "שמות". Each label is different.
@@ -55,7 +56,8 @@ const schema = z.object({
   align: z.enum(['right', 'center', 'left']),
   bold: z.boolean(),
   font: z.string().max(60),
-  rotation: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(),
+  rotation: z.number().min(-90).max(90).optional(),
+  arc: z.number().min(-100).max(100).optional(),
 });
 
 const objectSchema = z.object({
@@ -79,7 +81,8 @@ export async function readDesign(image: Buffer, mediaType: 'image/jpeg' | 'image
     tools: [
       tool('submit_design', 'Hand over the texts and the objects read from the picture.', { texts: z.array(schema).max(60), objects: z.array(objectSchema).max(20) }, async ({ texts, objects }) => {
         answer = {
-          texts: texts.map(({ line_height, rotation, ...t }) => ({ ...t, lineHeight: line_height, rotation: rotation ?? 0 })),
+          // a turn or a bend too small to see is none
+          texts: texts.map(({ line_height, rotation, arc, ...t }) => ({ ...t, lineHeight: line_height, rotation: Math.abs(rotation ?? 0) < 2 ? 0 : Math.round(rotation ?? 0), arc: Math.abs(arc ?? 0) < 3 ? 0 : Math.round(arc ?? 0) })),
           // a box over most of the picture is its background, not something to move
           // a picture without a frame of its own is part of the scene: cutting it out would tear the background
           objects: objects.filter((o) => o.w * o.h < 70 * 70 && !(o.kind === 'photo' && o.shape === 'rect')).map((o) => ({ ...o, corner: o.corner ?? 12 })),

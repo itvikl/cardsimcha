@@ -127,7 +127,7 @@ export async function POST(req: Request) {
 
   // what each text stands on once it is wiped: its colour must read on that
   const under = await meanColors(data, refined);
-  const content = importedContent({ page, texts, refined, under, frames: objects, fonts, newId });
+  const content = importedContent({ page, texts, refined, under, fonts, newId });
 
   const assetId = newId();
   const fileName = `${assetId}.jpg`;
