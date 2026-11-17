@@ -10,7 +10,7 @@ import { addImage, assetFileKey, createCategory, listCategories } from '@/lib/da
 import { createTemplate, topicConflictFor } from '@/lib/data/projects';
 import { cleanDesign } from '@/lib/importClean';
 import { importedContent } from '@/lib/importLayout';
-import { wipeOnObjects } from '@/lib/objectTexts';
+import { wipeOnFlat } from '@/lib/flatWipe';
 import { files } from '@/lib/files';
 import { BUILTIN_FONTS } from '@/lib/fonts';
 import { parseAudience } from '@/lib/topics';
@@ -65,11 +65,10 @@ async function importCategoryId(): Promise<string> {
 
 /**
  * Admin: a finished design as a picture ({ file, name, topic, audience }) in, a draft template out. The model reads
- * its texts, and the objects they stand on (a pill, a badge, a box). The texts are wiped from the picture and come
- * back as live text over it: the clean picture is the background layer, each text a customer field in the content
- * layer. The objects stay in the picture; they are found so the texts on them come off cleanly and stay inside them.
- * It is a first draft for the admin to fix in the editor: the fonts are the closest it found, and over a photograph a
- * wiped place shows.
+ * its texts, they are wiped from the picture, and they come back as live text over it: the clean picture is the
+ * background layer, each text a customer field in the content layer, in the place its letters took. It is a first
+ * draft for the admin to fix in the editor: the fonts are the closest it found, and over a photograph a wiped place
+ * shows.
  * Ported from feature/business-ads (Vitol) onto Postgres and card format v2.
  */
 export async function POST(req: Request) {
@@ -105,9 +104,9 @@ export async function POST(req: Request) {
 
   const fonts = [...new Set([...BUILTIN_FONTS.map((f) => f.family), ...(await listFonts()).map((f) => f.family)])];
   const forModel = await sharp(original).rotate().resize({ width: MODEL_SIDE, height: MODEL_SIDE, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
-  let texts, objects;
+  let texts;
   try {
-    ({ texts, objects } = await readDesign(forModel, 'image/jpeg', fonts));
+    texts = await readDesign(forModel, 'image/jpeg', fonts);
   } catch (e) {
     console.error('reading a design failed', e);
     return NextResponse.json({ error: 'לא הצלחנו לקרוא את העיצוב. נסו שוב.' }, { status: 502 });
@@ -117,10 +116,10 @@ export async function POST(req: Request) {
   // each box snaps to its ink (the ad-import tool's steps, lib/importClean)
   const { refined } = await cleanDesign(kept, texts);
   const fitted = texts.map((t, i) => ({ ...t, x: refined[i].x, y: refined[i].y, w: refined[i].w, h: refined[i].h }));
-  // the texts on a flat object are wiped by their letters only, in its colour (lib/objectTexts)
-  const onObjects = await wipeOnObjects(kept, objects, fitted);
-  // the other texts: only their ink is repainted (lib/importClean)
-  const { data, rough } = await cleanDesign(onObjects.picture, texts.filter((_, i) => !onObjects.texts.has(i)));
+  // the texts on a flat ground (a pill, a badge, a plain page) are wiped by their letters only, in its colour (lib/flatWipe)
+  const onFlat = await wipeOnFlat(kept, fitted);
+  // the others, on photographs: only their ink is repainted (lib/importClean)
+  const { data, rough } = await cleanDesign(onFlat.picture, texts.filter((_, i) => !onFlat.texts.has(i)));
   const { width, height } = await sharp(data).metadata();
   if (!width || !height) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
   const page = pageFor(width / height);
