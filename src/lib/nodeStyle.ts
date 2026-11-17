@@ -1,9 +1,11 @@
-import type { ImageElement, PageSpec, ShapeElement, TextElement } from './types';
+import type { Fill, ImageElement, ShapeElement, TextElement } from './types';
 
 /**
  * How an element looks beyond its place and size: a text's spacing, effects and foil, a shape's or page's gradient, a
- * picture's crop and mask. The editor and renderCard draw with the same Konva settings from here, so the card, its
- * previews and every download agree. Browser only (text is measured on a canvas).
+ * picture's crop and mask. The editor and the off-screen renderer draw with the same Konva settings from here, so the
+ * card, its previews and every download agree. Text measuring needs a canvas (browser, or a canvas polyfill).
+ *
+ * Ported from feature/business-ads (Vitol) onto card format v2.
  */
 
 const PT_TO_MM = 25.4 / 72;
@@ -17,18 +19,22 @@ const FOIL: Record<'gold' | 'silver', (number | string)[]> = {
 let measurer: CanvasRenderingContext2D | null = null;
 const measure = () => (measurer ??= typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d'));
 
-/** the size a text is drawn at: its own, or smaller when it shrinks so each line fits the box on one line */
+/** a CSS/canvas font string for a text at `sizePx` */
+export const fontCss = (e: Pick<TextElement, 'font'>, sizePx: number) => `${e.font.weight} ${sizePx}px "${e.font.family}"`;
+
+/** the size a text is drawn at, in pt: its own, or smaller when it shrinks so each line fits the box on one line */
 export function fittedSize(e: TextElement, px: number): number {
   if (e.fit !== 'shrink') return e.font.size_pt;
   const ctx = measure();
   if (!ctx) return e.font.size_pt;
   const lines = e.text.split('\n');
-  const box = e.w_mm * px;
+  // a little short of the box: shrunk to its exact width, rounding and the outline made Konva wrap the line anyway
+  const box = e.w_mm * px * 0.97;
   let size = e.font.size_pt;
-  // width grows with the size, so two rounds land close enough; letter spacing doesn't scale, hence the second
+  // width grows with the size, so two rounds land close enough; letter spacing doesn't scale, hence the third
   for (let round = 0; round < 3; round++) {
-    ctx.font = `${e.font.weight === 700 ? 'bold ' : ''}${size * PT_TO_MM * px}px "${e.font.family}"`;
-    const spacing = (e.letterSpacing ?? 0) * PT_TO_MM * px;
+    ctx.font = fontCss(e, size * PT_TO_MM * px);
+    const spacing = (e.font.letter_spacing ?? 0) * PT_TO_MM * px;
     const widest = Math.max(...lines.map((l) => ctx.measureText(l).width + spacing * [...l].length));
     if (widest <= box) break;
     size = Math.max(4, (size * box) / widest);
@@ -40,12 +46,12 @@ export function fittedSize(e: TextElement, px: number): number {
 export function textLook(e: TextElement, px: number) {
   const sizePt = fittedSize(e, px);
   const fontSize = sizePt * PT_TO_MM * px;
-  const lineHeight = e.lineHeight ?? LINE_HEIGHT;
+  const lineHeight = e.font.line_height ?? LINE_HEIGHT;
   const height = fontSize * lineHeight * Math.max(1, e.text.split('\n').length);
   return {
     fontSize,
     lineHeight,
-    letterSpacing: (e.letterSpacing ?? 0) * PT_TO_MM * px,
+    letterSpacing: (e.font.letter_spacing ?? 0) * PT_TO_MM * px,
     ...shadowOf(e, fontSize),
     ...(e.stroke ? { stroke: e.stroke.color, strokeWidth: e.stroke.width_mm * px, fillAfterStrokeEnabled: true } : {}),
     ...(e.foil
@@ -77,10 +83,18 @@ function gradient(from: string, to: string, angle: number, w: number, h: number)
   };
 }
 
-export const shapeLook = (e: ShapeElement, px: number) => (e.fill2 ? gradient(e.fill, e.fill2, e.angle ?? 90, e.w_mm * px, e.h_mm * px) : {});
+/** Konva fill settings for a v2 fill over a w×h box: `fill` always (the flat colour, or the gradient's first), plus the gradient */
+export const fillLook = (f: Fill, w: number, h: number) => ({
+  fill: f.color,
+  ...(f.type === 'linear' ? gradient(f.color, f.color2, f.angle, w, h) : {}),
+});
 
-export const pageLook = (page: PageSpec, w: number, h: number) =>
-  page.background2 ? gradient(page.background, page.background2, page.backgroundAngle ?? 90, w, h) : {};
+/** a shape's Konva settings beyond its place and size */
+export const shapeLook = (e: ShapeElement, px: number) => ({
+  ...fillLook(e.fill, e.w_mm * px, e.h_mm * px),
+  ...(e.corner_radius_mm ? { cornerRadius: e.corner_radius_mm * px } : {}),
+  ...(e.opacity !== undefined ? { opacity: e.opacity } : {}),
+});
 
 /** the part of a picture its box shows, in the picture's own pixels; none draws the whole picture into the box */
 export function cropOf(e: ImageElement, iw: number, ih: number) {
@@ -93,7 +107,15 @@ export function cropOf(e: ImageElement, iw: number, ih: number) {
   return { x: ((iw - w) / 2) * (1 + e.crop.x), y: ((ih - h) / 2) * (1 + e.crop.y), width: w, height: h };
 }
 
-type PathCtx = { beginPath(): void; moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; arc(x: number, y: number, r: number, a0: number, a1: number): void; ellipse(x: number, y: number, rx: number, ry: number, rot: number, a0: number, a1: number): void; closePath(): void; quadraticCurveTo(cx: number, cy: number, x: number, y: number): void };
+type PathCtx = {
+  beginPath(): void;
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  arc(x: number, y: number, r: number, a0: number, a1: number): void;
+  ellipse(x: number, y: number, rx: number, ry: number, rot: number, a0: number, a1: number): void;
+  closePath(): void;
+  quadraticCurveTo(cx: number, cy: number, x: number, y: number): void;
+};
 
 /** the outline a masked picture shows through, in a w×h box */
 export function maskPath(ctx: PathCtx, mask: NonNullable<ImageElement['mask']>, w: number, h: number) {

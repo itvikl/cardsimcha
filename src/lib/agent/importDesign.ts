@@ -2,17 +2,19 @@ import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic
 import { z } from 'zod';
 
 /** One text the model read off a finished design; places and sizes are in percent of the picture. */
-export type ReadText = { text: string; label: string; x: number; y: number; w: number; h: number; lineHeight: number; color: string; align: 'right' | 'center' | 'left'; bold: boolean; font: string };
+export type ReadText = { text: string; label: string; x: number; y: number; w: number; h: number; lineHeight: number; color: string; align: 'right' | 'center' | 'left'; bold: boolean; font: string; rotation: number; arc: number };
 
 const MODEL = process.env.AGENT_MODEL || 'claude-sonnet-5-5';
 const TIMEOUT_MS = 120_000;
 
 const PROMPT = (fonts: string[]) => `You read a finished Hebrew design (an ad or an invitation) so it can be rebuilt as an editable template.
-Call submit_texts once with every text you can see in the picture, grouped so each element is one block that belongs together (a headline, a phone number, a paragraph).
+Call submit_texts once with every text you can see in the picture, grouped so each element is one block that belongs together (a headline, a phone number, a paragraph). Texts that stand apart in the picture are separate blocks, even on one line: two times with a divider between them ("17:18 | 17:52") are two blocks, and the divider is part of the picture, not of either text.
 Rules:
-- Copy the words exactly, keeping their line breaks with \\n. Do not correct or translate them.
+- Copy the words exactly, keeping their line breaks with \\n exactly where the picture breaks them, no more and no fewer. Do not correct or translate them.
 - x, y, w, h are the block's tight box, in percent of the picture's width (x, w) and height (y, h). Measure carefully: the text will be erased from exactly there.
 - line_height is the height of ONE line of the block, in percent of the picture's height.
+- rotation is how far the line is turned, in degrees clockwise: 0 for an ordinary line, -90 for a text turned to read from bottom to top, 90 for one reading from top to bottom, and any angle between for a slanted line (a line rising to the left is about -15). Designs often run a title up the side of the page: its letters then stand one above the other, each lying on its side. That is ONE turned line: write it as ordinary text in reading order, never letter by letter with line breaks, and give its rotation. For a turned or slanted text x, y, w, h are still its box as it stands in the picture, and for a turned one (beyond 45 degrees) line_height is the thickness of one line in percent of the picture's WIDTH.
+- arc is how much a line set along a curve bends. Look for it: a line whose letters follow a curve (around a candle, along the top of a circle) is curved even when it bends gently, and a curved line is never written as several short lines. arc is 0 for a straight line, up to 100 for a half circle with its middle at the top (a rainbow), down to -100 for one with its middle at the bottom (a smile). A curved line is one line: x, y, w, h are the box around all of it, and rotation is the turn of the curve as a whole (its middle's tilt).
 - color is the text's colour as #RRGGBB.
 - font is the closest of: ${fonts.join(', ')}. The exact font usually isn't among them; pick by look: serif or sans, heavy or light.
 - label is a short Hebrew name for the field, the kind a customer would fill in, such as "כותרת", "טלפון", "שמות". Each label is different.
@@ -31,6 +33,8 @@ const schema = z.object({
   align: z.enum(['right', 'center', 'left']),
   bold: z.boolean(),
   font: z.string().max(60),
+  rotation: z.number().min(-90).max(90).optional(),
+  arc: z.number().min(-100).max(100).optional(),
 });
 
 /** The texts of a finished design, as the model reads them. A reading, so an admin goes over the template it becomes. */
@@ -42,7 +46,13 @@ export async function readDesign(image: Buffer, mediaType: 'image/jpeg' | 'image
     alwaysLoad: true,
     tools: [
       tool('submit_texts', 'Hand over the texts read from the picture.', { texts: z.array(schema).max(60) }, async ({ texts }) => {
-        answer = texts.map(({ line_height, ...t }) => ({ ...t, lineHeight: line_height }));
+        // a turn or a bend too small to see is none
+        answer = texts.map(({ line_height, rotation, arc, ...t }) => ({
+          ...t,
+          lineHeight: line_height,
+          rotation: Math.abs(rotation ?? 0) < 5 ? 0 : Math.round(rotation ?? 0),
+          arc: Math.abs(arc ?? 0) < 3 ? 0 : Math.round(arc ?? 0),
+        }));
         return { content: [{ type: 'text' as const, text: 'received' }] };
       }),
     ],

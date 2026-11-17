@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { fitDocColors } from '@/lib/fitColor';
 import { cardPixels, renderCard, type DrawableDoc } from '@/lib/renderCard';
-import { applyWording, type Wording } from '@/lib/wording';
+import { allowanceOf, fitDocTexts } from '@/lib/fitText';
+import { applyWording, isCardText, type Wording } from '@/lib/wording';
 import type { CanvasDoc } from '@/lib/types';
 
 /**
@@ -57,7 +58,9 @@ export function WordingPicker({
       try {
         const px = await cardPixels(drawable(doc));
         for (const w of wordings) {
-          const url = await renderCard(drawable(fitDocColors(applyWording(doc, w), px)), 220);
+          // as it will be on the card: the customer's details fitted in, in colours that read
+          const designed = allowanceOf({ ...doc, elements: [...doc.elements.filter((e) => !isCardText(e)), ...w.elements] });
+          const url = await renderCard(drawable(fitDocColors(fitDocTexts(applyWording(doc, w), designed), px)), 220);
           if (!alive) return;
           setPreviews((p) => ({ ...p, [w.id]: url }));
         }

@@ -108,6 +108,22 @@ export const QUICK_LINKS: (QuickLink | { name: string; items: QuickLink[] })[] =
   { name: 'ברכות', topic: 'ברכות' },
 ];
 
+/**
+ * What the shortcuts under the top bar call a topic, so the designs on the home page carry the same names
+ * ("הודעה על לידה" inside "לידת בן" is called by its group); a topic with no shortcut keeps its own name.
+ */
+export function quickName(topic: string): string {
+  for (const l of QUICK_LINKS) {
+    if (!('items' in l)) {
+      if (l.topic === topic) return l.name;
+      continue;
+    }
+    const item = l.items.find((i) => i.topic === topic);
+    if (item) return item.topic === l.name ? l.name : item.name;
+  }
+  return topic;
+}
+
 /** the built-in default: topics an admin typed freely (not in CATEGORIES) belong to the private side */
 export const audienceOf = (name: string): Audience => CATEGORIES.find((c) => c.name === name)?.audience ?? 'private';
 

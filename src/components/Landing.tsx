@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { SiteFooter } from './SiteFooter';
 import { AdHistory } from './AdHistory';
+import { HowItWorks } from './HowItWorks';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
-import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, groupHref, PRIVATE_GROUPS, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
+import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, groupHref, PRIVATE_GROUPS, quickName, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
 
 type Published = { id: string; name: string; topic: string | null; thumbnail: string | null; price: number | null };
 
@@ -159,26 +160,21 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
           <h2 className={s.sectionTitle}>עיצובים שאפשר להתחיל מהם עכשיו</h2>
           <div className={s.cardStrip}>
             {showcase.map((t) => (
-              <Link key={t.id} href={`/t/${t.id}`} className={s.cardTile}>
-                <img src={t.thumbnail!} alt={t.name} className={s.cardTileImg} loading="lazy" decoding="async" />
-                <div className={s.cardTileMeta}>
-                  <span className={s.cardTileName}>{t.name}</span>
-                </div>
-              </Link>
+              // each design under the name its kind has in the shortcuts at the top
+              <div key={t.id} className={s.cardTileWrap}>
+                <span className={s.cardTileKind}>{quickName(t.topic || GENERAL_TOPIC)}</span>
+                <Link href={`/t/${t.id}`} className={s.cardTile}>
+                  <img src={t.thumbnail!} alt={t.name} className={s.cardTileImg} loading="lazy" decoding="async" />
+                  <div className={s.cardTileMeta}>
+                    <span className={s.cardTileName}>{t.name}</span>
+                  </div>
+                </Link>
+              </div>
             ))}
           </div>
         </section>
       )}
-      {audience === 'private' && (
-        <section id="how" className={`${s.wrap} ${s.catSection}`}>
-          <h2 className={s.sectionTitle}>איך זה עובד</h2>
-          <ol className={s.howSteps}>
-            <li><strong>בוחרים עיצוב</strong><span>הזמנה, ברכה או תעודה, לפי סוג השמחה.</span></li>
-            <li><strong>ממלאים את הפרטים</strong><span>שמות, תאריך ומקום. הכרטיס מתעדכן מולכם.</span></li>
-            <li><strong>מורידים את הכרטיס</strong><span>קובץ תמונה, מוכן לשליחה בוואטסאפ או להדפסה.</span></li>
-          </ol>
-        </section>
-      )}
+      {audience === 'private' && <HowItWorks images={showcase.map((t) => t.thumbnail!)} />}
 
       {/* ── category grid ──────────────────────────── */}
       {audience === 'business' && (

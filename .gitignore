@@ -10,3 +10,6 @@ service-account*.json
 
 # Prisma client, made by "prisma generate" (runs on npm install)
 src/generated
+
+# AWS CDK output
+cdk.out

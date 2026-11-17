@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import Link from 'next/link';
 import s from './festive.module.css';
 import r from './reel.module.css';
-import { clamp, easeInOut, infinityPath, mix, pickReel, ringSpot, walk, wrap, type Path, type ReelDesign, type Spot } from '@/lib/reel';
+import { clamp, easeInOut, infinityPath, landing, mix, pickReel, ringSpot, walk, wrap, type Path, type ReelDesign, type Spot } from '@/lib/reel';
 
 type Phase = 'loading' | 'enter' | 'carousel';
 type Geo = { w: number; h: number; H: number; rowY: number; widths: number[]; at: number[]; L: number; ring: number; path: Path; pathScale: number };
@@ -186,14 +186,8 @@ export function ReelView() {
         const b = clamp((own - travel) / LAND_S, 0, 1);
         const e = easeInOut(b);
         const { spot, opacity } = onRing(g, g.at[i]);
-        const pull = speed * LAND_S * 0.5;
-        const h1 = 2 * b ** 3 - 3 * b ** 2 + 1;
-        const h2 = b ** 3 - 2 * b ** 2 + b;
-        const h3 = -2 * b ** 3 + 3 * b ** 2;
         el.style.transform = css({
-          x: h1 * end.p.x + h2 * end.dir.x * pull + h3 * spot.x,
-          y: h1 * end.p.y + h2 * end.dir.y * pull + h3 * spot.y,
-          z: h1 * end.p.z + h2 * end.dir.z * pull + h3 * spot.z,
+          ...landing(end.p, end.dir, speed * LAND_S * 0.5, spot, b),
           rx: mix(0, spot.rx, e),
           ry: mix(FACE_TURN * end.dir.x, spot.ry, e),
           scale: mix(g.pathScale, spot.scale, e),

@@ -121,8 +121,8 @@ function FontsManager() {
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <p className="status" role="status">{notice}</p>}
 
-      <div style={{ display: 'grid', gap: 16 }}>
-        <section className="card" style={{ display: 'grid', gap: 12 }} aria-label="העלאת פונט">
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0, 1fr)' }}>
+        <section className="card" style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(0, 1fr)' }} aria-label="העלאת פונט">
           <div className="row" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
             <label className="field" style={{ flex: '1 1 240px' }}>
               שם המשפחה (לא חובה, אחרת נלקח מהקובץ)
@@ -183,7 +183,7 @@ function FontsManager() {
             const files = fonts.filter((f) => f.family === fam);
             const hebrew = files.some((f) => f.hebrew);
             return (
-              <section key={fam} className="card" style={{ display: 'grid', gap: 10 }} aria-label={fam}>
+              <section key={fam} className="card" style={{ display: 'grid', gap: 10, gridTemplateColumns: 'minmax(0, 1fr)' }} aria-label={fam}>
                 <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
                   <h2 style={{ margin: 0, fontSize: 20 }}>{fam}</h2>
                   <span className="status">

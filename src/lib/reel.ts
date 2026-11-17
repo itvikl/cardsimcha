@@ -90,19 +90,27 @@ export type Path = { pts: Point[]; at: number[]; length: number };
 const STRETCH = 1.35;
 
 /**
- * The way in: from beyond the right edge, level with the top of the ∞, a curve down into its middle, then once round
- * the lying ∞ (a lemniscate, `size` from its middle to either tip) and back to the middle. The curve meets the ∞
+ * The way in: from beyond the right edge, `rise` above the middle (level with the top of the ∞ unless the room is
+ * shorter), a curve down into its middle, then once round the lying ∞ (a lemniscate, `size` from its middle to
+ * either tip, its loops stretched to `height`: they reach 0.354 of it above and below) and back to the middle. The curve meets the ∞
  * along its own line through the crossing, so the turn into it is smooth. The two strokes that cross pass at
  * different depths (`depth` in front of and behind the screen), so the cards never run through each other.
  */
-export function infinityPath(size: number, depth: number, centre: { x: number; y: number }, runIn: number): Path {
+export function infinityPath(
+  size: number,
+  depth: number,
+  centre: { x: number; y: number },
+  runIn: number,
+  rise = size * 0.6,
+  height = size * STRETCH,
+): Path {
   const pts: Point[] = [];
   const steps = 40;
-  const top = centre.y - size * 0.6;
+  const top = centre.y - rise;
   const bend = size * 0.4;
   const c0 = { x: centre.x + runIn, y: top };
   const c1 = { x: centre.x + runIn * 0.4, y: top };
-  const c2 = { x: centre.x + bend, y: centre.y - bend * STRETCH };
+  const c2 = { x: centre.x + bend, y: centre.y - (bend * height) / size };
   for (let i = 0; i < steps; i++) {
     const f = i / steps;
     const g = 1 - f;
@@ -117,7 +125,7 @@ export function infinityPath(size: number, depth: number, centre: { x: number; y
   for (let i = 0; i <= loop; i++) {
     const t = Math.PI / 2 + (2 * Math.PI * i) / loop;
     const d = 1 + Math.sin(t) ** 2;
-    pts.push({ x: centre.x + (size * Math.cos(t)) / d, y: centre.y + (STRETCH * size * Math.sin(t) * Math.cos(t)) / d, z: depth * Math.sin(t) });
+    pts.push({ x: centre.x + (size * Math.cos(t)) / d, y: centre.y + (height * Math.sin(t) * Math.cos(t)) / d, z: depth * Math.sin(t) });
   }
   const at = [0];
   for (let i = 1; i < pts.length; i++) at.push(at[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z));
@@ -142,6 +150,21 @@ export function walk(path: Path, d: number): { p: Point; dir: Point } {
   return {
     p: { x: mix(a.x, b.x, f), y: mix(a.y, b.y, f), z: mix(a.z, b.z, f) },
     dir: { x: (b.x - a.x) / seg, y: (b.y - a.y) / seg, z: (b.z - a.z) / seg },
+  };
+}
+
+/**
+ * A card leaving the ∞ for its place: at b = 0 it is at `from` still heading along `dir` (stretched to `pull` px),
+ * at b = 1 it rests on `to`. A Hermite curve, so it carries on smoothly instead of stopping dead and turning.
+ */
+export function landing(from: Point, dir: Point, pull: number, to: Point, b: number): Point {
+  const h1 = 2 * b ** 3 - 3 * b ** 2 + 1;
+  const h2 = b ** 3 - 2 * b ** 2 + b;
+  const h3 = -2 * b ** 3 + 3 * b ** 2;
+  return {
+    x: h1 * from.x + h2 * dir.x * pull + h3 * to.x,
+    y: h1 * from.y + h2 * dir.y * pull + h3 * to.y,
+    z: h1 * from.z + h2 * dir.z * pull + h3 * to.z,
   };
 }
 
