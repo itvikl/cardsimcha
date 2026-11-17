@@ -46,7 +46,8 @@
   /* no background of its own: the site backdrop shows through */
   color: var(--text);
   font-family: 'Heebo', sans-serif;
-  overflow: hidden;
+  /* clip, not hidden: hidden would make this a scroll container and stop "איך זה עובד" from sticking while the page scrolls */
+  overflow: clip;
 }
 .business {
   --bg: #0b1f4d;

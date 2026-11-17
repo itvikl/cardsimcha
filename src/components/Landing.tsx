@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { SiteFooter } from './SiteFooter';
 import { AdHistory } from './AdHistory';
+import { HowItWorks } from './HowItWorks';
 import { MirrorRing, type RingItem } from './MirrorRing';
 import s from './festive.module.css';
 import { applyCarousel, categoryHref, defaultCards, GENERAL_TOPIC, groupHref, PRIVATE_GROUPS, quickName, topicAudience, type Audience, type CarouselSetting } from '@/lib/categories';
@@ -173,16 +174,7 @@ export function Landing({ audience = 'private' }: { audience?: Audience }) {
           </div>
         </section>
       )}
-      {audience === 'private' && (
-        <section id="how" className={`${s.wrap} ${s.catSection}`}>
-          <h2 className={s.sectionTitle}>איך זה עובד</h2>
-          <ol className={s.howSteps}>
-            <li><strong>בוחרים עיצוב</strong><span>הזמנה, ברכה או תעודה, לפי סוג השמחה.</span></li>
-            <li><strong>ממלאים את הפרטים</strong><span>שמות, תאריך ומקום. הכרטיס מתעדכן מולכם.</span></li>
-            <li><strong>מורידים את הכרטיס</strong><span>קובץ תמונה, מוכן לשליחה בוואטסאפ או להדפסה.</span></li>
-          </ol>
-        </section>
-      )}
+      {audience === 'private' && <HowItWorks images={showcase.map((t) => t.thumbnail!)} />}
 
       {/* ── category grid ──────────────────────────── */}
       {audience === 'business' && (
