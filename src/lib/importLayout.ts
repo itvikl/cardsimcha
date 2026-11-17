@@ -6,6 +6,24 @@ import type { CanvasDoc, CanvasElement, TextElement } from './types';
 
 const PT_TO_MM = 25.4 / 72;
 
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const distance = (a: string, b: string) => Math.hypot(...rgb(a).map((v, i) => v - rgb(b)[i]));
+/** two colours closer than this don't read one on the other */
+const UNREADABLE = 70;
+
+/**
+ * A text's colour: the one sampled from its ink, unless that is the colour it stands on (thin letters give few ink
+ * pixels, and the sample can catch the circle under them); then the model's, and if that doesn't read either, dark
+ * or light by what is under it.
+ */
+function readable(sampled: string | null, model: string, under: string | null) {
+  if (!under) return sampled ?? model;
+  if (sampled && distance(sampled, under) >= UNREADABLE) return sampled;
+  if (distance(model, under) >= UNREADABLE) return model;
+  const [r, g, b] = rgb(under);
+  return r * 0.3 + g * 0.59 + b * 0.11 > 140 ? '#2B1D10' : '#FFFFFF';
+}
+
 const inside = (t: Refined, o: CutObject['object']) => {
   const cx = t.x + t.w / 2;
   const cy = t.y + t.h / 2;
@@ -23,6 +41,8 @@ export function importedContent(opts: {
   page: CanvasDoc['page'];
   texts: ReadText[];
   refined: Refined[];
+  /** the colour each text stands on once wiped, by the same order */
+  under: (string | null)[];
   pieces: CutObject[];
   imgW: number;
   imgH: number;
@@ -103,7 +123,7 @@ export function importedContent(opts: {
       x_mm = t.align === 'right' ? inkX + inkW - w_mm : t.align === 'left' ? inkX : inkX + inkW / 2 - w_mm / 2;
       y_mm = inkY + inkH / 2 - block / 2;
     }
-    const color = (fit.color ?? t.color).toUpperCase();
+    const color = readable(fit.color?.toUpperCase() ?? null, t.color.toUpperCase(), opts.under[i]);
     const group = groupOf(fit);
     return {
       id: newId(),

@@ -1,13 +1,16 @@
 import sharp, { type OverlayOptions } from 'sharp';
+import type { ReadObject } from './agent/importDesign';
+import { maskOf } from './cutObjects';
 
-export type Box = { x: number; y: number; w: number; h: number };
+/** a place to fill, in percent of the picture; with an outline, only what is inside it is filled */
+export type Box = { x: number; y: number; w: number; h: number } & Partial<Pick<ReadObject, 'shape' | 'corner'>>;
 
 /** how far the colours around a box may spread for it to count as standing on a flat background */
 const FLAT = 14;
 
 /**
- * The picture with these boxes (in percent of it) filled whole from what surrounds them, so a flat or softly changing
- * background comes out clean. Design import uses it for the places of objects cut out of the picture: a filled box is
+ * The picture with these boxes (in percent of it) filled from what surrounds them, so a flat or softly changing
+ * background comes out clean. A box with an outline is filled only inside it (a circle's corners stay as they were). Design import uses it for the places of objects cut out of the picture: a filled box is
  * not "ink", so importClean's repaint would leave it. Over a photograph that's a smudge, so it also says how many boxes
  * stood on something that wasn't flat, for the admin to look at. (Vitol's eraseTexts, before importClean replaced it
  * for texts.)
@@ -70,7 +73,10 @@ export async function fillPlaces(image: Buffer, boxes: Box[]): Promise<{ data: B
         for (let k = 0; k < 3; k++) fill[(y * w + x) * 3 + k] = ((a[k] * (1 - fy) + c[k] * fy) + (l[k] * (1 - fx) + r[k] * fx)) / 2;
       }
     }
-    const patch = await sharp(fill, { raw: { width: w, height: h, channels: 3 } }).blur(Math.max(1.5, Math.min(w, h) / 10)).png().toBuffer();
+    const blurred = sharp(fill, { raw: { width: w, height: h, channels: 3 } }).blur(Math.max(1.5, Math.min(w, h) / 10));
+    const patch = b.shape
+      ? await sharp(await blurred.png().toBuffer()).ensureAlpha().composite([{ input: maskOf({ shape: b.shape, corner: b.corner ?? 12 }, w, h), blend: 'dest-in' }]).png().toBuffer()
+      : await blurred.png().toBuffer();
     patches.push({ input: patch, left, top });
   }
   const data = await base.composite(patches).jpeg({ quality: 92 }).toBuffer();

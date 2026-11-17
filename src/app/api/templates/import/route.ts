@@ -34,6 +34,27 @@ function pageFor(ratio: number) {
   return ratio >= 1 ? { width_mm: 200, height_mm: 200 / ratio } : { width_mm: 200 * ratio, height_mm: 200 };
 }
 
+/** the mean colour of the picture inside each box (percent of it), as #RRGGBB */
+async function meanColors(image: Buffer, boxes: { x: number; y: number; w: number; h: number }[]) {
+  const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width: W, height: H } = info;
+  return boxes.map((b) => {
+    const x0 = Math.max(0, Math.floor((b.x / 100) * W));
+    const y0 = Math.max(0, Math.floor((b.y / 100) * H));
+    const x1 = Math.min(W, Math.ceil(((b.x + b.w) / 100) * W));
+    const y1 = Math.min(H, Math.ceil(((b.y + b.h) / 100) * H));
+    const sum = [0, 0, 0];
+    let n = 0;
+    for (let y = y0; y < y1; y += 2) {
+      for (let x = x0; x < x1; x += 2) {
+        for (let k = 0; k < 3; k++) sum[k] += data[(y * W + x) * 3 + k];
+        n++;
+      }
+    }
+    return n ? '#' + sum.map((v) => Math.round(v / n).toString(16).padStart(2, '0')).join('').toUpperCase() : null;
+  });
+}
+
 /** the shared category that keeps imported backgrounds, made the first time */
 async function importCategoryId(): Promise<string> {
   const made = await createCategory(CATEGORY, 'רקעים של עיצובים שיובאו מתמונה');
@@ -106,7 +127,9 @@ export async function POST(req: Request) {
 
   // each object a picture of its own, its texts grouped with it (importLayout.ts)
   const pieceIds = pieces.map(() => newId());
-  const content = importedContent({ page, texts, refined, pieces, imgW: width, imgH: height, pieceIds, fonts, newId });
+  // what each text stands on once it is wiped: its colour must read on that
+  const under = await meanColors(textless, refined);
+  const content = importedContent({ page, texts, refined, under, pieces, imgW: width, imgH: height, pieceIds, fonts, newId });
 
   const assetId = newId();
   const fileName = `${assetId}.jpg`;
