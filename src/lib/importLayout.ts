@@ -24,7 +24,7 @@ function readable(sampled: string | null, model: string, under: string | null) {
   return r * 0.3 + g * 0.59 + b * 0.11 > 140 ? '#2B1D10' : '#FFFFFF';
 }
 
-const inside = (t: Refined, o: CutObject['object']) => {
+const inside = (t: Refined, o: { x: number; y: number; w: number; h: number }) => {
   const cx = t.x + t.w / 2;
   const cy = t.y + t.h / 2;
   return cx > o.x && cx < o.x + o.w && cy > o.y && cy < o.y + o.h;
@@ -44,6 +44,8 @@ export function importedContent(opts: {
   /** the colour each text stands on once wiped, by the same order */
   under: (string | null)[];
   pieces: CutObject[];
+  /** every object the model found, cut out or left in the picture (percent of it): a text on one stays inside it */
+  frames: { x: number; y: number; w: number; h: number }[];
   imgW: number;
   imgH: number;
   /** the uploaded picture of each piece, in order */
@@ -87,9 +89,10 @@ export function importedContent(opts: {
     const across = turned ? page.width_mm : page.height_mm;
     const along = turned ? page.height_mm : page.width_mm;
     const thick = (b: { w: number; h: number }) => ((turned ? b.w : b.h) / 100) * across;
-    // the box fitted to the ink, unless fitting it grew into something next to the text (a candle, a glow), which
-    // would make the text far too big: then the box the model measured
-    const fit = thick(refined[i]) <= thick(t) * 1.3 ? refined[i] : { ...t, color: refined[i].color };
+    const long = (b: { w: number; h: number }) => ((turned ? b.h : b.w) / 100) * along;
+    // the box fitted to the ink, unless fitting it grew into something next to the text (a candle, a glow, a bottle),
+    // which would make the text far too big or move it: then the box the model measured
+    const fit = thick(refined[i]) <= thick(t) * 1.3 && long(refined[i]) <= long(t) * 1.3 + 2 ? refined[i] : { ...t, color: refined[i].color };
     const inkThick = thick(fit);
     const inkLong = ((turned ? fit.h : fit.w) / 100) * along;
     // The size: the model's line height, never larger than the ink allows (Hebrew letters stand about 0.78 of the
@@ -97,12 +100,18 @@ export function importedContent(opts: {
     // has in the picture rather than growing into what stands beside it.
     const fromModel = ((t.lineHeight / 100) * across) / 1.25;
     const fromInk = (inkThick / lines / 0.78) * 1.1;
-    const size_mm = Math.min(fromModel, Math.max(fromModel * 0.6, fromInk));
+    let size_mm = Math.min(fromModel, Math.max(fromModel * 0.6, fromInk));
     // When the picture shows no more lines than the text has, its lines must not break: the box takes the longest
     // line (about half a size per letter) besides the ink. Otherwise the picture wraps it, and the ink's width does too.
     const wraps = inkThick > lines * size_mm * 1.25 * 1.5;
-    const longest = Math.max(...t.text.split('\n').map((l) => l.length)) * size_mm * 0.55;
-    const w_mm = Math.min(along, Math.max(5, inkLong * 1.08 + size_mm * 0.3, wraps ? 0 : longest));
+    const letters = Math.max(...t.text.split('\n').map((l) => l.length));
+    // An upright text on an object (a circle, a box) stays inside it: the font that stands in for the designer's is
+    // often wider, so when its longest line would pass the object's width, it gets smaller, to 60% at most.
+    const frame = turned ? undefined : opts.frames.filter((f) => inside(fit, f)).sort((a, b) => a.w * a.h - b.w * b.h)[0];
+    const room = frame ? (frame.w / 100) * page.width_mm * 0.9 : Infinity;
+    if (!wraps && letters * size_mm * 0.55 > room) size_mm = Math.max(size_mm * 0.6, room / (letters * 0.55));
+    const longest = letters * size_mm * 0.55;
+    const w_mm = Math.min(along, room, Math.max(5, inkLong * 1.08 + size_mm * 0.3, wraps ? 0 : longest));
     const block = lines * size_mm * 1.25;
     const inkX = (fit.x / 100) * page.width_mm;
     const inkY = (fit.y / 100) * page.height_mm;
@@ -122,6 +131,10 @@ export function importedContent(opts: {
       // anchored where its alignment holds it, centred on the ink
       x_mm = t.align === 'right' ? inkX + inkW - w_mm : t.align === 'left' ? inkX : inkX + inkW / 2 - w_mm / 2;
       y_mm = inkY + inkH / 2 - block / 2;
+      if (frame) {
+        const fx = (frame.x / 100) * page.width_mm;
+        x_mm = Math.min(Math.max(x_mm, fx), fx + (frame.w / 100) * page.width_mm - w_mm);
+      }
     }
     const color = readable(fit.color?.toUpperCase() ?? null, t.color.toUpperCase(), opts.under[i]);
     const group = groupOf(fit);

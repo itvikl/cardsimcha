@@ -10,7 +10,7 @@ import { addImage, assetFileKey, createCategory, listCategories } from '@/lib/da
 import { createTemplate, topicConflictFor } from '@/lib/data/projects';
 import { cleanDesign } from '@/lib/importClean';
 import { importedContent } from '@/lib/importLayout';
-import { cutObjects } from '@/lib/cutObjects';
+import { cutObjects, keepCovered } from '@/lib/cutObjects';
 import { fillPlaces } from '@/lib/fillPlaces';
 import { files } from '@/lib/files';
 import { BUILTIN_FONTS } from '@/lib/fonts';
@@ -115,10 +115,15 @@ export async function POST(req: Request) {
   }
 
   const kept = await sharp(original).rotate().resize({ width: KEEP_SIDE, height: KEEP_SIDE, fit: 'inside', withoutEnlargement: true }).toBuffer();
-  // each box snaps to its ink and only the ink is repainted (the ad-import tool's steps, lib/importClean)
-  const { data: textless, refined, rough: roughTexts } = await cleanDesign(kept, texts);
-  // the objects are cut from the picture without its texts (each text where its ink is), and then their places are filled
-  const pieces = await cutObjects(kept, textless, objects, texts.map((t, i) => ({ ...t, x: refined[i].x, y: refined[i].y, w: refined[i].w, h: refined[i].h })));
+  // each box snaps to its ink (the ad-import tool's steps, lib/importClean)
+  const { refined } = await cleanDesign(kept, texts);
+  const fitted = texts.map((t, i) => ({ ...t, x: refined[i].x, y: refined[i].y, w: refined[i].w, h: refined[i].h }));
+  // a flat object something lies over stays in the picture, and the texts on it are wiped by their letters only
+  const stays = await keepCovered(kept, objects, fitted);
+  // the other texts: only their ink is repainted (lib/importClean)
+  const { data: textless, rough: roughTexts } = await cleanDesign(stays.picture, texts.filter((_, i) => !stays.texts.has(i)));
+  // the other objects are cut from the picture without its texts (each text where its ink is), and their places filled
+  const pieces = await cutObjects(kept, textless, objects.filter((o) => !stays.objects.includes(o)), fitted);
   const { data, rough: roughObjects } = pieces.length ? await fillPlaces(textless, pieces.map((p) => p.object)) : { data: textless, rough: 0 };
   const rough = roughTexts + roughObjects;
   const { width, height } = await sharp(data).metadata();
@@ -129,7 +134,7 @@ export async function POST(req: Request) {
   const pieceIds = pieces.map(() => newId());
   // what each text stands on once it is wiped: its colour must read on that
   const under = await meanColors(textless, refined);
-  const content = importedContent({ page, texts, refined, under, pieces, imgW: width, imgH: height, pieceIds, fonts, newId });
+  const content = importedContent({ page, texts, refined, under, pieces, frames: objects, imgW: width, imgH: height, pieceIds, fonts, newId });
 
   const assetId = newId();
   const fileName = `${assetId}.jpg`;

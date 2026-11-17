@@ -128,9 +128,14 @@ function tighten(img: Img, box: PxBox, s: number): PxBox {
     hi = x;
   }
   if (lo < 0) return box;
-  // walk outwards: any ink within `gap` continues the line
-  for (let i = lo - 1; i >= 0 && lo - i <= gap; i--) if (on[i]) lo = i;
-  for (let i = hi + 1; i < sw && i - hi <= gap; i++) if (on[i]) hi = i;
+  // walk outwards: any ink within `gap` continues the line, but only a little past the model's box: over a photograph
+  // whatever stands beside the text (a bottle, an arrow, another title) reads as ink, and following it moved the text
+  // off its place and wiped the neighbour with it
+  const reach = Math.max(gap, Math.round((box[2] - box[0]) * 0.15));
+  const minX = Math.max(0, box[0] - sx0 - reach);
+  const maxX = Math.min(sw - 1, box[2] - sx0 - 1 + reach);
+  for (let i = lo - 1; i >= minX && lo - i <= gap; i--) if (on[i]) lo = i;
+  for (let i = hi + 1; i <= maxX && i - hi <= gap; i++) if (on[i]) hi = i;
   return [sx0 + lo, ty0, sx0 + hi + 1, ty1];
 }
 
