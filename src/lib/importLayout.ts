@@ -23,35 +23,15 @@ function readable(sampled: string | null, model: string, under: string | null) {
   return r * 0.3 + g * 0.59 + b * 0.11 > 140 ? '#2B1D10' : '#FFFFFF';
 }
 
-/**
- * The words in `n` lines of about equal length, in their order: the picture breaks a block the model wrote as fewer
- * lines (a seal's "יין ישמח לבב אנוש", one word a line).
- */
-function rebreak(text: string, lines: number) {
-  const words = text.split(/\s+/).filter(Boolean);
-  const n = Math.min(lines, words.length);
-  const total = words.join(' ').length;
-  const out: string[][] = [[]];
-  let used = 0;
-  for (const [k, word] of words.entries()) {
-    const line = out[out.length - 1];
-    // a new line once this one has its share, keeping a word for each line still to come
-    if (line.length && out.length < n && used + word.length / 2 > (total * out.length) / n && words.length - k >= n - out.length) out.push([]);
-    out[out.length - 1].push(word);
-    used += word.length + 1;
-  }
-  return out.map((l) => l.join(' ')).join('\n');
-}
-
 /** Hebrew letters stand about 0.78 of the font size tall; digits and Latin capitals about 0.72 */
 const inkShare = (text: string) => (/[֐-׿]/.test(text) ? 0.78 : 0.72);
 
 /**
  * The content layer of a template made from a finished design: each text a live customer field over the cleaned
- * picture, in the box its letters took in the picture. The box is as long as the ink and centred on it, turned and
- * bent as the line was; the text shrinks to the box's width when the font standing in for the designer's is wider
- * (fit 'shrink'), so it keeps its place and its line breaks. Places are in percent of the picture: `refined` is each
- * text's box fitted to its ink (importClean).
+ * picture, in the box its letters took in the picture, with the line breaks the model wrote. The box is as long as
+ * the ink and centred on it, turned and bent as the line was; the text shrinks to the box's width when the font
+ * standing in for the designer's is wider (fit 'shrink'), so it keeps its place and its line breaks. Places are in
+ * percent of the picture: `refined` is each text's box fitted to its ink (importClean).
  */
 export function importedContent(opts: {
   page: CanvasDoc['page'];
@@ -68,8 +48,8 @@ export function importedContent(opts: {
     let label = t.label.trim() || 'טקסט';
     if (seen.has(label)) label = `${label} ${i + 1}`;
     seen.add(label);
-    let text = t.text;
-    let lines = Math.max(1, text.split('\n').length);
+    const text = t.text;
+    const lines = Math.max(1, text.split('\n').length);
     const angle = t.rotation;
     const rad = (angle * Math.PI) / 180;
     const steep = Math.abs(angle) >= 45;
@@ -87,22 +67,12 @@ export function importedContent(opts: {
     const fromModel = ((t.lineHeight / 100) * across) / 1.25;
     const fromInk = ((thick(fit) / lines / inkShare(text)) * 1.1);
     const size_mm = square ? Math.min(fromModel, Math.max(fromModel * 0.6, fromInk)) : fromModel;
-    // the picture may break the block into more lines than the model wrote
-    if (square && !t.arc) {
-      const shown = Math.round((thick(fit) - size_mm * inkShare(text)) / (size_mm * 1.25)) + 1;
-      if (shown > lines) {
-        text = rebreak(text.replace(/\s*\n\s*/g, ' '), shown);
-        lines = text.split('\n').length;
-      }
-    }
     // the block's thickness across its lines; a bent line also takes the height of its bend
     const W = (fit.w / 100) * page.width_mm;
     const H = (fit.h / 100) * page.height_mm;
     let depth = lines * size_mm * 1.25;
-    const cos = Math.abs(Math.cos(rad));
-    const sin = Math.abs(Math.sin(rad));
-    // the line's own length, out of its upright box: a slanted line's box holds its length and its depth across
-    const length = Math.max(5, square ? (steep ? H : W) : steep ? (H - depth * cos) / sin : (W - depth * sin) / cos);
+    // the line's length is its box's, as measured (down the page for a line turned on its side), the angle laid on it
+    const length = Math.max(5, steep ? H : W);
     if (t.arc) {
       const bend = (Math.min(100, Math.abs(t.arc)) / 100) * Math.PI;
       const run = (length * (bend / 2)) / Math.sin(bend / 2);

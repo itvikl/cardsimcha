@@ -1,4 +1,4 @@
-import type { Asset, Collection } from '@/generated/prisma/client';
+import type { Asset, Collection, Prisma } from '@/generated/prisma/client';
 import type { Category, ImageAsset } from '../types';
 import { prisma } from './prisma';
 
@@ -84,6 +84,8 @@ export async function addImage(input: {
   file: string;
   width: number;
   height: number;
+  /** kept with the image, for looking into it later (a design import keeps what the model read) */
+  metadata?: Record<string, unknown>;
 }): Promise<ImageAsset | null> {
   return prisma.$transaction(async (tx) => {
     if (!(await tx.collection.findFirst({ where: { id: input.categoryId, workspaceId: null } }))) return null;
@@ -96,6 +98,7 @@ export async function addImage(input: {
         fileKey: assetFileKey(input.file),
         width: input.width,
         height: input.height,
+        ...(input.metadata && { metadata: input.metadata as Prisma.InputJsonValue }),
       },
     });
     return toImage(a);

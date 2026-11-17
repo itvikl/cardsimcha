@@ -39,14 +39,21 @@ function wipeOnGround(data: Buffer, width: number, height: number, t: ReadText):
   const x1 = Math.min(width, Math.ceil(((t.x + t.w) / 100) * width));
   const y1 = Math.min(height, Math.ceil(((t.y + t.h) / 100) * height));
   if (x1 - x0 < 4 || y1 - y0 < 4) return false;
-  const inBox = Buffer.alloc((x1 - x0) * (y1 - y0) * 3);
-  for (let y = y0; y < y1; y++) data.copy(inBox, (y - y0) * (x1 - x0) * 3, (y * width + x0) * 3, (y * width + x1) * 3);
-  const colour = dominant(inBox);
+  // The ground is judged in the middle of the text only: the model's box for a slanted or loosely read text reaches
+  // past its ground (over a bottle, onto the photo beside a badge), and the whole box would fail a badge's text.
+  const mx0 = Math.round(x0 + (x1 - x0) * 0.25);
+  const mx1 = Math.round(x1 - (x1 - x0) * 0.25);
+  const my0 = Math.round(y0 + (y1 - y0) * 0.2);
+  const my1 = Math.round(y1 - (y1 - y0) * 0.2);
+  if (mx1 - mx0 < 2 || my1 - my0 < 2) return false;
+  const middle = Buffer.alloc((mx1 - mx0) * (my1 - my0) * 3);
+  for (let y = my0; y < my1; y++) data.copy(middle, (y - my0) * (mx1 - mx0) * 3, (y * width + mx0) * 3, (y * width + mx1) * 3);
+  const colour = dominant(middle);
   if (!colour) return false;
   const dist = (i: number) => Math.hypot(data[i] - colour[0], data[i + 1] - colour[1], data[i + 2] - colour[2]);
   let flat = 0;
-  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (dist((y * width + x) * 3) < FLAT_NEAR) flat++;
-  if (flat / ((x1 - x0) * (y1 - y0)) < FLAT_SHARE) return false;
+  for (let y = my0; y < my1; y++) for (let x = mx0; x < mx1; x++) if (dist((y * width + x) * 3) < FLAT_NEAR) flat++;
+  if (flat / ((mx1 - mx0) * (my1 - my0)) < FLAT_SHARE) return false;
 
   const line = (y1 - y0) / Math.max(1, t.text.split('\n').length);
   const m = Math.round(line * 2);

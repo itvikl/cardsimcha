@@ -138,7 +138,8 @@ export async function POST(req: Request) {
   if (!canvas) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
 
   await files.put(assetFileKey(fileName), data, 'image/jpeg');
-  const asset = await addImage({ id: assetId, categoryId: await importCategoryId(), name, file: fileName, width, height });
+  // what the model read is kept with the picture, to see later why a template came out as it did
+  const asset = await addImage({ id: assetId, categoryId: await importCategoryId(), name, file: fileName, width, height, metadata: { importReading: texts } });
   if (!asset) {
     await files.remove([assetFileKey(fileName)]);
     return NextResponse.json({ error: 'שמירת התמונה נכשלה. נסו שוב.' }, { status: 500 });
