@@ -2,24 +2,25 @@ import { NextResponse } from 'next/server';
 import sharp, { type Metadata } from 'sharp';
 import { readDesign } from '@/lib/agent/importDesign';
 import { requireAdmin } from '@/lib/auth';
-import { FIELD_LOCKS, LOCKED, PAGE_PRESETS, validateDoc } from '@/lib/canvas';
+import { LOCKED, PAGE_PRESETS, validateDoc } from '@/lib/canvas';
 import { AGENT_ENABLED } from '@/lib/config';
 import { listFonts } from '@/lib/data/fonts';
 import { newId } from '@/lib/data/ids';
 import { addImage, assetFileKey, createCategory, listCategories } from '@/lib/data/library';
 import { createTemplate, topicConflictFor } from '@/lib/data/projects';
 import { cleanDesign } from '@/lib/importClean';
+import { importedContent } from '@/lib/importLayout';
+import { cutObjects } from '@/lib/cutObjects';
+import { fillPlaces } from '@/lib/fillPlaces';
 import { files } from '@/lib/files';
 import { BUILTIN_FONTS } from '@/lib/fonts';
 import { parseAudience } from '@/lib/topics';
-import type { TextElement } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 180;
 
 const MAX_BYTES = 15 * 1024 * 1024;
-const PT_TO_MM = 25.4 / 72;
 const CATEGORY = 'עיצובים מיובאים';
 /** what the model sees and what is kept: enough to print a card, and less than an image request's limit */
 const MODEL_SIDE = 1568;
@@ -44,9 +45,11 @@ async function importCategoryId(): Promise<string> {
 
 /**
  * Admin: a finished design as a picture ({ file, name, topic, audience }) in, a draft template out. The model reads
- * its texts, they are wiped from the picture, and they come back as live text over it: the clean picture is the
- * background layer, each text a customer field in the content layer. It is a first draft for the admin to fix in the
- * editor: the fonts are the closest it found, and over a photograph a wiped place shows.
+ * its texts and its objects (a logo, a box, a badge…). The texts are wiped from the picture and come back as live
+ * text: each a customer field in the content layer. Each object is cut out along its outline into a picture of its
+ * own that the author can move, grouped with the texts lying on it, and its place in the picture is filled. The clean
+ * picture is the background layer. It is a first draft for the admin to fix in the editor: the fonts are the closest
+ * it found, and over a photograph a wiped or filled place shows.
  * Ported from feature/business-ads (Vitol) onto Postgres and card format v2.
  */
 export async function POST(req: Request) {
@@ -82,9 +85,9 @@ export async function POST(req: Request) {
 
   const fonts = [...new Set([...BUILTIN_FONTS.map((f) => f.family), ...(await listFonts()).map((f) => f.family)])];
   const forModel = await sharp(original).rotate().resize({ width: MODEL_SIDE, height: MODEL_SIDE, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
-  let texts;
+  let texts, objects;
   try {
-    texts = await readDesign(forModel, 'image/jpeg', fonts);
+    ({ texts, objects } = await readDesign(forModel, 'image/jpeg', fonts));
   } catch (e) {
     console.error('reading a design failed', e);
     return NextResponse.json({ error: 'לא הצלחנו לקרוא את העיצוב. נסו שוב.' }, { status: 502 });
@@ -92,51 +95,18 @@ export async function POST(req: Request) {
 
   const kept = await sharp(original).rotate().resize({ width: KEEP_SIDE, height: KEEP_SIDE, fit: 'inside', withoutEnlargement: true }).toBuffer();
   // each box snaps to its ink and only the ink is repainted (the ad-import tool's steps, lib/importClean)
-  const { data, refined, rough } = await cleanDesign(kept, texts);
+  const { data: textless, refined, rough: roughTexts } = await cleanDesign(kept, texts);
+  // the objects are cut from the picture without its texts (each text where its ink is), and then their places are filled
+  const pieces = await cutObjects(kept, textless, objects, texts.map((t, i) => ({ ...t, x: refined[i].x, y: refined[i].y, w: refined[i].w, h: refined[i].h })));
+  const { data, rough: roughObjects } = pieces.length ? await fillPlaces(textless, pieces.map((p) => p.object)) : { data: textless, rough: 0 };
+  const rough = roughTexts + roughObjects;
   const { width, height } = await sharp(data).metadata();
   if (!width || !height) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
   const page = pageFor(width / height);
 
-  const seen = new Set<string>();
-  const content = texts.map((t, i): TextElement => {
-    let label = t.label.trim() || 'טקסט';
-    if (seen.has(label)) label = `${label} ${i + 1}`;
-    seen.add(label);
-    const fit = refined[i];
-    const lines = Math.max(1, t.text.split('\n').length);
-    // the model's line height, checked against the ink: Hebrew letters stand about 0.78 of the font size tall
-    const fromModel = ((t.lineHeight / 100) * page.height_mm) / 1.25;
-    const fromInk = ((fit.h / 100) * page.height_mm) / lines / 0.78;
-    const size_mm = Math.abs(fromModel / fromInk - 1) <= 0.25 ? fromModel : fromInk;
-    // the text box: a little wider than the ink so the line never wraps, anchored where its alignment holds it
-    const inkX = (fit.x / 100) * page.width_mm;
-    const inkW = (fit.w / 100) * page.width_mm;
-    const w_mm = Math.max(5, inkW * 1.08 + size_mm * 0.3);
-    const x_mm = t.align === 'right' ? inkX + inkW - w_mm : t.align === 'left' ? inkX : inkX + inkW / 2 - w_mm / 2;
-    // centred on the ink: the drawn block is `lines` lines of 1.25 × the size
-    const y_mm = ((fit.y + fit.h / 2) / 100) * page.height_mm - (lines * size_mm * 1.25) / 2;
-    const color = (fit.color ?? t.color).toUpperCase();
-    return {
-      id: newId(),
-      type: 'text',
-      x_mm: Math.max(0, x_mm),
-      y_mm: Math.max(0, y_mm),
-      w_mm: Math.min(w_mm, page.width_mm),
-      rotation: 0,
-      text: t.text,
-      align: t.align,
-      locks: FIELD_LOCKS,
-      field: { label: label.slice(0, 60) },
-      // the line height is what was measured; a text's size is that over the 1.25 it is drawn at
-      font: {
-        family: fonts.includes(t.font) ? t.font : 'Heebo',
-        weight: t.bold ? 700 : 400,
-        size_pt: Math.min(400, Math.max(4, size_mm / PT_TO_MM)),
-        color,
-      },
-      design_color: color,
-    };
-  });
+  // each object a picture of its own, its texts grouped with it (importLayout.ts)
+  const pieceIds = pieces.map(() => newId());
+  const content = importedContent({ page, texts, refined, pieces, imgW: width, imgH: height, pieceIds, fonts, newId });
 
   const assetId = newId();
   const fileName = `${assetId}.jpg`;
@@ -147,13 +117,19 @@ export async function POST(req: Request) {
   });
   if (!canvas) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
 
+  const categoryId = await importCategoryId();
+  const pieceFiles = pieceIds.map((id) => `${id}.png`);
   await files.put(assetFileKey(fileName), data, 'image/jpeg');
-  const asset = await addImage({ id: assetId, categoryId: await importCategoryId(), name, file: fileName, width, height });
-  if (!asset) {
-    await files.remove([assetFileKey(fileName)]);
+  await Promise.all(pieces.map((p, i) => files.put(assetFileKey(pieceFiles[i]), p.png, 'image/png')));
+  const saved = await Promise.all([
+    addImage({ id: assetId, categoryId, name, file: fileName, width, height }),
+    ...pieces.map((p, i) => addImage({ id: pieceIds[i], categoryId, name: `${name} · ${p.object.label.trim() || 'אובייקט'}`, file: pieceFiles[i], width: p.width, height: p.height })),
+  ]);
+  if (saved.some((a) => !a)) {
+    await files.remove([fileName, ...pieceFiles].map(assetFileKey));
     return NextResponse.json({ error: 'שמירת התמונה נכשלה. נסו שוב.' }, { status: 500 });
   }
   const result = await createTemplate({ name, topic, canvas, ...(audience && { audience }) });
   if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
-  return NextResponse.json({ id: result.id, texts: texts.length, rough }, { status: 201 });
+  return NextResponse.json({ id: result.id, texts: texts.length, objects: pieces.length, rough }, { status: 201 });
 }

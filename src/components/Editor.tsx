@@ -22,6 +22,7 @@ import { uid } from '@/lib/uid';
 import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
 import { arcBox, drawArc, hasArc } from '@/lib/arcText';
 import { describeChange, nameOf } from '@/lib/historyLabel';
+import { allowanceOf, fitDocTexts, type Allowance } from '@/lib/fitText';
 import { cropOf, fillLook, LINE_HEIGHT, maskPath, shapeLook, textLook } from '@/lib/nodeStyle';
 import { intersects, linesOf, snapBox, unionOf, type Box, type Mark } from '@/lib/snap';
 import { EditorRulers } from './EditorRulers';
@@ -392,7 +393,14 @@ export default function Editor({ id }: { id: string }) {
   const [, bump] = useState(0);
   docRef.current = doc;
 
-  const commit = useCallback((next: CanvasDoc, mergeKey?: string) => {
+  /** a customer's card keeps its texts on it whatever they write (fitText.ts); an author places texts themselves */
+  const fitsTexts = useRef(false);
+  fitsTexts.current = !canManage || preview;
+  /** what each text's own design already takes past its limits, so a fit never "fixes" the designer (allowanceOf) */
+  const allowRef = useRef<Allowance>(new Map());
+
+  const commit = useCallback((change: CanvasDoc, mergeKey?: string) => {
+    const next = fitsTexts.current ? fitDocTexts(change, allowRef.current) : change;
     const cur = docRef.current;
     if (cur) {
       const now = Date.now();
@@ -412,6 +420,19 @@ export default function Editor({ id }: { id: string }) {
     setSave('dirty');
     bump((n) => n + 1);
   }, []);
+
+  // the design's own allowances, measured once its fonts are in, and the card fitted to them (a card saved too long, or
+  // an author switching to the customer's view)
+  useEffect(() => {
+    const cur = docRef.current;
+    if (!cur || !fitsTexts.current || !fontsTick) return;
+    if (!allowRef.current.size) allowRef.current = allowanceOf(cur);
+    const next = fitDocTexts(cur, allowRef.current);
+    if (next === cur) return;
+    docRef.current = next;
+    setDoc(next);
+    setSave('dirty');
+  }, [fontsTick, !!doc, preview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** a change to the current doc, recorded in the history */
   const change = useCallback(

@@ -93,6 +93,8 @@ export type TextElement = Base & {
   foil?: 'gold' | 'silver';
   /** the colour the designer gave it; matching text to a new background always starts from here */
   design_color?: string;
+  /** the size the designer gave it, in pt; a customer's longer words shrink it from here to fit (fitText.ts) */
+  design_size?: number;
 };
 
 export type ImageElement = Base & {

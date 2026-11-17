@@ -174,6 +174,10 @@ function textExtras(e: Record<string, unknown>) {
     if (!isColor(e.design_color)) return null;
     out.design_color = e.design_color;
   }
+  if (e.design_size !== undefined) {
+    if (!isNum(e.design_size, 4, 400)) return null;
+    out.design_size = e.design_size;
+  }
   return out;
 }
 
@@ -379,10 +383,17 @@ export function applyEdits(
     }
     if (e.locks.content) {
       if (out.type === 'text' && typeof s.text === 'string') out = { ...out, text: s.text.slice(0, 500) };
+      if (out.type === 'text') {
+        // the size only shrinks, to fit longer words (fitText.ts): from the designed size down to 40% of it
+        const base = out.design_size ?? out.font.size_pt;
+        const sent = (s.font as { size_pt?: unknown } | undefined)?.size_pt;
+        const size = isNum(sent, base * 0.4, base) ? sent : base;
+        out = { ...out, font: { ...out.font, size_pt: size }, ...(size !== base || out.design_size !== undefined ? { design_size: base } : {}) };
+      }
       if (out.type === 'image') out = swap(out, s, swapOk(s.asset_id, out.swap_collection_id));
     }
     if (e.locks.style) {
-      // only the colour; size, font and family stay as designed
+      // only the colour; the font and family stay as designed
       const color = out.type === 'text' ? (s.font as { color?: unknown } | undefined)?.color : (s.fill as { color?: unknown } | undefined)?.color;
       if (isColor(color) && out.type === 'text') out = { ...out, font: { ...out.font, color } };
       if (isColor(color) && out.type === 'shape') out = { ...out, fill: { type: 'solid', color } };
