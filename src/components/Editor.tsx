@@ -17,6 +17,7 @@ import {
   replaceElement,
   setBackground,
   updateElement,
+  TREE_SWAP,
 } from '@/lib/canvas';
 import { uid } from '@/lib/uid';
 import { DIVIDERS, newDivider, newImage, newRect, newText, type DividerKind } from '@/lib/elements';
@@ -284,6 +285,8 @@ export default function Editor({ id }: { id: string }) {
   const [panel, setPanel] = useState<Panel>('text');
   const [library, setLibrary] = useState<{ categories: Category[]; images: ImageAsset[] }>({ categories: [], images: [] });
   const [libCat, setLibCat] = useState<string>('');
+  /** the backgrounds this card's place in the occasion tree offers (its places and the nodes above them) */
+  const [treeBg, setTreeBg] = useState<Set<string>>(() => new Set());
   const [zoomOverride, setZoomOverride] = useState<number | null>(null);
   const [fit, setFit] = useState(0.5);
   const [save, setSave] = useState<SaveState>('saved');
@@ -309,7 +312,8 @@ export default function Editor({ id }: { id: string }) {
       try {
         const [pRes, lRes] = await Promise.all([fetch(`/api/projects/${id}`), fetch('/api/library')]);
         if (!pRes.ok) throw new Error(pRes.status === 404 ? 'העיצוב לא נמצא' : 'טעינת העיצוב נכשלה');
-        const p: Project & { canManage: boolean; canAgent: boolean } = await pRes.json();
+        const p: Project & { canManage: boolean; canAgent: boolean; treeBackgrounds?: string[] } = await pRes.json();
+        setTreeBg(new Set(p.treeBackgrounds ?? []));
         setCanManage(p.canManage);
         setCanAgent(p.canAgent);
         setPubStatus(p.status);
@@ -1297,8 +1301,10 @@ export default function Editor({ id }: { id: string }) {
 
   /** the image options a customer may pick for a swappable image */
   const imagePicker = (collection: string | undefined, current: string | undefined, pick: (asset: ImageAsset) => void) => {
-    const options = library.images.filter((i) => !collection || i.categoryId === collection);
-    if (options.length === 0) return <span className="status">אין תמונות להחלפה.</span>;
+    const options = library.images.filter((i) => (collection === TREE_SWAP ? treeBg.has(i.id) : !collection || i.categoryId === collection));
+    if (options.length === 0) {
+      return <span className="status">{collection === TREE_SWAP ? 'עוד לא שויכו רקעים למקום של העיצוב הזה בעץ.' : 'אין תמונות להחלפה.'}</span>;
+    }
     return (
       <div className="pick-grid">
         {options.map((img) => (
@@ -1566,11 +1572,11 @@ export default function Editor({ id }: { id: string }) {
             <div>
               {library.categories.length === 0 ? (
                 <p className="status">
-                  אין עדיין קטגוריות. <Link href="/categories" style={{ textDecoration: 'underline' }}>צרו קטגוריה והוסיפו תמונות</Link>.
+                  אין עדיין תיקיות. <Link href="/categories" style={{ textDecoration: 'underline' }}>צרו תיקייה והוסיפו תמונות</Link>.
                 </p>
               ) : (
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <select value={libCat} onChange={(e) => setLibCat(e.target.value)} aria-label="קטגוריה">
+                  <select value={libCat} onChange={(e) => setLibCat(e.target.value)} aria-label="תיקייה">
                     {library.categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -1578,7 +1584,7 @@ export default function Editor({ id }: { id: string }) {
                     ))}
                   </select>
                   {libImages.length === 0 ? (
-                    <p className="status">אין תמונות בקטגוריה הזו.</p>
+                    <p className="status">אין תמונות בתיקייה הזו.</p>
                   ) : (
                     <>
                       <div className="pick-grid">
@@ -1629,7 +1635,13 @@ export default function Editor({ id }: { id: string }) {
                 {fillEditor(bg.fill, (fill, key) => patchBackground({ fill }, key && 'bg-' + key))}
                 <div className="field">
                   <span>תמונת רקע: {bg.image ? (assetById.get(bg.image.asset_id)?.name ?? 'התמונה נמחקה') : 'אין'}</span>
-                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהקטגוריה שנבחרה בפאנל התמונות:</span>
+                  {treeBg.size > 0 && (
+                    <>
+                      <span className="status">רקעים של המקום של העיצוב בעץ:</span>
+                      {imagePicker(TREE_SWAP, bg.image?.asset_id, (img) => patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }))}
+                    </>
+                  )}
+                  <span className="status">{bg.image ? 'להחלפה' : 'להוספה'}, בחרו תמונה מהתיקייה שנבחרה בפאנל התמונות:</span>
                   {libImages.length > 0 &&
                     imagePicker(libCat, bg.image?.asset_id, (img) => patchBackground({ image: { asset_id: img.id, fit: bg.image?.fit ?? 'cover' } }))}
                   {bg.image && (
@@ -1664,7 +1676,7 @@ export default function Editor({ id }: { id: string }) {
                     change((d) => {
                       const next = { ...d.layers.background, ...p };
                       if (next.locks.content && !next.swap_collection_id && bg.image) {
-                        const cat = assetById.get(bg.image.asset_id)?.categoryId;
+                        const cat = treeBg.size > 0 ? TREE_SWAP : assetById.get(bg.image.asset_id)?.categoryId;
                         if (cat) next.swap_collection_id = cat;
                       }
                       if (!next.field) delete next.field;
@@ -1674,8 +1686,9 @@ export default function Editor({ id }: { id: string }) {
                 >
                   {bg.locks.content && (
                     <label className="field">
-                      הלקוח בוחר מהקטגוריה
+                      הלקוח בוחר מהתיקייה
                       <select value={bg.swap_collection_id ?? ''} onChange={(e) => patchBackground({ swap_collection_id: e.target.value || undefined })}>
+                        <option value={TREE_SWAP}>רקעים מהעץ (לפי המקום של העיצוב)</option>
                         <option value="">כל התמונות</option>
                         {library.categories.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -2074,7 +2087,7 @@ export default function Editor({ id }: { id: string }) {
 
                 {selected.type === 'image' && (
                   <>
-                    <p className="status">{assetById.get(selected.asset_id)?.name ?? 'התמונה נמחקה מהקטגוריה'}</p>
+                    <p className="status">{assetById.get(selected.asset_id)?.name ?? 'התמונה נמחקה מהתיקייה'}</p>
                     <div className="seg" role="group" aria-label="מסכה">
                       {([undefined, 'circle', 'rounded', 'arch'] as const).map((m) => (
                         <button key={m ?? 'none'} aria-pressed={selected.mask === m} onClick={() => patchElement(selected.id, { mask: m })}>
@@ -2117,11 +2130,12 @@ export default function Editor({ id }: { id: string }) {
                 >
                   {selected.type === 'image' && selected.locks.content && (
                     <label className="field">
-                      הלקוח בוחר מהקטגוריה
+                      הלקוח בוחר מהתיקייה
                       <select
                         value={selected.swap_collection_id ?? ''}
                         onChange={(e) => patchElement(selected.id, { swap_collection_id: e.target.value || undefined })}
                       >
+                        <option value={TREE_SWAP}>רקעים מהעץ (לפי המקום של העיצוב)</option>
                         <option value="">כל התמונות</option>
                         {library.categories.map((c) => (
                           <option key={c.id} value={c.id}>

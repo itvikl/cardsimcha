@@ -96,6 +96,12 @@ const isNum = (v: unknown, min = -5000, max = 5000): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
 export const isColor = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64;
+
+/**
+ * A swap source instead of a library category: the customer picks from the backgrounds filed
+ * on the template's places in the occasion tree and the nodes above them (src/lib/data/tree.ts).
+ */
+export const TREE_SWAP = 'tree';
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 
 function locks(v: unknown): Locks | null {
@@ -354,7 +360,7 @@ export function applyEdits(
   stored: CanvasDoc,
   incoming: unknown,
   actor: Actor,
-  assets: { id: string; categoryId: string }[] = [],
+  assets: { id: string; categoryId: string; inTree?: boolean }[] = [],
 ): CanvasDoc | null {
   if (actor === 'author') return validateDoc(incoming);
   const inc = incoming as { layers?: Record<string, unknown> } | null;
@@ -368,7 +374,8 @@ export function applyEdits(
   }
   const { width_mm: W, height_mm: H } = stored.page;
   const swapOk = (asset: unknown, collection?: string) =>
-    typeof asset === 'string' && assets.some((a) => a.id === asset && (!collection || a.categoryId === collection));
+    typeof asset === 'string' &&
+    assets.some((a) => a.id === asset && (collection === TREE_SWAP ? a.inTree : !collection || a.categoryId === collection));
 
   const edit = (e: CanvasElement): CanvasElement | null => {
     const s = sent.get(e.id);

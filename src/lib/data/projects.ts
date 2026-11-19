@@ -8,6 +8,7 @@ import type { CanvasDoc, Project, User } from '../types';
 import { newId } from './ids';
 import { prisma } from './prisma';
 import { ensureTopic, topicDoors } from './topics';
+import { setTemplatePlaces } from './tree';
 import { ensurePersonalWorkspace } from './users';
 
 // Templates (platform catalogue) and creatives (a customer's copy of a template) are two
@@ -27,13 +28,15 @@ function doc(v: Prisma.JsonValue, id: string): CanvasDoc {
 const thumbUrl = (id: string, key: string | null, updatedAt: Date) =>
   key ? `/api/thumbnails/${id}?v=${updatedAt.getTime()}` : undefined;
 
-const fromTemplate = (t: Template & { topic: Topic | null }): Project => ({
+const fromTemplate = (t: Template & { topic: Topic | null; places?: { topicId: string }[] }): Project => ({
   id: t.id,
   kind: 'template',
   ownerId: '',
   status: t.status,
   name: t.name,
   topic: t.topic?.name,
+  places: t.places?.map((p) => p.topicId) ?? [],
+  labelId: t.labelId ?? undefined,
   canvas: doc(t.canvas, t.id),
   thumbnail: thumbUrl(t.id, t.thumbnailKey, t.updatedAt),
   createdAt: t.createdAt.toISOString(),
@@ -53,7 +56,7 @@ const fromCreative = (c: Creative): Project => ({
   updatedAt: c.updatedAt.toISOString(),
 });
 
-const withTopic = { topic: true } as const;
+const withTopic = { topic: true, places: { select: { topicId: true } } } as const;
 
 export async function getProject(id: string, tx: Tx = prisma): Promise<Project | null> {
   const t = await tx.template.findUnique({ where: { id }, include: withTopic });
@@ -108,15 +111,45 @@ export async function createDesignFromTemplate(user: User, templateId: string, e
   return id;
 }
 
-/** a new blank catalogue template; with `audience` its topic must belong to that door */
-export async function createTemplate(input: { name: string; topic: string; canvas: CanvasDoc; audience?: Audience }) {
+/** a place refused inside createTemplate's transaction: thrown so the template is not kept */
+class PlaceError extends Error {}
+
+/**
+ * A new blank catalogue template; with `audience` its topic must belong to that door. With
+ * `places` it is filed on those nodes of the tree (all behind `audience`'s door) instead of `topic`.
+ */
+export async function createTemplate(input: {
+  name: string;
+  topic: string;
+  canvas: CanvasDoc;
+  audience?: Audience;
+  places?: string[];
+  labelId?: string | null;
+}): Promise<{ id: string } | { conflict: string }> {
+  try {
+    return await createTemplateTx(input);
+  } catch (e) {
+    if (e instanceof PlaceError) return { conflict: e.message };
+    throw e;
+  }
+}
+
+function createTemplateTx(input: Parameters<typeof createTemplate>[0]) {
   return prisma.$transaction(async (tx): Promise<{ id: string } | { conflict: string }> => {
+    if (input.places?.length) {
+      const t = await tx.template.create({ data: { name: input.name, canvas: json(input.canvas) } });
+      const r = await setTemplatePlaces(t.id, input.places, input.labelId ?? undefined, input.audience, tx);
+      if ('error' in r) throw new PlaceError(r.error);
+      return { id: t.id };
+    }
     if (input.audience) {
       const why = topicConflict(await topicDoors(tx), input.topic, input.audience);
       if (why) return { conflict: why };
     }
     const topicId = input.topic ? await ensureTopic(tx, input.topic, input.audience) : null;
-    const t = await tx.template.create({ data: { name: input.name, topicId, canvas: json(input.canvas) } });
+    const t = await tx.template.create({
+      data: { name: input.name, topicId, canvas: json(input.canvas), ...(topicId && { places: { create: { topicId } } }) },
+    });
     return { id: t.id };
   });
 }
@@ -159,6 +192,12 @@ export async function updateProject(user: User, id: string, patch: ProjectPatch)
       const topicId =
         patch.topic === undefined ? undefined : patch.topic ? await ensureTopic(tx, patch.topic, patch.audience) : null;
       const status = patch.status;
+      // the single topic field swaps one place in the tree and leaves the template's other places
+      const was = topicId === undefined ? undefined : (await tx.template.findUnique({ where: { id }, select: { topicId: true } }))?.topicId;
+      if (topicId !== undefined && topicId !== was) {
+        if (was) await tx.templatePlace.deleteMany({ where: { templateId: id, topicId: was } });
+        if (topicId) await tx.templatePlace.upsert({ where: { templateId_topicId: { templateId: id, topicId } }, update: {}, create: { templateId: id, topicId } });
+      }
       const row = await tx.template.update({
         where: { id },
         data: {

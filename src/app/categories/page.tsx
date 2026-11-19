@@ -1,8 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, ImageAsset } from '@/lib/types';
 import { useMe } from '@/components/Auth';
+import { PlaceChips, PlacePicker, sameIds, useTreeData } from '@/components/PlacePicker';
+import { TreeCrumbs, TreeHeading, TreeKids, TreeTile, TreeTiles, TreeTop, UNFILED, useTreeIndex, useTreeSpot } from '@/components/TreeBrowse';
+import type { TreeNode } from '@/lib/data/tree';
+
+const howMany = (n: number) => (n === 1 ? 'תמונה אחת' : `${n} תמונות`);
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -49,8 +54,22 @@ function CategoriesManager() {
   const [uploading, setUploading] = useState(0);
   const [over, setOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { data: tree } = useTreeData();
+  /** where each image is filed in the occasion tree (a background shows in the cards of those places) */
+  const [places, setPlaces] = useState<Record<string, string[]>>({});
+  /** the images the tree picker is open for (one, or the chosen ones) */
+  const [placing, setPlacing] = useState<ImageAsset[] | null>(null);
+  /** images chosen for filing together; kept while moving between folders */
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  /** the library is seen by its folders, or by where its images are filed in the tree */
+  const [mode, setMode] = useState<'folders' | 'tree'>('folders');
+  const [at, go] = useTreeSpot();
+  const byTree = mode === 'tree' || at !== null;
+  const nodes = useMemo<TreeNode[]>(() => tree?.nodes ?? [], [tree]);
+  const { byId, lineOf, childrenOf, onTree, holdings } = useTreeIndex(nodes);
 
   const load = useCallback(async () => {
+    api<Record<string, string[]>>('/api/tree/assets').then(setPlaces).catch(() => {});
     const lib = await api<{ categories: Category[]; images: ImageAsset[] }>('/api/library');
     setCategories(lib.categories);
     setImages(lib.images);
@@ -64,6 +83,20 @@ function CategoriesManager() {
 
   const selected = categories.find((c) => c.id === selectedId) ?? null;
   const catImages = images.filter((i) => i.categoryId === selectedId);
+
+  // the same images as the tree sees them
+  const placesOf = (i: ImageAsset) => places[i.id] ?? [];
+  const holds = holdings(images, placesOf);
+  const unfiled = images.filter((i) => !placesOf(i).some(onTree));
+  const here = at && at !== UNFILED ? byId.get(at) : undefined;
+  const line = here ? lineOf(here.id) : [];
+  const above = line.slice(0, -1);
+  const fromAbove = here ? images.filter((i) => !holds.get(here.id)?.includes(i) && placesOf(i).some((p) => above.some((a) => a.id === p))) : [];
+  const treeImages = here ? (holds.get(here.id) ?? []) : at === UNFILED ? unfiled : [];
+  /** the images on screen, which "choose all" takes */
+  const shownImages = byTree ? treeImages : catImages;
+  const allShownChosen = shownImages.length > 0 && shownImages.every((i) => chosen.has(i.id));
+  const urlOf = (i: ImageAsset) => `/api/uploads/${i.file}`;
 
   async function addCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -102,8 +135,8 @@ function CategoriesManager() {
     if (!selected) return;
     const n = catImages.length;
     const msg = n
-      ? `למחוק את הקטגוריה "${selected.name}" ואת ${n} התמונות שבה? אי אפשר לבטל.`
-      : `למחוק את הקטגוריה "${selected.name}"?`;
+      ? `למחוק את התיקייה "${selected.name}" ואת ${n} התמונות שבה? אי אפשר לבטל.`
+      : `למחוק את התיקייה "${selected.name}"?`;
     if (!confirm(msg)) return;
     setError('');
     try {
@@ -163,22 +196,141 @@ function CategoriesManager() {
     }
   }
 
+  const selectAll = shownImages.length > 0 && tree && (
+    <button
+      type="button"
+      className="btn small"
+      onClick={() =>
+        setChosen((c) => {
+          const next = new Set(c);
+          shownImages.forEach((i) => (allShownChosen ? next.delete(i.id) : next.add(i.id)));
+          return next;
+        })
+      }
+    >
+      {allShownChosen ? 'ביטול הבחירה כאן' : 'בחירת כל התמונות כאן'}
+    </button>
+  );
+
+  const imageGrid = (list: ImageAsset[]) => (
+    <div className="thumb-grid">
+      {list.map((img) => (
+        <figure key={img.id} className={'thumb' + (chosen.has(img.id) ? ' chosen' : '')} style={{ margin: 0, position: 'relative' }}>
+          <label className="thumb-check" title="בחירה">
+            <input
+              type="checkbox"
+              checked={chosen.has(img.id)}
+              aria-label={`בחירת ${img.name || 'התמונה'}`}
+              onChange={() =>
+                setChosen((c) => {
+                  const next = new Set(c);
+                  if (next.has(img.id)) next.delete(img.id);
+                  else next.add(img.id);
+                  return next;
+                })
+              }
+            />
+          </label>
+          <div className="img">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={urlOf(img)} alt={img.name} loading="lazy" />
+          </div>
+          <figcaption className="meta">
+            <input
+              type="text"
+              defaultValue={img.name}
+              aria-label="שם התמונה"
+              maxLength={100}
+              style={{ minHeight: 32, padding: '4px 8px' }}
+              onBlur={(e) => renameImage(img, e.target.value)}
+            />
+            <span className="count">
+              {img.width}×{img.height}
+            </span>
+            {tree && <PlaceChips nodes={tree.nodes} ids={places[img.id] ?? []} />}
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn small" onClick={() => setPlacing([img])} disabled={!tree} title="באילו כרטיסים הרקע מוצע">
+                {places[img.id]?.length ? 'שינוי שיוך' : 'שיוך לעץ'}
+              </button>
+              <button className="btn danger small" style={{ marginInlineStart: 'auto' }} onClick={() => deleteImage(img)}>
+                מחיקה
+              </button>
+            </div>
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+
   return (
     <main className="page">
-      <h1>קטגוריות ותמונות</h1>
-      <p className="sub">צרו קטגוריות והוסיפו להן תמונות. את התמונות תוכלו להכניס לעיצובים בעורך.</p>
+      <h1>ספריית תמונות</h1>
+      <p className="sub">התמונות שמכניסים לעיצובים. תמונה ששויכה למקום בעץ מוצעת כרקע בעיצובים של אותו מקום.</p>
 
       {error && <p className="error" role="alert">{error}</p>}
 
+      <div className="view-switch" role="group" aria-label="תצוגה">
+        <button
+          type="button"
+          aria-pressed={!byTree}
+          onClick={() => {
+            setMode('folders');
+            if (at) go(null);
+          }}
+        >
+          לפי תיקיות
+        </button>
+        <button type="button" aria-pressed={byTree} onClick={() => setMode('tree')}>
+          לפי העץ
+        </button>
+      </div>
+
+      <TreeTop />
+      {byTree ? (
+        !loaded || !tree ? (
+          <p className="status">טוען…</p>
+        ) : at === null || (at !== UNFILED && !here) ? (
+          <>
+            <TreeHeading title="לפי קטגוריות" detail={`${howMany(images.length - unfiled.length)} משויכות`} />
+            <TreeTiles>
+              {childrenOf(null).map((c) => {
+                const list = holds.get(c.id) ?? [];
+                return (
+                  <TreeTile
+                    key={c.id}
+                    name={c.name}
+                    detail={(c.audience === 'business' ? 'לעסק · ' : '') + howMany(list.length)}
+                    thumbs={list.map(urlOf)}
+                    onOpen={() => go(c.id)}
+                  />
+                );
+              })}
+              {unfiled.length > 0 && <TreeTile name="לא משויכות לעץ" detail={howMany(unfiled.length)} thumbs={unfiled.map(urlOf)} warn onOpen={() => go(UNFILED)} />}
+            </TreeTiles>
+          </>
+        ) : (
+          <>
+            <TreeCrumbs above={above} onGo={go} />
+            <TreeHeading title={here ? here.name : 'לא משויכות לעץ'} detail={howMany(treeImages.length)} action={selectAll} />
+            {here && <TreeKids kids={childrenOf(here.id)} count={(id) => holds.get(id)?.length ?? 0} onGo={go} />}
+            {fromAbove.length > 0 && (
+              <p className="status" style={{ margin: '4px 0 0' }}>
+                בעיצובים של המקום הזה מוצעות גם {howMany(fromAbove.length)} ששויכו לרמה שמעל.
+              </p>
+            )}
+            {treeImages.length === 0 ? <div className="empty" style={{ marginTop: 12 }}>אין עדיין תמונות שמשויכות לכאן.</div> : imageGrid(treeImages)}
+          </>
+        )
+      ) : (
       <div className="cat-layout">
-        <section className="card" aria-label="רשימת קטגוריות">
+        <section className="card" aria-label="רשימת תיקיות">
           <form onSubmit={addCategory} className="row" style={{ marginBottom: 12 }}>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="שם קטגוריה חדשה"
-              aria-label="שם קטגוריה חדשה"
+              placeholder="שם תיקייה חדשה"
+              aria-label="שם תיקייה חדשה"
               maxLength={80}
               style={{ flex: 1, minWidth: 0 }}
             />
@@ -189,7 +341,7 @@ function CategoriesManager() {
           {!loaded ? (
             <p className="status">טוען…</p>
           ) : categories.length === 0 ? (
-            <p className="status">עדיין אין קטגוריות. הוסיפו את הראשונה למעלה.</p>
+            <p className="status">עדיין אין תיקיות. הוסיפו את הראשונה למעלה.</p>
           ) : (
             <div className="cat-list">
               {categories.map((c) => (
@@ -207,14 +359,14 @@ function CategoriesManager() {
           )}
         </section>
 
-        <section aria-label="פרטי הקטגוריה">
+        <section aria-label="פרטי התיקייה">
           {!selected ? (
-            <div className="empty">בחרו קטגוריה או צרו חדשה כדי להוסיף תמונות.</div>
+            <div className="empty">בחרו תיקייה או צרו חדשה כדי להוסיף תמונות.</div>
           ) : (
             <div style={{ display: 'grid', gap: 16 }}>
               <div className="card" style={{ display: 'grid', gap: 12 }} key={selected.id}>
                 <label className="field">
-                  שם הקטגוריה
+                  שם התיקייה
                   <input
                     type="text"
                     defaultValue={selected.name}
@@ -233,7 +385,7 @@ function CategoriesManager() {
                 </label>
                 <div className="row">
                   <button className="btn danger small" onClick={deleteCategory}>
-                    מחיקת קטגוריה
+                    מחיקת התיקייה
                   </button>
                 </div>
               </div>
@@ -272,39 +424,52 @@ function CategoriesManager() {
               </div>
 
               {catImages.length === 0 ? (
-                <div className="empty">אין עדיין תמונות בקטגוריה "{selected.name}".</div>
+                <div className="empty">אין עדיין תמונות בתיקייה &quot;{selected.name}&quot;.</div>
               ) : (
-                <div className="thumb-grid">
-                  {catImages.map((img) => (
-                    <figure key={img.id} className="thumb" style={{ margin: 0 }}>
-                      <div className="img">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={`/api/uploads/${img.file}`} alt={img.name} loading="lazy" />
-                      </div>
-                      <figcaption className="meta">
-                        <input
-                          type="text"
-                          defaultValue={img.name}
-                          aria-label="שם התמונה"
-                          maxLength={100}
-                          style={{ minHeight: 32, padding: '4px 8px' }}
-                          onBlur={(e) => renameImage(img, e.target.value)}
-                        />
-                        <span className="count">
-                          {img.width}×{img.height}
-                        </span>
-                        <button className="btn danger small" onClick={() => deleteImage(img)}>
-                          מחיקה
-                        </button>
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
+                <>
+                  <TreeHeading title="התמונות" detail={howMany(catImages.length)} action={selectAll} />
+                  {imageGrid(catImages)}
+                </>
               )}
             </div>
           )}
         </section>
       </div>
+      )}
+
+      {chosen.size > 0 && tree && (
+        <div className="select-bar" role="toolbar" aria-label="בחירה מרובה">
+          <strong>{chosen.size === 1 ? 'תמונה אחת נבחרה' : `${chosen.size} תמונות נבחרו`}</strong>
+          <span className="spacer" />
+          <button className="btn small" onClick={() => setChosen(new Set())}>
+            ניקוי בחירה
+          </button>
+          <button className="btn small primary" onClick={() => setPlacing(images.filter((i) => chosen.has(i.id)))}>
+            שיוך לעץ
+          </button>
+        </div>
+      )}
+
+      {tree && placing && placing.length > 0 && (
+        <PlacePicker
+          title={placing.length === 1 ? `איפה מוצע "${placing[0].name || 'הרקע'}"` : `איפה מוצעות ${placing.length} התמונות שנבחרו`}
+          note={placing.length > 1 && sameIds(placing.map((i) => places[i.id] ?? [])) ? 'השמירה קובעת את אותו שיוך לכל התמונות שנבחרו.' : undefined}
+          data={tree}
+          value={sameIds(placing.map((i) => places[i.id] ?? [])) ? (places[placing[0].id] ?? []) : []}
+          mixedPlaces={!sameIds(placing.map((i) => places[i.id] ?? []))}
+          onClose={() => setPlacing(null)}
+          onSave={async (ids) => {
+            if (!ids) return;
+            await api('/api/tree/assets', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ assetIds: placing.map((i) => i.id), topicIds: ids }),
+            });
+            setPlaces((p) => ({ ...p, ...Object.fromEntries(placing.map((i) => [i.id, ids])) }));
+            if (placing.length > 1) setChosen(new Set());
+          }}
+        />
+      )}
     </main>
   );
 }

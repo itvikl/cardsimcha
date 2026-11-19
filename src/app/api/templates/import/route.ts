@@ -87,8 +87,16 @@ export async function POST(req: Request) {
   const name = text('name', 100) || 'עיצוב מיובא';
   const topic = text('topic', 60);
   const audience = parseAudience(text('audience', 20));
+  let places: string[] = [];
+  try {
+    const raw: unknown = JSON.parse(text('places', 4000) || '[]');
+    if (Array.isArray(raw)) places = raw.filter((t): t is string => typeof t === 'string').slice(0, 50);
+  } catch {
+    // no places: filed later on the tree page
+  }
+  const labelId = text('labelId', 60) || null;
   // fail before the model's minute is spent (createTemplate checks again)
-  if (audience) {
+  if (audience && !places.length) {
     const why = await topicConflictFor(topic, audience);
     if (why) return NextResponse.json({ error: why }, { status: 400 });
   }
@@ -144,7 +152,7 @@ export async function POST(req: Request) {
     await files.remove([assetFileKey(fileName)]);
     return NextResponse.json({ error: 'שמירת התמונה נכשלה. נסו שוב.' }, { status: 500 });
   }
-  const result = await createTemplate({ name, topic, canvas, ...(audience && { audience }) });
+  const result = await createTemplate({ name, topic, canvas, ...(audience && { audience }), places, labelId });
   if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
   return NextResponse.json({ id: result.id, texts: texts.length, rough }, { status: 201 });
 }

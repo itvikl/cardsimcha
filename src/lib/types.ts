@@ -179,6 +179,10 @@ export type Project = {
   name: string;
   /** topic shown to customers as a category tile on the home page, e.g. "בית כנסת" (templates only) */
   topic?: string;
+  /** templates: the nodes of the occasion tree it is filed on (src/lib/data/tree.ts) */
+  places?: string[];
+  /** templates: its "what it is" label */
+  labelId?: string;
   canvas: CanvasDoc;
   thumbnail?: string;
   createdAt: string;

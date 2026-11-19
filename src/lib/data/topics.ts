@@ -23,12 +23,21 @@ export async function listSlides(tx: Tx = prisma): Promise<CarouselSlide[]> {
 }
 
 /**
+ * The pages from before the tree name a topic by its name, and since the tree a name can be
+ * used twice (the event "חתונה" and its type "חתונה"). The one meant is the carousel's, then
+ * the deepest (a type before an event before a category).
+ */
+export async function topicByName(tx: Tx, name: string) {
+  return tx.topic.findFirst({ where: { name }, orderBy: [{ sortOrder: 'desc' }, { level: 'desc' }], select: { id: true } });
+}
+
+/**
  * The topic row for a template's topic, created when missing. With `door` (the admin is
  * working behind it) a new topic is placed on the carousel for that door; without it a new
  * topic gets the built-in default.
  */
 export async function ensureTopic(tx: Tx, name: string, door?: Audience): Promise<string> {
-  const found = await tx.topic.findUnique({ where: { name }, select: { id: true } });
+  const found = await topicByName(tx, name);
   if (found) return found.id;
   const sortOrder = door ? await tx.topic.count({ where: { sortOrder: { gte: 0 } } }) : UNPLACED;
   const created = await tx.topic.create({ data: { name, audience: door ?? audienceOf(name), sortOrder } });
@@ -47,7 +56,9 @@ export async function replaceSlides(slides: { name: string; image: string | null
     let order = 0;
     for (const s of slides) {
       const data = { coverUrl: s.image, hidden: s.hidden, sortOrder: order++, audience: s.audience ?? audienceOf(s.name) };
-      await tx.topic.upsert({ where: { name: s.name }, update: data, create: { name: s.name, ...data } });
+      const row = await topicByName(tx, s.name);
+      if (row) await tx.topic.update({ where: { id: row.id }, data });
+      else await tx.topic.create({ data: { name: s.name, ...data } });
     }
     for (const s of rest) await tx.topic.update({ where: { id: s.id }, data: { sortOrder: order++ } });
     return listSlides(tx);

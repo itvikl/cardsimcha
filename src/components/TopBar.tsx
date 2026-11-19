@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMe } from './Auth';
@@ -19,18 +20,32 @@ export function TopBar() {
     await refresh();
     router.push('/');
   }
-  const links = [
-    { href: '/', label: me?.role === 'admin' ? 'תבניות' : 'הכרטיסים שלי' },
-    ...(me?.role === 'admin'
-      ? [
-          { href: '/categories', label: 'קטגוריות ותמונות' },
-          { href: '/fonts', label: 'פונטים' },
-          { href: '/carousel', label: 'קרוסלה' },
-        ]
-      : []),
-  ];
+  // the admin's links in the order of the work: the tree, the pictures, then the templates built from them
+  const admin = me?.role === 'admin';
+  const links = admin
+    ? [
+        { href: '/tree', label: 'עץ הקטגוריות' },
+        { href: '/categories', label: 'ספריית תמונות' },
+        { href: '/', label: 'תבניות' },
+        { href: '/fonts', label: 'פונטים' },
+        { href: '/carousel', label: 'קרוסלה' },
+      ]
+    : [{ href: '/', label: 'הכרטיסים שלי' }];
+
+  // on a narrow screen the links scroll inside the bar: keep the current one in sight
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    const link = nav?.querySelector('[aria-current="page"]');
+    if (!nav || !link) return;
+    const box = nav.getBoundingClientRect();
+    const at = link.getBoundingClientRect();
+    if (at.left < box.left) nav.scrollLeft += at.left - box.left - 8;
+    else if (at.right > box.right) nav.scrollLeft += at.right - box.right + 8;
+  }, [pathname, admin]);
+
   return (
-    <header className={pathname.startsWith('/business') ? 'topbar business' : 'topbar'}>
+    <header className={'topbar' + (pathname.startsWith('/business') ? ' business' : '') + (admin ? ' admin' : '')}>
       <Link href="/" className="brand">
         <span className="logo-mark">
           <LogoIcon />
@@ -47,7 +62,7 @@ export function TopBar() {
       )}
       {me && (
         <>
-          <nav aria-label="ראשי">
+          <nav aria-label="ראשי" ref={navRef}>
             {links.map((l) => {
               const active = l.href === '/' ? pathname === '/' || pathname.startsWith('/editor') : pathname.startsWith(l.href);
               return (

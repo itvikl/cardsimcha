@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (auth instanceof Response) return auth;
   const { id } = await params;
   if (!(await categoryExists(id))) {
-    return NextResponse.json({ error: 'הקטגוריה לא נמצאה' }, { status: 404 });
+    return NextResponse.json({ error: 'התיקייה לא נמצאה' }, { status: 404 });
   }
 
   const form = await req.formData().catch(() => null);
@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const asset = await addImage({ id: assetId, categoryId: id, name, file: fileName, width, height });
   if (!asset) {
     await files.remove([assetFileKey(fileName)]);
-    return NextResponse.json({ error: 'הקטגוריה נמחקה' }, { status: 404 });
+    return NextResponse.json({ error: 'התיקייה נמחקה' }, { status: 404 });
   }
   return NextResponse.json(asset, { status: 201 });
 }

@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (typeof body?.description === 'string') patch.description = body.description.trim().slice(0, 300);
   const result = await updateCategory(id, patch);
   if (result === 'missing') return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
-  if (result === 'duplicate') return NextResponse.json({ error: 'קטגוריה בשם הזה כבר קיימת' }, { status: 409 });
+  if (result === 'duplicate') return NextResponse.json({ error: 'תיקייה בשם הזה כבר קיימת' }, { status: 409 });
   return NextResponse.json(result);
 }
 

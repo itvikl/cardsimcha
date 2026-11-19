@@ -392,6 +392,16 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
   .hero .cta .btn { width: 100%; }
 }
 @media (max-width: 640px) { .topbar .brand-text { display: none; } .topbar .spacer { flex: 1 1 0; min-width: 0; } }
+/* the admin bar has more links than a tablet is wide too: they scroll inside the bar, never the page */
+@media (min-width: 641px) and (max-width: 1100px) {
+  .topbar.admin { gap: 10px; padding: 0 14px; }
+  .topbar.admin .status, .topbar.admin .brand-text { display: none; }
+  .topbar.admin nav { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .topbar.admin nav::-webkit-scrollbar { display: none; }
+  .topbar.admin nav a { padding: 8px 12px; font-size: 15px; }
+  .topbar.admin .brand, .topbar.admin .btn { flex-shrink: 0; }
+  .topbar.admin .spacer { flex: 1 1 0; min-width: 0; }
+}
 
 /* ------------------------------------------------------------ toasts */
 .toasts { position: fixed; z-index: 100; bottom: 20px; inset-inline: 0; display: grid; justify-items: center; gap: 8px; pointer-events: none; padding: 0 16px; }
@@ -888,3 +898,13 @@ label.field, .field { display: grid; gap: 6px; font-size: 14px; color: var(--mut
 .history-step:hover { background: var(--mint-soft); }
 .history-step.now { font-weight: 800; background: var(--mint-soft); }
 .history-step.undone { color: var(--muted); }
+
+/* images page: choosing several images to file in the tree together */
+.view-switch { display: inline-flex; gap: 2px; margin-bottom: 16px; padding: 4px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.view-switch button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: none; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; }
+.view-switch button[aria-pressed='true'] { background: var(--mint-soft); color: var(--brand-text); font-weight: 700; }
+.select-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); position: sticky; bottom: 12px; z-index: 5; box-shadow: 0 8px 28px rgba(10, 30, 22, 0.2); }
+.thumb-check { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); cursor: pointer; }
+.thumb-check input { width: 24px; height: 24px; margin: 0; cursor: pointer; }
+.thumb.chosen, .card.chosen { outline: 3px solid var(--brand-2); outline-offset: -3px; }
+.card > .thumb-check { top: 14px; inset-inline-start: 14px; }

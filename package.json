@@ -23,7 +23,8 @@
     "migrate:thumbnails": "tsx --env-file=.env.local scripts/migrate-thumbnails.ts",
     "seed:content": "tsx --env-file=.env.local scripts/seed-content.ts",
     "seed:wording-pilot": "tsx --env-file=.env.local scripts/seed-wording-pilot.ts",
-    "seed:stickers": "tsx --env-file=.env.local scripts/seed-stickers.ts"
+    "seed:stickers": "tsx --env-file=.env.local scripts/seed-stickers.ts",
+    "seed:tree": "tsx --env-file=.env.local scripts/seed-topic-tree.ts"
   },
   "keywords": [],
   "author": "",
