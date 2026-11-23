@@ -1,1 +1,26 @@
-{}
+{
+  "apphosting": [
+    {
+      "backendId": "cardsimcha",
+      "rootDir": "/",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        "data",
+        "src/generated",
+        "functions",
+        "infra",
+        "legacy",
+        "adds",
+        "examples",
+        "*.rar",
+        "*.zip",
+        "בת עין תורמים כללי פז",
+        ".env*",
+        "firebase-debug.log",
+        "tsconfig.tsbuildinfo"
+      ]
+    }
+  ]
+}

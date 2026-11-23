@@ -1,0 +1,23 @@
+# Firebase App Hosting (Cloud Run under the hood): backend "cardsimcha" of project simchacard-d87c1.
+# Deploy from this folder: npx firebase-tools deploy --only apphosting
+# It scales to zero when nobody visits: no visitors, no server cost (the first visit after a quiet spell waits a few seconds).
+# Data: Firestore collections v2_* and the project's Cloud Storage bucket (src/lib/data/store.ts, src/lib/files.ts).
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  cpu: 1
+  # sharp (backgrounds, the InDesign import) and the AI assistant want more than the default 512 MiB
+  memoryMiB: 2048
+  concurrency: 40
+
+env:
+  - variable: DATA_DRIVER
+    value: firestore
+  - variable: FIRESTORE_PREFIX
+    value: v2_
+  - variable: FILES_DRIVER
+    value: firebase
+  # the AI assistant (a secret in Cloud Secret Manager):
+  #   npx firebase-tools apphosting:secrets:set ANTHROPIC_API_KEY
+  # - variable: ANTHROPIC_API_KEY
+  #   secret: ANTHROPIC_API_KEY
