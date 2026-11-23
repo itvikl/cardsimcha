@@ -210,7 +210,7 @@ function AdminHome() {
     }
   }
 
-  /** a finished design as a picture: the server reads its texts, and it opens as a draft to go over */
+  /** an InDesign HTML export (.zip/.rar): every text frame becomes a field, and it opens as a draft to go over */
   async function importDesign(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -225,8 +225,9 @@ function AdminHome() {
       form.set('places', JSON.stringify(newPlaces));
       if (newLabel) form.set('labelId', newLabel);
       form.set('audience', door);
-      const r = await api<{ id: string; texts: number; rough: number }>('/api/templates/import', { method: 'POST', body: form });
-      if (r.rough > 0) window.alert(`זוהו ${r.texts} טקסטים. ב-${r.rough} מהם הרקע לא אחיד, אז כדאי לבדוק שם את המקום שנמחק.`);
+      const r = await api<{ id: string; ids: string[] }>('/api/templates/import', { method: 'POST', body: form });
+      // an export of several pages makes a draft of each: the first opens, the others wait in the list
+      if (r.ids.length > 1) window.alert(`נוצרו ${r.ids.length} טיוטות, אחת לכל עמוד בייצוא. הראשונה נפתחת עכשיו.`);
       router.push(`/editor/${r.id}`);
     } catch (err) {
       setError((err as Error).message);
@@ -662,9 +663,9 @@ function AdminHome() {
                 {busy && bgFile ? 'מעלה…' : busy ? 'יוצר…' : !business && isWording ? 'יצירת הנוסח' : 'יצירת התבנית'}
               </button>
               {!isWording && (
-                <label className="btn sticker-upload" title="הטקסטים נקראים מהתמונה והופכים לשדות. התוצאה נפתחת כטיוטה לבדיקה.">
-                  {importing ? 'קורא את העיצוב… (עד 2 דקות)' : 'מעיצוב מוכן (תמונה)'}
-                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-file" aria-label="תבנית מעיצוב מוכן" onChange={importDesign} disabled={importing || busy} />
+                <label className="btn sticker-upload" title="ייצוא HTML מ-InDesign, ארוז ב-ZIP או RAR. כל טקסט הופך לשדה במקומו, בגופן ובצבע שלו. התוצאה נפתחת כטיוטה לבדיקה.">
+                  {importing ? 'מייבא…' : 'מ-InDesign (ZIP / RAR)'}
+                  <input type="file" accept=".zip,.rar,application/zip,application/x-rar-compressed,application/vnd.rar" className="sr-file" aria-label="תבנית מייצוא HTML של InDesign" onChange={importDesign} disabled={importing || busy} />
                 </label>
               )}
             </div>
