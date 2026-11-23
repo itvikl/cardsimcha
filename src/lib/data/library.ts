@@ -1,53 +1,93 @@
-import type { Asset, Collection, Prisma } from '@/generated/prisma/client';
 import type { Category, ImageAsset } from '../types';
-import { prisma } from './prisma';
+import { newId } from './ids';
+import { C, db, now } from './store';
 
 // The platform image library: collections (the admin's image "categories") and their
-// images. Workspace libraries come with the business features; until then every row here
-// has workspace_id null.
+// images. Workspace libraries come with the business features; until then every document
+// here has workspaceId null.
 
-const toCategory = (c: Collection): Category => ({
-  id: c.id,
-  name: c.name,
-  description: c.description,
-  createdAt: c.createdAt.toISOString(),
-});
+export type CollectionDoc = {
+  id: string;
+  workspaceId: string | null;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
-const toImage = (a: Asset): ImageAsset => ({
+export type AssetDoc = {
+  id: string;
+  workspaceId: string | null;
+  collectionId: string | null;
+  kind: 'image' | 'svg' | 'pattern' | 'sticker';
+  name: string;
+  fileKey: string;
+  width: number;
+  height: number;
+  /** JSON text: what is kept with an image for looking into it later (Firestore takes no nested arrays) */
+  metadata: string;
+  /** where it is filed in the occasion tree */
+  places: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const toCategory = (c: CollectionDoc): Category => ({ id: c.id, name: c.name, description: c.description, createdAt: c.createdAt });
+
+const toImage = (a: AssetDoc): ImageAsset => ({
   id: a.id,
   categoryId: a.collectionId ?? '',
   name: a.name,
   file: a.fileKey.slice(a.fileKey.lastIndexOf('/') + 1),
   width: a.width,
   height: a.height,
-  createdAt: a.createdAt.toISOString(),
+  createdAt: a.createdAt,
 });
+
+const oldestFirst = (a: { createdAt: string }, b: { createdAt: string }) => a.createdAt.localeCompare(b.createdAt);
 
 /** where a platform image is stored; its public name ("file") is the last part */
 export const assetFileKey = (file: string) => `assets/platform/${file}`;
 
+const platformCollections = () => db.find<CollectionDoc>(C.collections, ['workspaceId', '==', null]);
+
 export async function listCategories(): Promise<Category[]> {
-  return (await prisma.collection.findMany({ where: { workspaceId: null }, orderBy: { createdAt: 'asc' } })).map(toCategory);
+  return (await platformCollections()).sort(oldestFirst).map(toCategory);
 }
 
 export async function listImages(): Promise<ImageAsset[]> {
-  return (await prisma.asset.findMany({ where: { workspaceId: null, kind: 'image' }, orderBy: { createdAt: 'asc' } })).map(toImage);
+  const rows = await db.pick<AssetDoc>(
+    C.assets,
+    ['collectionId', 'name', 'fileKey', 'width', 'height', 'createdAt'],
+    ['workspaceId', '==', null],
+    ['kind', '==', 'image'],
+  );
+  return rows.sort(oldestFirst).map(toImage);
 }
 
 export async function getImage(id: string): Promise<ImageAsset | null> {
-  const a = await prisma.asset.findUnique({ where: { id } });
+  const a = await db.get<AssetDoc>(C.assets, id);
   return a && toImage(a);
 }
 
+const platformCollection = async (id: string) => {
+  const c = await db.get<CollectionDoc>(C.collections, id);
+  return c && c.workspaceId === null ? c : null;
+};
+
 export async function categoryExists(id: string): Promise<boolean> {
-  return (await prisma.collection.count({ where: { id, workspaceId: null } })) > 0;
+  return !!(await platformCollection(id));
 }
 
 /** null when a category with this name exists */
 export async function createCategory(name: string, description: string): Promise<Category | null> {
-  return prisma.$transaction(async (tx) => {
-    if (await tx.collection.findFirst({ where: { workspaceId: null, name } })) return null;
-    return toCategory(await tx.collection.create({ data: { name, description } }));
+  return db.tx(async (t) => {
+    const same = await t.find<CollectionDoc>(C.collections, ['workspaceId', '==', null], ['name', '==', name]);
+    if (same.length) return null;
+    const at = now();
+    const c: CollectionDoc = { id: newId(), workspaceId: null, name, description, createdAt: at, updatedAt: at };
+    t.set(C.collections, c.id, c);
+    return toCategory(c);
   });
 }
 
@@ -55,23 +95,27 @@ export async function updateCategory(
   id: string,
   patch: { name?: string; description?: string },
 ): Promise<Category | 'missing' | 'duplicate'> {
-  return prisma.$transaction(async (tx) => {
-    const cat = await tx.collection.findFirst({ where: { id, workspaceId: null } });
-    if (!cat) return 'missing' as const;
-    if (patch.name && (await tx.collection.findFirst({ where: { workspaceId: null, name: patch.name, id: { not: id } } }))) {
-      return 'duplicate' as const;
+  return db.tx(async (t) => {
+    const cat = await t.get<CollectionDoc>(C.collections, id);
+    if (!cat || cat.workspaceId !== null) return 'missing' as const;
+    if (patch.name) {
+      const same = await t.find<CollectionDoc>(C.collections, ['workspaceId', '==', null], ['name', '==', patch.name]);
+      if (same.some((c) => c.id !== id)) return 'duplicate' as const;
     }
-    return toCategory(await tx.collection.update({ where: { id }, data: patch }));
+    const next = { ...cat, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)), updatedAt: now() };
+    t.set(C.collections, id, next);
+    return toCategory(next);
   });
 }
 
 /** Deletes the category and its images; returns the file keys to remove, or null if missing. */
 export async function deleteCategory(id: string): Promise<string[] | null> {
-  return prisma.$transaction(async (tx) => {
-    if (!(await tx.collection.findFirst({ where: { id, workspaceId: null } }))) return null;
-    const assets = await tx.asset.findMany({ where: { collectionId: id }, select: { fileKey: true } });
-    await tx.asset.deleteMany({ where: { collectionId: id } });
-    await tx.collection.delete({ where: { id } });
+  return db.tx(async (t) => {
+    const cat = await t.get<CollectionDoc>(C.collections, id);
+    if (!cat || cat.workspaceId !== null) return null;
+    const assets = await t.pick<Pick<AssetDoc, 'id' | 'fileKey'>>(C.assets, ['fileKey'], ['collectionId', '==', id]);
+    for (const a of assets) t.delete(C.assets, a.id);
+    t.delete(C.collections, id);
     return assets.map((a) => a.fileKey);
   });
 }
@@ -87,40 +131,52 @@ export async function addImage(input: {
   /** kept with the image, for looking into it later (a design import keeps what the model read) */
   metadata?: Record<string, unknown>;
 }): Promise<ImageAsset | null> {
-  return prisma.$transaction(async (tx) => {
-    if (!(await tx.collection.findFirst({ where: { id: input.categoryId, workspaceId: null } }))) return null;
-    const a = await tx.asset.create({
-      data: {
-        id: input.id,
-        collectionId: input.categoryId,
-        kind: 'image',
-        name: input.name,
-        fileKey: assetFileKey(input.file),
-        width: input.width,
-        height: input.height,
-        ...(input.metadata && { metadata: input.metadata as Prisma.InputJsonValue }),
-      },
-    });
+  return db.tx(async (t) => {
+    const cat = await t.get<CollectionDoc>(C.collections, input.categoryId);
+    if (!cat || cat.workspaceId !== null) return null;
+    const at = now();
+    const a: AssetDoc = {
+      id: input.id,
+      workspaceId: null,
+      collectionId: input.categoryId,
+      kind: 'image',
+      name: input.name,
+      fileKey: assetFileKey(input.file),
+      width: input.width,
+      height: input.height,
+      metadata: JSON.stringify(input.metadata ?? {}),
+      places: [],
+      createdAt: at,
+      updatedAt: at,
+    };
+    t.set(C.assets, a.id, a);
     return toImage(a);
   });
 }
 
 export async function renameImage(id: string, name: string): Promise<ImageAsset | null> {
-  const r = await prisma.asset.updateMany({ where: { id }, data: { name } });
-  return r.count ? getImage(id) : null;
+  return db.tx(async (t) => {
+    const a = await t.get<AssetDoc>(C.assets, id);
+    if (!a) return null;
+    t.update(C.assets, id, { name, updatedAt: now() });
+    return toImage({ ...a, name });
+  });
 }
 
 /** returns the file key to remove, or null if missing */
 export async function deleteImage(id: string): Promise<string | null> {
-  const a = await prisma.asset.findUnique({ where: { id }, select: { fileKey: true } });
-  if (!a) return null;
-  const r = await prisma.asset.deleteMany({ where: { id } });
-  return r.count ? a.fileKey : null;
+  return db.tx(async (t) => {
+    const a = await t.get<AssetDoc>(C.assets, id);
+    if (!a) return null;
+    t.delete(C.assets, id);
+    return a.fileKey;
+  });
 }
 
 /** the stored key behind a public image name "<id>.<ext>", or null */
 export async function fileKeyOfImage(file: string): Promise<string | null> {
   const id = file.slice(0, file.lastIndexOf('.'));
-  const a = await prisma.asset.findUnique({ where: { id }, select: { fileKey: true } });
+  if (!id) return null;
+  const a = await db.get<AssetDoc>(C.assets, id);
   return a && a.fileKey.endsWith(`/${file}`) ? a.fileKey : null;
 }

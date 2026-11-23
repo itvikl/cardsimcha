@@ -1,5 +1,6 @@
-// Legacy Firestore store. The app uses src/lib/data/ (Postgres) on this branch; this file stays
-// for the migration script (rollout step 2) and so the Firebase branches keep working.
+// main's Firestore store (format v1, collections categories, carousel, images, projects, users,
+// sessions). This branch reads src/lib/data/ (the "v2_" collections); this file stays for
+// scripts/migrate-to-v2.ts, which copies main's data across, read-only.
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { firestore, bucket } from './firebase';

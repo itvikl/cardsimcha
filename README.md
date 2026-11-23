@@ -1,46 +1,56 @@
 # סטודיו עיצוב
 
-אפליקציית Next.js ליצירת עיצובים מקטגוריות ותמונות. בענף הזה (`editor-port`, מתוך `new-design`) הנתונים ב-Postgres, פורמט הכרטיס הוא v2 (שלוש שכבות ונעילות), והעורך כולל את הכלים מ-`feature/business-ads`.
+אפליקציית Next.js ליצירת עיצובים מקטגוריות ותמונות. בענף הזה (`staging`, מתוך `editor-port`) הנתונים ב-**Firebase** (Firestore ו-Cloud Storage, אותו פרויקט כמו `main`), פורמט הכרטיס הוא v2 (שלוש שכבות ונעילות), והעורך כולל את הכלים מ-`feature/business-ads`. הוחלט להישאר ב-Firebase ולא לעבור ל-Postgres ו-AWS: ה-Prisma, ה-Docker של Postgres וה-CDK של AWS הוסרו.
 
-## הרצה מקומית (הענף הזה)
+## הרצה מקומית
 
-צריך Node 22 ו-Docker Desktop פועל.
+צריך Node 22.
 
 ```
-git fetch && git checkout editor-port
-npm install                      # מריץ גם prisma generate
-npm run db:up                    # Postgres 16 + pgvector ב-localhost:5433
-npm run db:deploy                # מריץ את המיגרציות שב-prisma/migrations
-echo AUTH_DISABLED=true >> .env.local   # פיתוח בלבד: כפתור "מצב ניהול" בלי הרשמה
+git fetch && git checkout staging
+npm install
 npm run dev                      # http://localhost:3000
 ```
 
-**נתונים:** מסד חדש מתחיל ריק. כדי להעתיק אליו את מה שיש היום (קטגוריות, תמונות, תבניות, עיצובים ומשתמשים, כרטיסים בפורמט הישן מומרים ל-v2):
+**בלי Firebase** (פיתוח בלבד): ב-`.env.local` שמים
 
 ```
-npm run migrate:postgres                  # מ-Firestore ו-Cloud Storage (קריאה בלבד), עם FIREBASE_SERVICE_ACCOUNT_FILE או התחברות gcloud
-npm run migrate:postgres -- --from local  # מ-data/db.json ו-data/uploads
+DATA_DRIVER=local      # הנתונים בקובץ data/store.json
+FILES_DRIVER=local     # הקבצים בתיקייה data/files/
+AUTH_DISABLED=true     # כפתור "מצב ניהול" בלי הרשמה
 ```
 
-הסקריפט כותב רק ל-Postgres המקומי ול-`data/files/`, ואפשר להריץ אותו שוב. הוא לא מעתיק עדיין את הנתונים העסקיים (ערכות מותג, קטלוג, מנויים).
+**עם Firebase:** בלי המשתנים האלה האפליקציה קוראת וכותבת ל-Firestore ול-Cloud Storage של `FIREBASE_PROJECT_ID` (ברירת מחדל `simchacard-d87c1`). ההרשאה היא מ-`FIREBASE_SERVICE_ACCOUNT_FILE` (נתיב לקובץ JSON של service account), או מ-`gcloud auth application-default login`.
 
-**מה עוד לא עובד בענף הזה:** הקבצים של הדלת העסקית, ההורדות מהשרת (PDF, GIF, סרטון, ZIP), נוסחים ורקעים בתוך כרטיס פרטי, כניסה בלי הרשמה, זמני שבת וסקריפטי ה-`seed:*` חנו ב-[legacy/business-ads/](legacy/business-ads/README.md) עד שיועברו ל-Postgres ול-v2. החלקים שמתוארים בהמשך הקובץ ומשתמשים בהם עובדים כרגע רק ב-`feature/business-ads`.
+### איפה הנתונים
 
-### Postgres ו-Docker
+- **Firestore:** כל רשומה היא מסמך, באוספים עם הקידומת `v2_` (`v2_templates`, `v2_creatives`, `v2_topics`, `v2_labels`, `v2_collections`, `v2_assets`, `v2_fonts`, `v2_text_styles`, `v2_users`, `v2_workspaces`, `v2_sessions`). האוספים הישנים של `main` (`projects`, `categories` וכו') לא נכתבים, אז `main` ממשיך לעבוד עליהם. אפשר לשנות את הקידומת עם `FIRESTORE_PREFIX`, למשל `staging_` כדי שסביבת בדיקות לא תיגע בנתונים האמיתיים.
+- **Cloud Storage:** תמונות ב-`assets/platform/`, תמונות מקדימות ב-`thumbnails/`, פונטים ב-`fonts/platform/`. התיקייה `uploads/` של `main` נשארת כמו שהיא.
+- הכרטיס נשמר כטקסט JSON בשדה `canvas`, כי Firestore לא מקבל מערכים בתוך מערכים.
+- הקוד: `src/lib/data/store.ts` (Firestore או קובץ מקומי), והמאגרים לידו ב-`src/lib/data/`. השאילתות הן רק סינון לפי שוויון, והמיון נעשה בזיכרון, כך שלא צריך אינדקסים מורכבים ב-Firestore.
 
-לפי [מסמך התכנון](docs/design/v2-foundation.md).
+### העברת הנתונים מ-main
 
 ```
-npm run db:up        # Postgres 16 + pgvector ב-localhost:5433
-npm run db:migrate   # יוצר מיגרציה חדשה אחרי שינוי בסכמה (פיתוח)
-npm run db:smoke     # בדיקה שהחיבור עובד
-npm run db:studio    # צפייה בטבלאות בדפדפן
-npm run db:down      # עצירה (הנתונים נשמרים ב-volume)
-
-docker compose --profile app up --build   # האפליקציה כ-image של production ב-localhost:3200
+npm run migrate:v2 -- --dry      # רק דוח
+npm run migrate:v2               # מעתיק מהאוספים של main ל-v2_ (קריאה בלבד מ-main), כרטיסים מומרים ל-v2
+npm run seed:tree                # בונה את עץ האירועים ואת התוויות
 ```
 
-הסכמה ב-[prisma/schema.prisma](prisma/schema.prisma). כתובת ברירת המחדל של מסד הנתונים מוגדרת בקוד, ואפשר להחליף אותה עם `DATABASE_URL` ב-`.env.local`. בענף הזה האפליקציה קוראת וכותבת ל-Postgres דרך `src/lib/data/`, וקבצים (תמונות ותמונות מקדימות) נשמרים ב-`data/files/`. הקוד של Firestore (`db.ts`, `firebase.ts`) נשאר לסקריפט ההעברה, וענפים אחרים ממשיכים לעבוד עם Firebase.
+אפשר להריץ את שניהם שוב, כל מסמך נכתב לפי ה-id שלו. ההתחברויות לא מועתקות, כולם נכנסים מחדש.
+
+### בדיקות
+
+```
+npm run test:canvas   # פורמט הכרטיס
+npm run test:data     # שכבת הנתונים, על הדרייבר המקומי בתיקייה זמנית
+```
+
+### אירוח
+
+`npm run build && npm start`, או ה-`Dockerfile` לשרת קונטיינרים (Cloud Run וכדומה). ייבוא עיצוב (`/api/templates/import`) צריך שרת Node עם `sharp` וזמן ריצה של עד 180 שניות.
+
+**מה עוד לא עובד בענף הזה:** הקבצים של הדלת העסקית, ההורדות מהשרת (PDF, GIF, סרטון, ZIP), נוסחים ורקעים בתוך כרטיס פרטי, כניסה בלי הרשמה, זמני שבת וסקריפטי `seed:content`, `seed:stickers` ו-`seed:wording-pilot` חנו ב-[legacy/business-ads/](legacy/business-ads/README.md) עד שיועברו לשכבת הנתונים החדשה ול-v2. החלקים שמתוארים בהמשך הקובץ ומשתמשים בהם עובדים כרגע רק ב-`feature/business-ads`.
 
 ## משתמשים והרשאות
 

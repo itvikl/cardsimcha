@@ -1,4 +1,3 @@
-import type { Creative, Prisma, Template, Topic } from '@/generated/prisma/client';
 import type { Audience } from '../categories';
 import { toV2 } from '../canvas-v1';
 import { canRead, canWrite } from '../access';
@@ -6,44 +5,74 @@ import { files } from '../files';
 import { topicConflict } from '../topics';
 import type { CanvasDoc, Project, User } from '../types';
 import { newId } from './ids';
-import { prisma } from './prisma';
-import { ensureTopic, topicDoors } from './topics';
-import { setTemplatePlaces } from './tree';
+import { C, db, now, type Reader } from './store';
+import { allTopics, ensureTopic, topicDoors, type TopicDoc } from './topics';
+import { placesPatch } from './tree';
 import { ensurePersonalWorkspace } from './users';
 
 // Templates (platform catalogue) and creatives (a customer's copy of a template) are two
-// tables. The app still sees both as a `Project` with `kind` 'template' | 'design', so the
-// pages and the editor did not have to change.
+// collections. The app still sees both as a `Project` with `kind` 'template' | 'design', so
+// the pages and the editor did not have to change.
 
-type Tx = Prisma.TransactionClient;
-const json = (doc: CanvasDoc) => doc as unknown as Prisma.InputJsonValue;
-/** stored cards may still be format v1 until scripts/cards-to-v2.ts ran; they are converted on read */
-function doc(v: Prisma.JsonValue, id: string): CanvasDoc {
-  const d = toV2(v);
+export type TemplateDoc = {
+  id: string;
+  /** null: the platform catalogue */
+  workspaceId: string | null;
+  /** the first place in the tree, read by the pages from before it */
+  topicId: string | null;
+  labelId: string | null;
+  /** where it is filed in the occasion tree */
+  places: string[];
+  name: string;
+  status: 'draft' | 'published';
+  /** JSON text of the card document (Firestore takes no nested arrays) */
+  canvas: string;
+  thumbnailKey: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreativeDoc = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  templateId: string | null;
+  name: string;
+  canvas: string;
+  thumbnailKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const cardText = (doc: CanvasDoc) => JSON.stringify(doc);
+
+/** stored cards may still be format v1 (copied from main before scripts/migrate-to-v2.ts converted them); they are converted on read */
+function doc(text: string, id: string): CanvasDoc {
+  const d = toV2(JSON.parse(text));
   if (!d) throw new Error(`card ${id} has an invalid canvas`);
   return d;
 }
 
 /** thumbnails are served by /api/thumbnails/<id>; `v` changes the URL when the card is saved */
-const thumbUrl = (id: string, key: string | null, updatedAt: Date) =>
-  key ? `/api/thumbnails/${id}?v=${updatedAt.getTime()}` : undefined;
+const thumbUrl = (id: string, key: string | null, updatedAt: string) => (key ? `/api/thumbnails/${id}?v=${Date.parse(updatedAt)}` : undefined);
 
-const fromTemplate = (t: Template & { topic: Topic | null; places?: { topicId: string }[] }): Project => ({
+const fromTemplate = (t: TemplateDoc, topics: Map<string, TopicDoc>): Project => ({
   id: t.id,
   kind: 'template',
   ownerId: '',
   status: t.status,
   name: t.name,
-  topic: t.topic?.name,
-  places: t.places?.map((p) => p.topicId) ?? [],
+  topic: t.topicId ? topics.get(t.topicId)?.name : undefined,
+  places: t.places ?? [],
   labelId: t.labelId ?? undefined,
   canvas: doc(t.canvas, t.id),
   thumbnail: thumbUrl(t.id, t.thumbnailKey, t.updatedAt),
-  createdAt: t.createdAt.toISOString(),
-  updatedAt: t.updatedAt.toISOString(),
+  createdAt: t.createdAt,
+  updatedAt: t.updatedAt,
 });
 
-const fromCreative = (c: Creative): Project => ({
+const fromCreative = (c: CreativeDoc): Project => ({
   id: c.id,
   kind: 'design',
   ownerId: c.userId,
@@ -52,45 +81,45 @@ const fromCreative = (c: Creative): Project => ({
   name: c.name,
   canvas: doc(c.canvas, c.id),
   thumbnail: thumbUrl(c.id, c.thumbnailKey, c.updatedAt),
-  createdAt: c.createdAt.toISOString(),
-  updatedAt: c.updatedAt.toISOString(),
+  createdAt: c.createdAt,
+  updatedAt: c.updatedAt,
 });
 
-const withTopic = { topic: true, places: { select: { topicId: true } } } as const;
+const topicMap = async (r: Reader = db) => new Map((await allTopics(r)).map((t) => [t.id, t]));
 
-export async function getProject(id: string, tx: Tx = prisma): Promise<Project | null> {
-  const t = await tx.template.findUnique({ where: { id }, include: withTopic });
-  if (t) return fromTemplate(t);
-  const c = await tx.creative.findUnique({ where: { id } });
+export async function getProject(id: string, r: Reader = db): Promise<Project | null> {
+  const [t, c] = await Promise.all([r.get<TemplateDoc>(C.templates, id), r.get<CreativeDoc>(C.creatives, id)]);
+  if (t) return fromTemplate(t, await topicMap(r));
   return c && fromCreative(c);
 }
 
 /** Admin: every catalogue template plus their own designs. Customer: their own designs. */
 export async function listProjectsFor(user: User): Promise<Project[]> {
-  const [templates, creatives] = await Promise.all([
-    user.role === 'admin' ? prisma.template.findMany({ where: { workspaceId: null }, include: withTopic }) : [],
-    prisma.creative.findMany({ where: { userId: user.id } }),
+  const [templates, creatives, topics] = await Promise.all([
+    user.role === 'admin' ? db.find<TemplateDoc>(C.templates, ['workspaceId', '==', null]) : [],
+    db.find<CreativeDoc>(C.creatives, ['userId', '==', user.id]),
+    topicMap(),
   ]);
-  return [...templates.map(fromTemplate), ...creatives.map(fromCreative)];
+  return [...templates.map((t) => fromTemplate(t, topics)), ...creatives.map(fromCreative)];
 }
 
 export async function listPublishedTemplates(): Promise<Project[]> {
-  const rows = await prisma.template.findMany({
-    where: { workspaceId: null, status: 'published' },
-    include: withTopic,
-    orderBy: { updatedAt: 'desc' },
-  });
-  return rows.map(fromTemplate);
+  const [rows, topics] = await Promise.all([
+    db.find<TemplateDoc>(C.templates, ['workspaceId', '==', null], ['status', '==', 'published']),
+    topicMap(),
+  ]);
+  return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((t) => fromTemplate(t, topics));
 }
 
 export async function getPublishedTemplate(id: string): Promise<Project | null> {
-  const t = await prisma.template.findFirst({ where: { id, workspaceId: null, status: 'published' }, include: withTopic });
-  return t && fromTemplate(t);
+  const t = await db.get<TemplateDoc>(C.templates, id);
+  if (!t || t.workspaceId !== null || t.status !== 'published') return null;
+  return fromTemplate(t, await topicMap());
 }
 
 /** thumbnail URL of a catalogue template (the carousel can use it as a cover) */
 export async function templateThumbnail(id: string): Promise<string | null> {
-  const t = await prisma.template.findUnique({ where: { id }, select: { id: true, thumbnailKey: true, updatedAt: true } });
+  const [t] = await db.pick<TemplateDoc>(C.templates, ['thumbnailKey', 'updatedAt'], ['id', '==', id]);
   return (t && thumbUrl(t.id, t.thumbnailKey, t.updatedAt)) ?? null;
 }
 
@@ -99,7 +128,7 @@ export async function templateThumbnail(id: string): Promise<string | null> {
  * admins may copy any template to test it). `edit` may change the copy's canvas first.
  */
 export async function createDesignFromTemplate(user: User, templateId: string, edit: (canvas: CanvasDoc) => void): Promise<string | null> {
-  const t = await prisma.template.findUnique({ where: { id: templateId } });
+  const t = await db.get<TemplateDoc>(C.templates, templateId);
   if (!t || (t.status !== 'published' && user.role !== 'admin')) return null;
   const workspaceId = await ensurePersonalWorkspace(user);
   const canvas = doc(t.canvas, t.id);
@@ -107,12 +136,20 @@ export async function createDesignFromTemplate(user: User, templateId: string, e
   const id = newId();
   // the copy starts with the template's thumbnail until its first save
   const thumbnailKey = t.thumbnailKey ? await copyThumbnail(t.thumbnailKey, id) : null;
-  await prisma.creative.create({ data: { id, workspaceId, userId: user.id, templateId: t.id, name: t.name, canvas: json(canvas), thumbnailKey } });
+  const at = now();
+  await db.set(C.creatives, id, {
+    id, workspaceId, userId: user.id, templateId: t.id, name: t.name, canvas: cardText(canvas), thumbnailKey, createdAt: at, updatedAt: at,
+  } satisfies CreativeDoc);
   return id;
 }
 
-/** a place refused inside createTemplate's transaction: thrown so the template is not kept */
-class PlaceError extends Error {}
+function newTemplate(name: string, canvas: CanvasDoc): TemplateDoc {
+  const at = now();
+  return {
+    id: newId(), workspaceId: null, topicId: null, labelId: null, places: [], name, status: 'draft',
+    canvas: cardText(canvas), thumbnailKey: null, publishedAt: null, createdAt: at, updatedAt: at,
+  };
+}
 
 /**
  * A new blank catalogue template; with `audience` its topic must belong to that door. With
@@ -126,31 +163,21 @@ export async function createTemplate(input: {
   places?: string[];
   labelId?: string | null;
 }): Promise<{ id: string } | { conflict: string }> {
-  try {
-    return await createTemplateTx(input);
-  } catch (e) {
-    if (e instanceof PlaceError) return { conflict: e.message };
-    throw e;
-  }
-}
-
-function createTemplateTx(input: Parameters<typeof createTemplate>[0]) {
-  return prisma.$transaction(async (tx): Promise<{ id: string } | { conflict: string }> => {
+  return db.tx(async (t) => {
+    const row = newTemplate(input.name, input.canvas);
     if (input.places?.length) {
-      const t = await tx.template.create({ data: { name: input.name, canvas: json(input.canvas) } });
-      const r = await setTemplatePlaces(t.id, input.places, input.labelId ?? undefined, input.audience, tx);
-      if ('error' in r) throw new PlaceError(r.error);
-      return { id: t.id };
+      const p = await placesPatch(t, row, input.places, input.labelId ?? undefined, input.audience);
+      if ('error' in p) return { conflict: p.error };
+      t.set(C.templates, row.id, { ...row, ...p });
+      return { id: row.id };
     }
     if (input.audience) {
-      const why = topicConflict(await topicDoors(tx), input.topic, input.audience);
+      const why = topicConflict(await topicDoors(t), input.topic, input.audience);
       if (why) return { conflict: why };
     }
-    const topicId = input.topic ? await ensureTopic(tx, input.topic, input.audience) : null;
-    const t = await tx.template.create({
-      data: { name: input.name, topicId, canvas: json(input.canvas), ...(topicId && { places: { create: { topicId } } }) },
-    });
-    return { id: t.id };
+    const topicId = input.topic ? await ensureTopic(t, input.topic, input.audience) : null;
+    t.set(C.templates, row.id, { ...row, topicId, places: topicId ? [topicId] : [] });
+    return { id: row.id };
   });
 }
 
@@ -172,13 +199,14 @@ export type ProjectPatch = {
 export type PatchResult = 'missing' | 'invalid' | { conflict: string } | { id: string; updatedAt: string };
 
 export async function updateProject(user: User, id: string, patch: ProjectPatch): Promise<PatchResult> {
-  const result = await prisma.$transaction(async (tx): Promise<PatchResult> => {
-    const p = await getProject(id, tx);
-    if (!p || !canWrite(user, p)) return 'missing';
-    const template = p.kind === 'template';
+  const result = await db.tx(async (t): Promise<PatchResult> => {
+    const [tpl, cre] = await Promise.all([t.get<TemplateDoc>(C.templates, id), t.get<CreativeDoc>(C.creatives, id)]);
+    if (!tpl && !cre) return 'missing';
+    const p = tpl ? fromTemplate(tpl, await topicMap(t)) : fromCreative(cre!);
+    if (!canWrite(user, p)) return 'missing';
     // checked before anything changes: a template only takes a topic of the admin's current door
-    if (patch.topic !== undefined && template && patch.audience) {
-      const why = topicConflict(await topicDoors(tx), patch.topic, patch.audience);
+    if (patch.topic !== undefined && tpl && patch.audience) {
+      const why = topicConflict(await topicDoors(t), patch.topic, patch.audience);
       if (why) return { conflict: why };
     }
     let canvas: CanvasDoc | undefined;
@@ -187,45 +215,43 @@ export async function updateProject(user: User, id: string, patch: ProjectPatch)
       if (!next) return 'invalid';
       canvas = next;
     }
-    const common = { ...(canvas && { canvas: json(canvas) }), ...(patch.name && { name: patch.name }) };
-    if (template) {
+    const updatedAt = now();
+    const common = { ...(canvas && { canvas: cardText(canvas) }), ...(patch.name && { name: patch.name }), updatedAt };
+    if (tpl) {
       const topicId =
-        patch.topic === undefined ? undefined : patch.topic ? await ensureTopic(tx, patch.topic, patch.audience) : null;
+        patch.topic === undefined ? undefined : patch.topic ? await ensureTopic(t, patch.topic, patch.audience) : null;
       const status = patch.status;
       // the single topic field swaps one place in the tree and leaves the template's other places
-      const was = topicId === undefined ? undefined : (await tx.template.findUnique({ where: { id }, select: { topicId: true } }))?.topicId;
-      if (topicId !== undefined && topicId !== was) {
-        if (was) await tx.templatePlace.deleteMany({ where: { templateId: id, topicId: was } });
-        if (topicId) await tx.templatePlace.upsert({ where: { templateId_topicId: { templateId: id, topicId } }, update: {}, create: { templateId: id, topicId } });
+      let places: string[] | undefined;
+      if (topicId !== undefined && topicId !== tpl.topicId) {
+        places = (tpl.places ?? []).filter((x) => x !== tpl.topicId);
+        if (topicId && !places.includes(topicId)) places.push(topicId);
       }
-      const row = await tx.template.update({
-        where: { id },
-        data: {
-          ...common,
-          ...(topicId !== undefined && { topicId }),
-          ...(status && { status, ...(status === 'published' && p.status !== 'published' && { publishedAt: new Date() }) }),
-        },
+      t.update(C.templates, id, {
+        ...common,
+        ...(topicId !== undefined && { topicId }),
+        ...(places && { places }),
+        ...(status && { status, ...(status === 'published' && tpl.status !== 'published' && { publishedAt: updatedAt }) }),
       });
-      return { id, updatedAt: row.updatedAt.toISOString() };
+      return { id, updatedAt };
     }
-    const row = await tx.creative.update({ where: { id }, data: common });
-    return { id, updatedAt: row.updatedAt.toISOString() };
+    t.update(C.creatives, id, common);
+    return { id, updatedAt };
   });
 
   if (typeof result === 'object' && 'updatedAt' in result && patch.thumbnail) {
-    const updatedAt = await saveThumbnail(id, patch.thumbnail);
-    if (updatedAt) result.updatedAt = updatedAt;
+    result.updatedAt = await saveThumbnail(id, patch.thumbnail);
   }
   return result;
 }
 
 export async function deleteProject(user: User, id: string): Promise<boolean> {
-  const p = await getProject(id);
-  if (!p || !canWrite(user, p)) return false;
-  const row =
-    p.kind === 'template'
-      ? await prisma.template.delete({ where: { id }, select: { thumbnailKey: true } })
-      : await prisma.creative.delete({ where: { id }, select: { thumbnailKey: true } });
+  const [tpl, cre] = await Promise.all([db.get<TemplateDoc>(C.templates, id), db.get<CreativeDoc>(C.creatives, id)]);
+  const row = tpl ?? cre;
+  if (!row) return false;
+  const p = tpl ? fromTemplate(tpl, new Map()) : fromCreative(cre!);
+  if (!canWrite(user, p)) return false;
+  await db.delete(tpl ? C.templates : C.creatives, id);
   if (row.thumbnailKey) await files.remove([row.thumbnailKey]);
   return true;
 }
@@ -235,6 +261,21 @@ export async function deleteProject(user: User, id: string): Promise<boolean> {
 const thumbKey = (id: string, ext: string) => `thumbnails/${id}.${ext}`;
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
 
+async function saveThumbnail(id: string, t: { data: Buffer; ext: 'png' | 'jpg' }): Promise<string> {
+  const key = thumbKey(id, t.ext);
+  await files.put(key, t.data, t.ext === 'png' ? 'image/png' : 'image/jpeg');
+  const updatedAt = now();
+  const before = await db.tx(async (tx) => {
+    const [tpl, cre] = await Promise.all([tx.get<TemplateDoc>(C.templates, id), tx.get<CreativeDoc>(C.creatives, id)]);
+    const row = tpl ?? cre;
+    if (row) tx.update(tpl ? C.templates : C.creatives, id, { thumbnailKey: key, updatedAt });
+    return row?.thumbnailKey ?? null;
+  });
+  // the previous file, when it had another extension (a migrated card may have .webp)
+  if (before && before !== key) await files.remove([before]);
+  return updatedAt;
+}
+
 async function copyThumbnail(fromKey: string, toId: string): Promise<string | null> {
   const data = await files.get(fromKey);
   if (!data) return null;
@@ -243,30 +284,14 @@ async function copyThumbnail(fromKey: string, toId: string): Promise<string | nu
   return key;
 }
 
-async function saveThumbnail(id: string, t: { data: Buffer; ext: 'png' | 'jpg' }): Promise<string | null> {
-  const key = thumbKey(id, t.ext);
-  await files.put(key, t.data, t.ext === 'png' ? 'image/png' : 'image/jpeg');
-  const select = { thumbnailKey: true } as const;
-  const before = (await prisma.template.findUnique({ where: { id }, select })) ?? (await prisma.creative.findUnique({ where: { id }, select }));
-  const tpl = await prisma.template.updateMany({ where: { id }, data: { thumbnailKey: key } });
-  if (!tpl.count) await prisma.creative.updateMany({ where: { id }, data: { thumbnailKey: key } });
-  // the previous file, when it had another extension (a migrated card may have .webp)
-  if (before?.thumbnailKey && before.thumbnailKey !== key) await files.remove([before.thumbnailKey]);
-  const p = await getProject(id);
-  return p?.updatedAt ?? null;
-}
-
 /** the stored thumbnail of a card the user may see, or null */
 export async function readThumbnail(user: User | null, id: string): Promise<{ data: Buffer; contentType: string } | null> {
-  const p = await getProject(id);
-  if (!p) return null;
+  const [tpl, cre] = await Promise.all([db.get<TemplateDoc>(C.templates, id), db.get<CreativeDoc>(C.creatives, id)]);
+  const row = tpl ?? cre;
+  if (!row?.thumbnailKey) return null;
+  const p = tpl ? fromTemplate(tpl, new Map()) : fromCreative(cre!);
   const visible = (p.kind === 'template' && p.status === 'published') || (user && canRead(user, p));
   if (!visible) return null;
-  const row =
-    p.kind === 'template'
-      ? await prisma.template.findUnique({ where: { id }, select: { thumbnailKey: true } })
-      : await prisma.creative.findUnique({ where: { id }, select: { thumbnailKey: true } });
-  if (!row?.thumbnailKey) return null;
   const data = await files.get(row.thumbnailKey);
   return data && { data, contentType: IMAGE_TYPES[row.thumbnailKey.slice(row.thumbnailKey.lastIndexOf('.'))] ?? 'image/jpeg' };
 }

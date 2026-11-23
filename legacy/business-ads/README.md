@@ -1,10 +1,10 @@
 # Parked: Vitol's feature/business-ads work, waiting to be ported
 
 These files came into `new-design` with the two merges of `feature/business-ads` (5f2126a, 22eac97).
-They are written against the Firestore data layer and the v1 card format, so they don't compile on
+They are written against the v1 Firestore data layer (`src/lib/db.ts`) and the v1 card format, so they don't compile on
 `new-design` (447 type errors) and kept `next build` from passing. They live here, outside the build
 (`tsconfig.json` excludes `legacy/`), as the source to port from. Paths mirror the repo:
-`legacy/business-ads/src/lib/looks.ts` goes back to `src/lib/looks.ts` once it works on v2 and Postgres.
+`legacy/business-ads/src/lib/looks.ts` goes back to `src/lib/looks.ts` once it works on v2 and the data layer in `src/lib/data/` (Firestore).
 
 Two kinds of file:
 

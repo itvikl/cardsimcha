@@ -1,9 +1,13 @@
 // Puts the topics from before the tree into it (npm run seed:tree). Safe to run again: a node
 // that is already in place is left alone, and an existing topic is moved, not copied, so its
 // templates come with it. The topics that become product labels (לוגו, זמני שבת, מבצע,
-// מיתוג שמחה...) are left outside the tree on purpose; the next stage turns them into labels.
-import type { TopicLevel } from '../src/generated/prisma/client';
-import { prisma } from '../src/lib/data/prisma';
+// מיתוג שמחה...) are left outside the tree on purpose and their designs get the label.
+// Runs against the store DATA_DRIVER picks (Firestore by default).
+import { newId } from '../src/lib/data/ids';
+import { C, db, now } from '../src/lib/data/store';
+import { allTopics, newTopic, type TopicDoc, type TopicLevel } from '../src/lib/data/topics';
+import type { LabelDoc } from '../src/lib/data/tree';
+import type { TemplateDoc } from '../src/lib/data/projects';
 
 type Audience = 'private' | 'business';
 /** a type, or [the topic's old name, its name in the tree] when it is renamed on the way */
@@ -29,44 +33,6 @@ const TREE: CategorySpec[] = [
   { name: 'עסקים', audience: 'business', events: [{ name: 'ייעוץ משכנתאות' }, { name: 'מיזוג אוויר' }, { name: 'ייעוץ עסקי' }] },
 ];
 
-const log: string[] = [];
-
-/**
- * The node `name` under `parentId` at `position`: already there, or a topic from before the
- * tree (at the root, not yet a category) moved in, or a new one.
- */
-async function place(name: string, oldName: string, parentId: string | null, level: TopicLevel, audience: Audience, position: number, adopt = true) {
-  const here = await prisma.topic.findFirst({ where: { parentId, name, ...(parentId === null && { level: 'category' }) } });
-  if (here) {
-    if (here.position !== position || here.level !== level || here.audience !== audience) {
-      await prisma.topic.update({ where: { id: here.id }, data: { position, level, audience } });
-    }
-    return here.id;
-  }
-  const loose = adopt ? await prisma.topic.findFirst({ where: { parentId: null, name: oldName, level: { not: 'category' } } }) : null;
-  if (loose) {
-    await prisma.topic.update({ where: { id: loose.id }, data: { name, parentId, level, audience, position } });
-    log.push(`moved   ${oldName}${oldName !== name ? ` → ${name}` : ''} (${level})`);
-    return loose.id;
-  }
-  const made = await prisma.topic.create({ data: { name, parentId, level, audience, position, sortOrder: -1 } });
-  log.push(`created ${name} (${level})`);
-  return made.id;
-}
-
-for (const [ci, cat] of TREE.entries()) {
-  const catId = await place(cat.name, cat.name, null, 'category', cat.audience, ci);
-  for (const [ei, ev] of cat.events.entries()) {
-    // an event with a type of its own name (חתונה → חתונה) leaves the old topic to that type, where its designs belong
-    const ownType = (ev.types ?? []).some((t) => (typeof t === 'string' ? t : t[0]) === ev.name);
-    const evId = await place(ev.name, ev.name, catId, 'event', cat.audience, ei, !ownType);
-    for (const [ti, t] of (ev.types ?? []).entries()) {
-      const [oldName, name] = typeof t === 'string' ? [t, t] : t;
-      await place(name, oldName, evId, 'type', cat.audience, ti);
-    }
-  }
-}
-
 // ---- "what it is" labels, and the topics from before the tree that were really labels ----
 
 const LABELS: Record<Audience, string[]> = {
@@ -87,44 +53,97 @@ const AS_LABEL: Record<string, { label: string; place: string }> = {
   'מיתוג שמחה': { label: 'מיתוג אירוע', place: 'שמחות' },
 };
 
-for (const audience of ['private', 'business'] as const) {
-  for (const [position, name] of LABELS[audience].entries()) {
-    const found = await prisma.productLabel.findUnique({ where: { audience_name: { audience, name } } });
-    if (!found) {
-      await prisma.productLabel.create({ data: { name, audience, position } });
-      log.push(`label   ${name} (${audience})`);
+const log: string[] = [];
+const topics = await allTopics();
+const loose = (t: TopicDoc) => t.parentId === null && t.level !== 'category';
+
+async function save(t: TopicDoc) {
+  await db.set(C.topics, t.id, { ...t, updatedAt: now() });
+}
+
+/**
+ * The node `name` under `parentId` at `position`: already there, or a topic from before the
+ * tree (at the root, not yet a category) moved in, or a new one.
+ */
+async function place(name: string, oldName: string, parentId: string | null, level: TopicLevel, audience: Audience, position: number, adopt = true) {
+  const here = topics.find((t) => t.parentId === parentId && t.name === name && (parentId !== null || t.level === 'category'));
+  if (here) {
+    if (here.position !== position || here.level !== level || here.audience !== audience) {
+      Object.assign(here, { position, level, audience });
+      await save(here);
+    }
+    return here.id;
+  }
+  const found = adopt ? topics.find((t) => loose(t) && t.name === oldName) : undefined;
+  if (found) {
+    Object.assign(found, { name, parentId, level, audience, position });
+    await save(found);
+    log.push(`moved   ${oldName}${oldName !== name ? ` → ${name}` : ''} (${level})`);
+    return found.id;
+  }
+  const made = newTopic({ name, parentId, level, audience, position, sortOrder: -1 });
+  topics.push(made);
+  await save(made);
+  log.push(`created ${name} (${level})`);
+  return made.id;
+}
+
+for (const [ci, cat] of TREE.entries()) {
+  const catId = await place(cat.name, cat.name, null, 'category', cat.audience, ci);
+  for (const [ei, ev] of cat.events.entries()) {
+    // an event with a type of its own name (חתונה → חתונה) leaves the old topic to that type, where its designs belong
+    const ownType = (ev.types ?? []).some((t) => (typeof t === 'string' ? t : t[0]) === ev.name);
+    const evId = await place(ev.name, ev.name, catId, 'event', cat.audience, ei, !ownType);
+    for (const [ti, t] of (ev.types ?? []).entries()) {
+      const [oldName, name] = typeof t === 'string' ? [t, t] : t;
+      await place(name, oldName, evId, 'type', cat.audience, ti);
     }
   }
 }
 
-// a design keeps its old topic for the pages from before the tree; it gains the label and a place
-for (const [topicName, { label, place }] of Object.entries(AS_LABEL)) {
-  const topic = await prisma.topic.findFirst({ where: { name: topicName, parentId: null, level: { not: 'category' } } });
-  if (!topic) continue;
-  const cat = await prisma.topic.findFirst({ where: { name: place, parentId: null, level: 'category' } });
-  const lab = await prisma.productLabel.findFirst({ where: { name: label, audience: topic.audience } });
-  if (!cat || !lab) continue;
-  const designs = await prisma.template.findMany({ where: { topicId: topic.id }, select: { id: true, labelId: true } });
-  let n = 0;
-  for (const d of designs) {
-    // the old topic is not a place in the tree: a design filed only there moves to the category
-    await prisma.templatePlace.deleteMany({ where: { templateId: d.id, topicId: topic.id } });
-    const placed = await prisma.templatePlace.count({ where: { templateId: d.id } });
-    if (d.labelId && placed) continue;
-    await prisma.template.update({
-      where: { id: d.id },
-      data: { labelId: d.labelId ?? lab.id, ...(!placed && { places: { create: { topicId: cat.id } } }) },
-    });
-    n++;
+const labels = await db.find<LabelDoc>(C.labels);
+for (const audience of ['private', 'business'] as const) {
+  for (const [position, name] of LABELS[audience].entries()) {
+    if (labels.some((l) => l.audience === audience && l.name === name)) continue;
+    const l: LabelDoc = { id: newId(), name, audience, position, createdAt: now() };
+    labels.push(l);
+    await db.set(C.labels, l.id, l);
+    log.push(`label   ${name} (${audience})`);
   }
-  if (n) log.push(`labeled ${n} × ${topicName} → ${label}, filed on ${place}`);
 }
 
-// no design stays "filed" on a topic outside the tree (the backfill copied every old topic)
-const loosePlaces = await prisma.templatePlace.deleteMany({ where: { topic: { parentId: null, level: { not: 'category' } } } });
-if (loosePlaces.count) log.push(`removed ${loosePlaces.count} places on old topics outside the tree`);
+// a design keeps its old topic for the pages from before the tree; it gains the label and a place
+const templates = await db.pick<Pick<TemplateDoc, 'id' | 'topicId' | 'labelId' | 'places'>>(C.templates, ['topicId', 'labelId', 'places']);
+const looseIds = new Set(topics.filter(loose).map((t) => t.id));
+for (const [topicName, { label, place: placeName }] of Object.entries(AS_LABEL)) {
+  const topic = topics.find((t) => loose(t) && t.name === topicName);
+  if (!topic) continue;
+  const cat = topics.find((t) => t.parentId === null && t.level === 'category' && t.name === placeName);
+  const lab = labels.find((l) => l.name === label && l.audience === topic.audience);
+  if (!cat || !lab) continue;
+  let n = 0;
+  for (const d of templates.filter((x) => x.topicId === topic.id)) {
+    // the old topic is not a place in the tree: a design filed only there moves to the category
+    const places = (d.places ?? []).filter((p) => p !== topic.id);
+    if (d.labelId && places.length) continue;
+    d.labelId ??= lab.id;
+    d.places = places.length ? places : [cat.id];
+    await db.update(C.templates, d.id, { labelId: d.labelId, places: d.places });
+    n++;
+  }
+  if (n) log.push(`labeled ${n} × ${topicName} → ${label}, filed on ${placeName}`);
+}
 
-const left = await prisma.topic.findMany({ where: { parentId: null, level: { not: 'category' } }, select: { name: true } });
+// no design stays "filed" on a topic outside the tree
+let removed = 0;
+for (const d of templates) {
+  const places = (d.places ?? []).filter((p) => !looseIds.has(p));
+  if (places.length === (d.places ?? []).length) continue;
+  removed += (d.places ?? []).length - places.length;
+  await db.update(C.templates, d.id, { places });
+}
+if (removed) log.push(`removed ${removed} places on old topics outside the tree`);
+
+const left = topics.filter(loose).map((t) => t.name);
 console.log(log.length ? log.join('\n') : 'the tree was already in place');
-console.log(`\nold topics still outside the tree (read only by the pages from before it): ${left.map((t) => t.name).join(', ') || 'none'}`);
-await prisma.$disconnect();
+console.log(`\nold topics still outside the tree (read only by the pages from before it): ${left.join(', ') || 'none'}`);

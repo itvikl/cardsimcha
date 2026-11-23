@@ -1,5 +1,7 @@
 # v2 foundation: data platform and card format
 
+> **Update (2026-11-23, branch `staging`):** the data stays on Firebase. Postgres, Prisma and AWS were dropped; the v2 model below is kept as Firestore collections (`v2_…`) through `src/lib/data/store.ts`. The card format v2 parts are unchanged. See the README.
+
 Status: **draft for review** (zvimoe, itvikl) · Branch: `new-design` · Covers phase 1 of [`overallplan`](../../overallplan) plus the storage groundwork phase 2 depends on.
 
 ## 1. Decisions in this document
