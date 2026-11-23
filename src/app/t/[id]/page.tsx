@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useMe } from '@/components/Auth';
 import { formatPrice } from '@/lib/price';
 
-type Template = { id: string; name: string; price: number | null; width_mm: number; height_mm: number; thumbnail: string | null; fields: string[]; canSwapBackground: boolean };
+// price: not stored on this branch yet, so the API leaves it out
+type Template = { id: string; name: string; price?: number | null; width_mm: number; height_mm: number; thumbnail: string | null; fields: string[]; canSwapBackground: boolean };
 
 export default function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -86,7 +87,7 @@ export default function TemplatePage({ params }: { params: Promise<{ id: string 
           <div>
             <span className="eyebrow">כרטיס</span>
             <h1 style={{ margin: '4px 0 0', fontSize: 'clamp(34px, 5vw, 56px)', lineHeight: 1.08 }}>{tpl.name}</h1>
-            {tpl.price !== null && <p style={{ margin: '10px 0 0', fontSize: 24, fontWeight: 700 }}>{formatPrice(tpl.price)}</p>}
+            {typeof tpl.price === 'number' && <p style={{ margin: '10px 0 0', fontSize: 24, fontWeight: 700 }}>{formatPrice(tpl.price)}</p>}
           </div>
           {(tpl.fields.length > 0 || tpl.canSwapBackground) && (
             <div>
