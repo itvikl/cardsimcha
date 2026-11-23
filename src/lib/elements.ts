@@ -1,3 +1,4 @@
+import { uid } from './uid';
 import { FIELD_LOCKS, LOCKED } from './canvas';
 import type { CanvasDoc, ImageAsset, ImageElement, ShapeElement, TextElement } from './types';
 
@@ -9,7 +10,7 @@ import type { CanvasDoc, ImageAsset, ImageElement, ShapeElement, TextElement } f
 export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט'): TextElement {
   const w = Math.min(120, doc.page.width_mm - 20);
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'text',
     x_mm: (doc.page.width_mm - w) / 2,
     y_mm: doc.page.height_mm / 3,
@@ -25,7 +26,7 @@ export function newText(doc: CanvasDoc, text = 'לחצו לעריכת הטקסט
 
 export function newRect(doc: CanvasDoc): ShapeElement {
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'shape',
     shape: 'rect',
     x_mm: doc.page.width_mm / 4,
@@ -47,7 +48,7 @@ export function newImage(doc: CanvasDoc, asset: ImageAsset): ImageElement {
     w = (h * asset.width) / asset.height;
   }
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     type: 'image',
     x_mm: (doc.page.width_mm - w) / 2,
     y_mm: (doc.page.height_mm - h) / 2,
@@ -67,36 +68,39 @@ export const DIVIDERS: { id: DividerKind; label: string }[] = [
   { id: 'double', label: 'קו כפול' },
 ];
 
-/** A divider between lines of text: a few shapes in one group, across the middle of the page, so they move as one. */
+/**
+ * A divider between lines of text: a few shapes in one group across the middle of the page, so they move as one.
+ * They go in the content layer, in this order. Ported from feature/business-ads (Vitol).
+ */
 export function newDivider(doc: CanvasDoc, kind: DividerKind, color = '#B8892F'): ShapeElement[] {
-  const group = crypto.randomUUID();
+  const group = uid();
   const W = doc.page.width_mm;
   const w = Math.min(70, W * 0.42);
   const x = (W - w) / 2;
   const y = doc.page.height_mm / 2;
   const t = Math.max(0.35, W / 300);
-  const z = doc.elements.length;
-  const shape = (s: Partial<ShapeElement> & Pick<ShapeElement, 'x_mm' | 'y_mm' | 'w_mm' | 'h_mm'>, i: number): ShapeElement => ({
-    id: crypto.randomUUID(),
-    type: 'rect',
+  const shape = (s: Partial<ShapeElement> & Pick<ShapeElement, 'x_mm' | 'y_mm' | 'w_mm' | 'h_mm'>): ShapeElement => ({
+    id: uid(),
+    type: 'shape',
+    shape: 'rect',
     rotation: 0,
-    z: z + i,
-    fill: color,
+    locks: LOCKED,
+    fill: { type: 'solid', color },
     group,
     ...s,
   });
-  if (kind === 'line') return [shape({ x_mm: x, y_mm: y, w_mm: w, h_mm: t }, 0)];
-  if (kind === 'double') return [shape({ x_mm: x, y_mm: y - t * 1.6, w_mm: w, h_mm: t }, 0), shape({ x_mm: x, y_mm: y + t * 1.6, w_mm: w, h_mm: t }, 1)];
+  if (kind === 'line') return [shape({ x_mm: x, y_mm: y, w_mm: w, h_mm: t })];
+  if (kind === 'double') return [shape({ x_mm: x, y_mm: y - t * 1.6, w_mm: w, h_mm: t }), shape({ x_mm: x, y_mm: y + t * 1.6, w_mm: w, h_mm: t })];
   const d = Math.max(1.6, w / 22);
   if (kind === 'dots') {
-    return [-1, 0, 1].map((k, i) => shape({ x_mm: W / 2 + k * d * 2.6 - d / 2, y_mm: y - d / 2, w_mm: d, h_mm: d, cornerRadius_mm: d / 2 }, i));
+    return [-1, 0, 1].map((k) => shape({ x_mm: W / 2 + k * d * 2.6 - d / 2, y_mm: y - d / 2, w_mm: d, h_mm: d, corner_radius_mm: d / 2 }));
   }
   // a diamond between two lines: a square turned 45° about its corner, so its middle stays on the line
   const side = d * 1.3;
   const gap = side * 1.4;
   return [
-    shape({ x_mm: x, y_mm: y - t / 2, w_mm: w / 2 - gap, h_mm: t }, 0),
-    shape({ x_mm: W / 2 + gap, y_mm: y - t / 2, w_mm: w / 2 - gap, h_mm: t }, 1),
-    shape({ x_mm: W / 2, y_mm: y - (side * Math.SQRT2) / 2, w_mm: side, h_mm: side, rotation: 45 }, 2),
+    shape({ x_mm: x, y_mm: y - t / 2, w_mm: w / 2 - gap, h_mm: t }),
+    shape({ x_mm: W / 2 + gap, y_mm: y - t / 2, w_mm: w / 2 - gap, h_mm: t }),
+    shape({ x_mm: W / 2, y_mm: y - (side * Math.SQRT2) / 2, w_mm: side, h_mm: side, rotation: 45 }),
   ];
 }

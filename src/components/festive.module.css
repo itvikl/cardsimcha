@@ -46,7 +46,8 @@
   /* no background of its own: the site backdrop shows through */
   color: var(--text);
   font-family: 'Heebo', sans-serif;
-  overflow: hidden;
+  /* clip, not hidden: hidden would make this a scroll container and stop "איך זה עובד" from sticking while the page scrolls */
+  overflow: clip;
 }
 .business {
   --bg: #0b1f4d;
@@ -225,6 +226,12 @@
 }
 .howSteps strong { font-size: 18px; }
 .howSteps span { color: var(--text-2); }
+/* a design on the home page under its kind's name, as the shortcuts at the top call it */
+.cardTileWrap { flex: 0 0 auto; scroll-snap-align: start; display: flex; flex-direction: column; gap: var(--sp-1); width: 180px; }
+.cardTileKind {
+  font-family: var(--serif); font-size: 17px; font-weight: 700; line-height: 1.2; color: var(--gold-text);
+  text-align: center;
+}
 .cardTileMore {
   align-items: center; justify-content: center; gap: var(--sp-1);
   font-weight: 700; font-size: 15px;

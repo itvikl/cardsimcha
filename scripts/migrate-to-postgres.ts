@@ -103,7 +103,7 @@ async function main() {
   // --- topics: the carousel settings, then every other topic a template uses ---
   for (const s of db.carousel) {
     const data = { coverUrl: s.image, hidden: !!s.hidden, sortOrder: s.order ?? 0, audience: s.audience ?? audienceOf(s.name) };
-    await prisma.topic.upsert({ where: { name: s.name }, update: data, create: { id: stableId(`topic:${s.name}`), name: s.name, ...data } });
+    await prisma.topic.upsert({ where: { id: stableId(`topic:${s.name}`) }, update: data, create: { id: stableId(`topic:${s.name}`), name: s.name, ...data } });
     note('topics (carousel)');
   }
   const topicId = new Map((await prisma.topic.findMany({ select: { id: true, name: true } })).map((t) => [t.name, t.id]));

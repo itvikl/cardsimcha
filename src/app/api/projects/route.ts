@@ -46,15 +46,17 @@ export async function POST(req: Request) {
   let canvas = validateDoc(emptyDoc(Number(body?.width_mm) || 210, Number(body?.height_mm) || 297));
   if (!canvas) return NextResponse.json({ error: 'מידות לא תקינות' }, { status: 400 });
   const audience = parseAudience(body?.audience);
+  const places = Array.isArray(body?.places) ? body.places.filter((t: unknown): t is string => typeof t === 'string').slice(0, 50) : [];
+  const labelId = typeof body?.labelId === 'string' ? body.labelId : null;
   // fail before the work below is wasted (checked again, atomically, when saving)
-  if (audience) {
+  if (audience && !places.length) {
     const why = await topicConflictFor(topic, audience);
     if (why) return NextResponse.json({ error: why }, { status: 400 });
   }
   const bg = typeof body?.backgroundAssetId === 'string' ? await getImage(body.backgroundAssetId) : null;
   // the chosen image fills the page like CSS "cover"
   if (bg) canvas = setBackground(canvas, { image: { asset_id: bg.id, fit: 'cover' } });
-  const result = await createTemplate({ name, topic, canvas, audience });
+  const result = await createTemplate({ name, topic, canvas, audience, places, labelId });
   if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
   return NextResponse.json({ id: result.id }, { status: 201 });
 }

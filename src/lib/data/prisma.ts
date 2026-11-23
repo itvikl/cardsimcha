@@ -8,13 +8,21 @@ import { PrismaClient } from '@/generated/prisma/client';
  */
 const DEFAULT_URL = 'postgresql://cardsimcha:cardsimcha@localhost:5433/cardsimcha';
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+// `client` remembers which generated class made it: after `prisma generate` (a schema change)
+// the dev server loads a new class, and a client of the old one would not know the new fields.
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; prismaClass?: typeof PrismaClient };
 
 function createClient() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL ?? DEFAULT_URL });
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+const stale = globalForPrisma.prisma && globalForPrisma.prismaClass !== PrismaClient;
+if (stale) void globalForPrisma.prisma!.$disconnect().catch(() => {});
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+export const prisma = (!stale && globalForPrisma.prisma) || createClient();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaClass = PrismaClient;
+}

@@ -1,4 +1,4 @@
-import { foilStops } from './nodeStyle';
+import { fontCss, foilStops } from './nodeStyle';
 import type { TextElement } from './types';
 
 /**
@@ -6,7 +6,8 @@ import type { TextElement } from './types';
  * whole. `arc` is how much of a half circle the line takes: 100 bends it into a half circle with its middle at the top
  * (a rainbow), -100 into one with its middle at the bottom (a smile), and near 0 it stays straight.
  *
- * Drawn the same in the editor and off screen (renderCard), so the card, its previews and every download agree.
+ * Drawn the same in the editor and off screen, so the card, its previews and every download agree.
+ * Ported from feature/business-ads (Vitol) onto card format v2.
  */
 
 export const ARC_LIMIT = 100;
@@ -16,8 +17,7 @@ const PT_TO_MM = 25.4 / 72;
 
 export const hasArc = (e: Pick<TextElement, 'arc'>) => Math.abs(e.arc ?? 0) >= ARC_MIN;
 
-export const fontOf = (e: TextElement, px: number) =>
-  `${e.font.weight === 700 ? 'bold ' : ''}${e.font.size_pt * PT_TO_MM * px}px "${e.font.family}"`;
+export const fontOf = (e: TextElement, px: number) => fontCss(e, e.font.size_pt * PT_TO_MM * px);
 
 const segmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter('he', { granularity: 'grapheme' }) : null;
 /** letters with their niqqud: a mark stays with the letter it sits on */
@@ -60,7 +60,7 @@ export function arcLayout(e: TextElement, px: number, ctx: Pick<CanvasRenderingC
   ctx.font = fontOf(e, px);
   const size = e.font.size_pt * PT_TO_MM * px;
   const chars = visualOrder(e.text);
-  const spacing = (e.letterSpacing ?? 0) * PT_TO_MM * px;
+  const spacing = (e.font.letter_spacing ?? 0) * PT_TO_MM * px;
   const widths = chars.map((ch) => ctx.measureText(ch).width + spacing);
   const W = widths.reduce((a, b) => a + b, 0);
   const boxW = e.w_mm * px;

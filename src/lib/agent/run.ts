@@ -13,26 +13,15 @@ The user describes what they want; you change the card only through the card too
 Always call get_card first to see the element ids. Measurements are in millimetres from the page's top-left corner.
 Texts are Hebrew (right-to-left) unless the user writes in another language. Keep every element inside the page.
 When you are done, answer the user in one or two short sentences in the user's language (usually Hebrew) saying what you changed.
-Your final message is shown to the user word for word: write only that answer, as plain text without markdown, with no notes to yourself, no restating of the request and no English preamble.
+Your final message is shown to the user word for word: write only that answer, with no notes to yourself, no restating of the request and no English preamble.
 If the user asks for something the tools cannot do, say so briefly instead of guessing.`;
 
-const CUSTOMER_PROMPT = `The user is a customer filling in a template. They may change the text, colour and position of
-editable text fields, replace images marked swappable, and add, move, resize or remove stickers. Match each detail the user gives to the field whose label fits it best.
-Do not put text into fields that do not fit it; leave fields the user said nothing about unchanged.
-You can do what the page in front of them can do, and nothing else: if a tool for it is missing here, say that it can't be done.`;
-
-const FREE_PROMPT = `On this ad they may also add texts of their own, change the ad's photo, choose products from their catalog when the ad has a place for them, and open the ad in another size.
-A new detail goes in an existing field when one fits it; add a text of their own only when none does.`;
+const CUSTOMER_PROMPT = `The user is a customer filling in a template. They may only change the text, colour and position of
+editable text fields, and replace images marked swappable. Match each detail the user gives to the field whose label fits it best.
+Do not put text into fields that do not fit it; leave fields the user said nothing about unchanged.`;
 
 const ADMIN_PROMPT = `The user is the template designer and may change anything: add, delete, move and restyle elements,
 mark texts as editable for customers (with a short Hebrew label such as "שם החתן"), and change the page.`;
-
-const BUSINESS_PROMPT = `This design is an advertisement for a business, not a greeting card: speak of "המודעה", never "הכרטיס".
-The aim is an ad that brings customers: one clear message, the reason to choose this business, and one call to action.
-If the request is open ("תכתוב לי מודעה", "מה כדאי לכתוב") and the brief doesn't settle it, ask at most three short questions
-(whom the ad is for, what to offer, what the reader should do), then offer three different ad directions in one line each and wait for the choice.
-If the request is specific, just do it. Write only what is true: never invent prices, discounts, numbers, reviews, customers or guarantees
-the user didn't give you, and leave the business's locked details as they are.`;
 
 /**
  * Runs one agent turn over `state.doc`. In development this uses the Claude Code login on
@@ -59,7 +48,7 @@ export async function runAgent(
       options: {
         model: opts.model ?? MODEL,
         effort: opts.effort ?? EFFORT,
-        systemPrompt: [BASE_PROMPT, state.mode === 'full' ? ADMIN_PROMPT : CUSTOMER_PROMPT, ...(state.mode !== 'full' && state.free ? [FREE_PROMPT] : []), ...(state.brief ? [BUSINESS_PROMPT, state.brief] : [])].join('\n\n'),
+        systemPrompt: [BASE_PROMPT, state.mode === 'full' ? ADMIN_PROMPT : CUSTOMER_PROMPT].join('\n\n'),
         tools: [], // no built-in Claude Code tools (files, shell, web)
         mcpServers: { card: server },
         allowedTools: toolNames,

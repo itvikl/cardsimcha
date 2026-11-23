@@ -1,23 +1,38 @@
 # סטודיו עיצוב
 
-אפליקציית Next.js ליצירת עיצובים מקטגוריות ותמונות. השלב הנוכחי: ניהול קטגוריות ותמונות ועורך ידני (בלי AI).
+אפליקציית Next.js ליצירת עיצובים מקטגוריות ותמונות. בענף הזה (`editor-port`, מתוך `new-design`) הנתונים ב-Postgres, פורמט הכרטיס הוא v2 (שלוש שכבות ונעילות), והעורך כולל את הכלים מ-`feature/business-ads`.
 
-## הרצה
+## הרצה מקומית (הענף הזה)
+
+צריך Node 22 ו-Docker Desktop פועל.
 
 ```
-npm install
-npm run dev      # http://localhost:3000
+git fetch && git checkout editor-port
+npm install                      # מריץ גם prisma generate
+npm run db:up                    # Postgres 16 + pgvector ב-localhost:5433
+npm run db:deploy                # מריץ את המיגרציות שב-prisma/migrations
+echo AUTH_DISABLED=true >> .env.local   # פיתוח בלבד: כפתור "מצב ניהול" בלי הרשמה
+npm run dev                      # http://localhost:3000
 ```
 
-הנתונים נשמרים מקומית בתיקייה `data/` (קובץ `db.json` ותיקיית `uploads/`). התיקייה לא נכנסת ל-git.
+**נתונים:** מסד חדש מתחיל ריק. כדי להעתיק אליו את מה שיש היום (קטגוריות, תמונות, תבניות, עיצובים ומשתמשים, כרטיסים בפורמט הישן מומרים ל-v2):
 
-### Postgres ו-Docker (v2, בבנייה)
+```
+npm run migrate:postgres                  # מ-Firestore ו-Cloud Storage (קריאה בלבד), עם FIREBASE_SERVICE_ACCOUNT_FILE או התחברות gcloud
+npm run migrate:postgres -- --from local  # מ-data/db.json ו-data/uploads
+```
 
-לפי [מסמך התכנון](docs/design/v2-foundation.he.md). צריך Docker Desktop פועל.
+הסקריפט כותב רק ל-Postgres המקומי ול-`data/files/`, ואפשר להריץ אותו שוב. הוא לא מעתיק עדיין את הנתונים העסקיים (ערכות מותג, קטלוג, מנויים).
+
+**מה עוד לא עובד בענף הזה:** הקבצים של הדלת העסקית, ההורדות מהשרת (PDF, GIF, סרטון, ZIP), נוסחים ורקעים בתוך כרטיס פרטי, כניסה בלי הרשמה, זמני שבת וסקריפטי ה-`seed:*` חנו ב-[legacy/business-ads/](legacy/business-ads/README.md) עד שיועברו ל-Postgres ול-v2. החלקים שמתוארים בהמשך הקובץ ומשתמשים בהם עובדים כרגע רק ב-`feature/business-ads`.
+
+### Postgres ו-Docker
+
+לפי [מסמך התכנון](docs/design/v2-foundation.md).
 
 ```
 npm run db:up        # Postgres 16 + pgvector ב-localhost:5433
-npm run db:migrate   # מריץ את המיגרציות שב-prisma/migrations
+npm run db:migrate   # יוצר מיגרציה חדשה אחרי שינוי בסכמה (פיתוח)
 npm run db:smoke     # בדיקה שהחיבור עובד
 npm run db:studio    # צפייה בטבלאות בדפדפן
 npm run db:down      # עצירה (הנתונים נשמרים ב-volume)

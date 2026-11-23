@@ -6,6 +6,7 @@ import { AGENT_ENABLED } from '@/lib/config';
 import { parseAudience } from '@/lib/topics';
 import { listImages } from '@/lib/data/library';
 import { deleteProject, getProject, updateProject, type ProjectPatch } from '@/lib/data/projects';
+import { backgroundsFor } from '@/lib/data/tree';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,8 +29,11 @@ export async function GET(_req: Request, { params }: Ctx) {
   const project = await getProject(id);
   if (!project || !canRead(user, project)) return NextResponse.json({ error: 'לא נמצא' }, { status: 404 });
   // `canEdit` tells the editor which mode to open in; the server enforces it again on save.
+  // a design is offered the backgrounds of the template it came from
+  const templateId = project.kind === 'template' ? project.id : project.templateId;
   return NextResponse.json({
     ...project,
+    treeBackgrounds: templateId ? await backgroundsFor(templateId) : [],
     canManage: canWrite(user, project) && project.kind === 'template',
     canAgent: AGENT_ENABLED && canWrite(user, project),
   });
@@ -51,8 +55,11 @@ export async function PUT(req: Request, { params }: Ctx) {
     audience: parseAudience(body?.audience),
   };
   if (body?.canvas !== undefined) {
-    // a customer's design takes only the changes a customer may make; that needs the image library
-    const images = await listImages();
+    // a customer's design takes only the changes a customer may make; that needs the image library,
+    // and which of its images the design's place in the tree offers
+    const current = await getProject(id);
+    const tree = new Set(current?.kind === 'design' && current.templateId ? await backgroundsFor(current.templateId) : []);
+    const images = (await listImages()).map((i) => ({ ...i, inTree: tree.has(i.id) }));
     // admin editing a template: full control. A customer's design: what each element's locks allow.
     patch.canvas = (p) => applyEdits(p.canvas, body.canvas, p.kind === 'template' ? 'author' : 'customer', images);
   }

@@ -2,24 +2,28 @@ import { NextResponse } from 'next/server';
 import sharp, { type Metadata } from 'sharp';
 import { readDesign } from '@/lib/agent/importDesign';
 import { requireAdmin } from '@/lib/auth';
-import { FONTS, PAGE_PRESETS, validateDoc } from '@/lib/canvas';
+import { LOCKED, PAGE_PRESETS, validateDoc } from '@/lib/canvas';
 import { AGENT_ENABLED } from '@/lib/config';
-import { findRows, newId, saveUpload, setRow, updateDb } from '@/lib/db';
-import { eraseTexts } from '@/lib/eraseTexts';
-import { claimTopic, parseAudience, topicConflict } from '@/lib/topics';
-import type { CanvasElement, Category, ImageAsset, Project } from '@/lib/types';
+import { listFonts } from '@/lib/data/fonts';
+import { newId } from '@/lib/data/ids';
+import { addImage, assetFileKey, createCategory, listCategories } from '@/lib/data/library';
+import { createTemplate, topicConflictFor } from '@/lib/data/projects';
+import { cleanDesign } from '@/lib/importClean';
+import { importedContent } from '@/lib/importLayout';
+import { wipeOnFlat } from '@/lib/flatWipe';
+import { files } from '@/lib/files';
+import { BUILTIN_FONTS } from '@/lib/fonts';
+import { parseAudience } from '@/lib/topics';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 180;
 
 const MAX_BYTES = 15 * 1024 * 1024;
-const PT_TO_MM = 25.4 / 72;
 const CATEGORY = 'עיצובים מיובאים';
 /** what the model sees and what is kept: enough to print a card, and less than an image request's limit */
 const MODEL_SIDE = 1568;
 const KEEP_SIDE = 3000;
-
 const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 /** the page: the preset of this shape, or a page of this shape 200 mm on its long side */
@@ -29,10 +33,43 @@ function pageFor(ratio: number) {
   return ratio >= 1 ? { width_mm: 200, height_mm: 200 / ratio } : { width_mm: 200 * ratio, height_mm: 200 };
 }
 
+/** the mean colour of the picture inside each box (percent of it), as #RRGGBB */
+async function meanColors(image: Buffer, boxes: { x: number; y: number; w: number; h: number }[]) {
+  const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width: W, height: H } = info;
+  return boxes.map((b) => {
+    const x0 = Math.max(0, Math.floor((b.x / 100) * W));
+    const y0 = Math.max(0, Math.floor((b.y / 100) * H));
+    const x1 = Math.min(W, Math.ceil(((b.x + b.w) / 100) * W));
+    const y1 = Math.min(H, Math.ceil(((b.y + b.h) / 100) * H));
+    const sum = [0, 0, 0];
+    let n = 0;
+    for (let y = y0; y < y1; y += 2) {
+      for (let x = x0; x < x1; x += 2) {
+        for (let k = 0; k < 3; k++) sum[k] += data[(y * W + x) * 3 + k];
+        n++;
+      }
+    }
+    return n ? '#' + sum.map((v) => Math.round(v / n).toString(16).padStart(2, '0')).join('').toUpperCase() : null;
+  });
+}
+
+/** the shared category that keeps imported backgrounds, made the first time */
+async function importCategoryId(): Promise<string> {
+  const made = await createCategory(CATEGORY, 'רקעים של עיצובים שיובאו מתמונה');
+  if (made) return made.id;
+  const found = (await listCategories()).find((c) => c.name === CATEGORY);
+  if (!found) throw new Error('import category missing');
+  return found.id;
+}
+
 /**
- * Admin: a finished design as a picture ({ file, name, topic, audience }) in, a draft template out. The model reads its
- * texts, they are wiped from the picture, and they come back as live text on it. It is a first draft for the admin to fix
- * in the editor: the fonts are the closest it found, and over a photograph a wiped place shows.
+ * Admin: a finished design as a picture ({ file, name, topic, audience }) in, a draft template out. The model reads
+ * its texts, they are wiped from the picture, and they come back as live text over it: the clean picture is the
+ * background layer, each text a customer field in the content layer, in the place its letters took. It is a first
+ * draft for the admin to fix in the editor: the fonts are the closest it found, and over a photograph a wiped place
+ * shows.
+ * Ported from feature/business-ads (Vitol) onto Postgres and card format v2.
  */
 export async function POST(req: Request) {
   if (!AGENT_ENABLED) return NextResponse.json({ error: 'הקריאה האוטומטית לא זמינה כרגע' }, { status: 503 });
@@ -47,8 +84,22 @@ export async function POST(req: Request) {
     const v = form?.get(k);
     return typeof v === 'string' ? v.trim().slice(0, max) : '';
   };
+  const name = text('name', 100) || 'עיצוב מיובא';
   const topic = text('topic', 60);
   const audience = parseAudience(text('audience', 20));
+  let places: string[] = [];
+  try {
+    const raw: unknown = JSON.parse(text('places', 4000) || '[]');
+    if (Array.isArray(raw)) places = raw.filter((t): t is string => typeof t === 'string').slice(0, 50);
+  } catch {
+    // no places: filed later on the tree page
+  }
+  const labelId = text('labelId', 60) || null;
+  // fail before the model's minute is spent (createTemplate checks again)
+  if (audience && !places.length) {
+    const why = await topicConflictFor(topic, audience);
+    if (why) return NextResponse.json({ error: why }, { status: 400 });
+  }
 
   const original = Buffer.from(await file.arrayBuffer());
   let meta: Metadata;
@@ -59,7 +110,7 @@ export async function POST(req: Request) {
   }
   if (!meta.width || !meta.height) return NextResponse.json({ error: 'הקובץ אינו תמונה תקינה' }, { status: 400 });
 
-  const fonts = [...FONTS, ...(await findRows('fonts', {})).map((f) => f.family)];
+  const fonts = [...new Set([...BUILTIN_FONTS.map((f) => f.family), ...(await listFonts()).map((f) => f.family)])];
   const forModel = await sharp(original).rotate().resize({ width: MODEL_SIDE, height: MODEL_SIDE, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
   let texts;
   try {
@@ -70,66 +121,38 @@ export async function POST(req: Request) {
   }
 
   const kept = await sharp(original).rotate().resize({ width: KEEP_SIDE, height: KEEP_SIDE, fit: 'inside', withoutEnlargement: true }).toBuffer();
-  const { data, rough } = await eraseTexts(kept, texts);
+  // each box snaps to its ink (the ad-import tool's steps, lib/importClean)
+  const { refined } = await cleanDesign(kept, texts);
+  const fitted = texts.map((t, i) => ({ ...t, x: refined[i].x, y: refined[i].y, w: refined[i].w, h: refined[i].h }));
+  // the texts on a flat ground (a pill, a badge, a plain page) are wiped by their letters only, in its colour (lib/flatWipe)
+  const onFlat = await wipeOnFlat(kept, fitted);
+  // the others, on photographs: only their ink is repainted (lib/importClean)
+  const { data, rough } = await cleanDesign(onFlat.picture, texts.filter((_, i) => !onFlat.texts.has(i)));
   const { width, height } = await sharp(data).metadata();
+  if (!width || !height) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
+  const page = pageFor(width / height);
 
-  const now = new Date().toISOString();
-  const page = pageFor(width! / height!);
+  // what each text stands on once it is wiped: its colour must read on that
+  const under = await meanColors(data, refined);
+  const content = importedContent({ page, texts, refined, under, fonts, newId });
+
   const assetId = newId();
   const fileName = `${assetId}.jpg`;
-  await saveUpload(fileName, data, 'image/jpeg');
-
-  const seen = new Set<string>();
-  const elements: CanvasElement[] = [
-    { id: newId(), type: 'image', x_mm: 0, y_mm: 0, w_mm: page.width_mm, h_mm: page.height_mm, rotation: 0, z: 0, asset_id: assetId, label: 'רקע' },
-    ...texts.map((t, i): CanvasElement => {
-      let label = t.label.trim() || 'טקסט';
-      if (seen.has(label)) label = `${label} ${i + 1}`;
-      seen.add(label);
-      return {
-        id: newId(),
-        type: 'text',
-        x_mm: (t.x / 100) * page.width_mm,
-        y_mm: (t.y / 100) * page.height_mm,
-        w_mm: Math.max(5, (t.w / 100) * page.width_mm),
-        rotation: 0,
-        z: i + 1,
-        text: t.text,
-        align: t.align,
-        editable: true,
-        label,
-        // the line height is what was measured; a text's size is that over the 1.25 it is drawn at
-        font: { family: fonts.includes(t.font) ? t.font : 'Heebo', weight: t.bold ? 700 : 400, size_pt: Math.min(400, Math.max(4, ((t.lineHeight / 100) * page.height_mm) / 1.25 / PT_TO_MM)), color: t.color },
-      };
-    }),
-  ];
-  const canvas = validateDoc({ schema_version: 1, page: { ...page, background: '#FFFFFF' }, elements });
+  const canvas = validateDoc({
+    schema_version: 2,
+    page,
+    layers: { background: { fill: { type: 'solid', color: '#FFFFFF' }, image: { asset_id: assetId, fit: 'cover' }, locks: LOCKED }, content, overlay: [] },
+  });
   if (!canvas) return NextResponse.json({ error: 'לא הצלחנו לבנות תבנית מהעיצוב. נסו תמונה אחרת.' }, { status: 422 });
 
-  const project: Project = {
-    id: newId(),
-    kind: 'template',
-    ownerId: admin.id,
-    status: 'draft',
-    name: text('name', 100) || 'עיצוב מיובא',
-    topic: topic || undefined,
-    canvas,
-    createdAt: now,
-    updatedAt: now,
-  };
-  const conflict = await updateDb((db) => {
-    const why = audience ? topicConflict(db, topic, audience) : null;
-    if (why) return why;
-    if (audience) claimTopic(db, topic, audience);
-    let category = db.categories.find((c) => c.name === CATEGORY);
-    if (!category) {
-      category = { id: newId(), name: CATEGORY, description: 'רקעים של עיצובים שיובאו מתמונה', createdAt: now } satisfies Category;
-      db.categories.push(category);
-    }
-    db.images.push({ id: assetId, categoryId: category.id, name: project.name, file: fileName, width: width!, height: height!, createdAt: now } satisfies ImageAsset);
-    db.projects.push(project);
-    return null;
-  }, ['projects', 'carousel', 'categories', 'images']);
-  if (conflict) return NextResponse.json({ error: conflict }, { status: 400 });
-  return NextResponse.json({ id: project.id, texts: texts.length, rough }, { status: 201 });
+  await files.put(assetFileKey(fileName), data, 'image/jpeg');
+  // what the model read is kept with the picture, to see later why a template came out as it did
+  const asset = await addImage({ id: assetId, categoryId: await importCategoryId(), name, file: fileName, width, height, metadata: { importReading: texts } });
+  if (!asset) {
+    await files.remove([assetFileKey(fileName)]);
+    return NextResponse.json({ error: 'שמירת התמונה נכשלה. נסו שוב.' }, { status: 500 });
+  }
+  const result = await createTemplate({ name, topic, canvas, ...(audience && { audience }), places, labelId });
+  if ('conflict' in result) return NextResponse.json({ error: result.conflict }, { status: 400 });
+  return NextResponse.json({ id: result.id, texts: texts.length, rough }, { status: 201 });
 }

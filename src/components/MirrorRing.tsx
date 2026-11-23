@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import s from './festive.module.css';
+import { easeInOut, infinityPath, landing, mix, walk, type Path } from '@/lib/reel';
 
 /** one card on the ring: its picture (cover-fitted) and the name on its label */
 export type RingItem = { id: string; name: string; image: string | null };
@@ -45,9 +46,22 @@ const DRIFT_DEG_S = 5;
 const RESUME_S = 3;
 /** a card catches the foil sheen when it comes within this many degrees of the front */
 const SHINE_DEG = 2;
-/** the deal and the turn-over: one card's share (s), and the delay between neighbours, spreading out from the front */
+/** the turn-over: one card's share (s), and the delay between neighbours, spreading out from the front */
 const CARD_ANIM_S = 0.6;
 const STAGGER_S = 0.06;
+/**
+ * The deal: the cards come in one after another from the right, each goes once round a lying ∞ (TRAVEL_S, the next
+ * one GAP_S behind it) and then lands in its place on the ring (LAND_S), the first at the front.
+ */
+const TRAVEL_S = 2.6;
+const GAP_S = 0.1;
+const LAND_S = 1;
+/** on the ∞ a card turns this far (rad) toward the way it's going */
+const FACE_TURN = 0.45;
+/** the ring is seen from a little above */
+const TILT_DEG = -7;
+/** where the cards' tops sit in the stage (.scene's top in festive.module.css) */
+const SCENE_TOP = 26;
 
 type Anim = { kind: 'deal' | 'out' | 'in'; start: number };
 
@@ -66,7 +80,7 @@ const sameIds = (a: RingItem[], b: RingItem[]) => a.length === b.length && a.eve
 /**
  * "Mirror hall" carousel: the cards stand on a 3D ring over the site backdrop, the ones behind fading into it.
  * It turns slowly all the time; each card catches a foil sheen as it passes the front, and the front one leans toward the mouse.
- * The cards are dealt out on arrival and turn over when the category changes.
+ * On arrival the cards come in one by one round a lying ∞ and land on the ring; they turn over when the category changes.
  * Drag (mouse or touch) with momentum, it settles on the nearest card; arrows and keys step it.
  * Everything per-frame is written to the DOM directly; React only re-renders when the front card or the set changes.
  */
@@ -82,6 +96,7 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [front, setFront] = useState(0);
   const [size, setSize] = useState(CARD_WIDE);
+  const [box, setBox] = useState({ w: 0, h: 0 });
   const m = useRef({
     rot: 0,
     vel: 0,
@@ -115,12 +130,29 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }
   const radius = n ? (size.w / 2 + 16) / Math.tan(Math.PI / n) : 0;
   const snap = useCallback((r: number) => Math.round(r / step) * step, [step]);
 
+  /**
+   * The way in: a lying ∞ in the middle of the stage, kept inside it so it never runs over the title, with the cards on
+   * it small enough to keep its shape. In the coordinates of a card's centre at rest, before the ring places it.
+   */
+  const entry = useMemo<{ path: Path; scale: number } | null>(() => {
+    if (!box.w || !box.h) return null;
+    const scale = Math.min(0.45, (box.w * 0.18) / size.h);
+    const room = box.h / 2 - (size.h * scale) / 2 - 8;
+    const centre = { x: 0, y: box.h / 2 - (SCENE_TOP + size.h / 2) };
+    // the stage is low, so the ∞ is drawn out sideways and its loops kept to the room above and below the middle
+    const across = Math.min(box.w * 0.4, box.w / 2 - (size.w * scale) / 2);
+    const height = Math.min(room / 0.354, across * 1.35);
+    const path = infinityPath(across, Math.min(across * 0.45, 200), centre, box.w / 2 + size.w * scale, Math.min(across * 0.6, room), height);
+    return { path, scale };
+  }, [box, size]);
+
   // card size follows the stage width
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
       setSize(e.contentRect.width < 640 ? CARD_NARROW : CARD_WIDE);
+      setBox({ w: e.contentRect.width, h: e.contentRect.height });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -133,10 +165,54 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }
     const anim = st.anim;
     const t = anim && anim.start ? now - anim.start : 0;
     const best = (((Math.round(-st.rot / step) % n) + n) % n);
-    if (sceneRef.current) sceneRef.current.style.transform = `translateZ(${-radius}px) rotateX(-7deg) rotateY(${st.rot}deg)`;
+    if (sceneRef.current) sceneRef.current.style.transform = `translateZ(${-radius}px) rotateX(${TILT_DEG}deg) rotateY(${st.rot}deg)`;
+    // undoes the scene's transform around a card's centre, so a card on the ∞ can be placed in the stage itself
+    const unscene =
+      `translate3d(0, ${-size.h / 2}px, 0) rotateY(${-st.rot}deg) rotateX(${-TILT_DEG}deg) ` +
+      `translateZ(${radius}px) translate3d(0, ${size.h / 2}px, 0)`;
+    const tilt = (TILT_DEG * Math.PI) / 180;
     cardRefs.current.forEach((el, i) => {
       if (!el) return;
       const a = norm(i * step + st.rot);
+      if (anim?.kind === 'deal' && entry) {
+        el.dataset.front = 'false';
+        const own = t - i * GAP_S;
+        if (own <= 0) {
+          el.style.opacity = '0';
+          return;
+        }
+        const speed = entry.path.length / TRAVEL_S;
+        if (own < TRAVEL_S) {
+          // on the ∞, facing a little the way it's going
+          const { p, dir } = walk(entry.path, own * speed);
+          el.style.transform =
+            `${unscene} translate3d(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px, ${p.z.toFixed(1)}px) ` +
+            `rotateY(${(FACE_TURN * dir.x).toFixed(4)}rad) rotate(${(-0.12 * dir.y * Math.sign(dir.x || 1)).toFixed(4)}rad) scale(${entry.scale})`;
+          el.style.opacity = '1';
+          return;
+        }
+        // off the ∞ at the crossing and onto its place on the ring (where the scene would put it), still moving at first
+        const b = clamp((own - TRAVEL_S) / LAND_S, 0, 1);
+        const e = easeInOut(b);
+        const angle = i * step + st.rot;
+        const f = (1 + Math.cos((norm(angle) * Math.PI) / 180)) / 2;
+        const ar = (angle * Math.PI) / 180;
+        const y = size.h / 2 - 20 * f ** 8;
+        const z = radius * Math.cos(ar);
+        const place = { x: radius * Math.sin(ar), y: y * Math.cos(tilt) - z * Math.sin(tilt) - size.h / 2, z: y * Math.sin(tilt) + z * Math.cos(tilt) - radius };
+        const end = walk(entry.path, entry.path.length);
+        const p = landing(end.p, end.dir, speed * LAND_S * 0.5, place, b);
+        el.style.transform =
+          `${unscene} translate3d(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px, ${p.z.toFixed(1)}px) ` +
+          `rotateX(${(TILT_DEG * e).toFixed(2)}deg) rotateY(${mix((FACE_TURN * end.dir.x * 180) / Math.PI, angle, e).toFixed(2)}deg) ` +
+          `scale(${mix(entry.scale, 1, e).toFixed(3)})`;
+        el.style.opacity = mix(1, 0.18 + 0.82 * f ** 1.6, e).toFixed(2);
+        if (st.dof && st.blur[i] !== 0) {
+          st.blur[i] = 0;
+          el.style.filter = '';
+        }
+        return;
+      }
       // the deal and the turn-over spread outwards from the front card
       const p = anim ? easeOut(clamp((t - Math.round(Math.abs(a) / step) * STAGGER_S) / CARD_ANIM_S, 0, 1)) : 1;
       let angle = i * step;
@@ -185,7 +261,7 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }
       st.front = best;
       setFront(best);
     }
-  }, [n, radius, step]);
+  }, [n, radius, step, size, entry]);
 
   const kick = useCallback(() => {
     const st = m.current;
@@ -203,7 +279,8 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }
     if (st.anim) {
       if (!st.anim.start) st.anim.start = now;
       turning = true;
-      if (now - st.anim.start >= Math.ceil(n / 2) * STAGGER_S + CARD_ANIM_S) {
+      const length = st.anim.kind === 'deal' && entry ? (n - 1) * GAP_S + TRAVEL_S + LAND_S : Math.ceil(n / 2) * STAGGER_S + CARD_ANIM_S;
+      if (now - st.anim.start >= length) {
         const done = st.anim.kind;
         st.anim = null;
         // the old cards are edge-on now: swap in the new set, which then turns face up
@@ -246,7 +323,7 @@ export function MirrorRing({ items, label, spinKey, onOpen, openLabel, onFront }
     }
     paint();
     if ((turning || easing) && st.visible) st.raf = requestAnimationFrame(() => tickRef.current());
-  }, [n, paint, snap]);
+  }, [n, paint, snap, entry]);
 
   useLayoutEffect(() => {
     tickRef.current = tick;

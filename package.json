@@ -23,7 +23,8 @@
     "migrate:thumbnails": "tsx --env-file=.env.local scripts/migrate-thumbnails.ts",
     "seed:content": "tsx --env-file=.env.local scripts/seed-content.ts",
     "seed:wording-pilot": "tsx --env-file=.env.local scripts/seed-wording-pilot.ts",
-    "seed:stickers": "tsx --env-file=.env.local scripts/seed-stickers.ts"
+    "seed:stickers": "tsx --env-file=.env.local scripts/seed-stickers.ts",
+    "seed:tree": "tsx --env-file=.env.local scripts/seed-topic-tree.ts"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +32,9 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.293",
+    "@aws-sdk/client-s3": "^3.1169.0",
+    "@clayzo/animation": "^0.3.21",
+    "@clayzo/webgl-player": "^0.3.21",
     "@hebcal/core": "^6.14.7",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
@@ -56,6 +60,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.187.0",
+    "clayzo": "^0.3.21",
     "prisma": "^7.10.1",
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
